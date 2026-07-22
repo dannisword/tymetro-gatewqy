@@ -1,0 +1,187 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    /* ===========================
+         Light theme
+         =========================== */
+    --bg: 249 250 251;
+    /* gray-50 */
+    --bg__preview: rgb(249, 250, 251);
+
+    --fg: 31 41 55;
+    /* gray-800 */
+    --fg__preview: rgb(31, 41, 55);
+
+    --card: 255 255 255;
+    /* white */
+    --card__preview: rgb(255, 255, 255);
+
+    --border: 229 231 235;
+    /* gray-200 */
+    --border__preview: rgb(229, 231, 235);
+
+    --muted: 243 244 246;
+    /* gray-100 */
+    --muted__preview: rgb(243, 244, 246);
+
+    --primary: 92 48 142;
+    /* purple-metro */
+    --primary__preview: rgb(92, 48, 142);
+
+    --bg-secondary: 248 250 252;
+    /* #F8FAFC */
+    --bg-secondary__preview: rgb(248, 250, 252);
+
+    --input: 243 244 246;
+    /* #F3F4F6 */
+    --input__preview: rgb(243, 244, 246);
+
+    --ring: 59 130 246;
+    /* #3B82F6 */
+    --ring__preview: rgb(59, 130, 246);
+
+    --success: 126 211 33;
+    /* #7ED321 */
+    --warning: 245 158 11;
+    /* #F59E0B */
+    --error: 239 68 68;
+    /* #EF4444 */
+    --info: 59 130 246;
+    /* #3B82F6 */
+    --default: 255 255 255;
+    /* #FFFFFF */
+    --primary-brand: 92 48 142;
+    /* #5C308E */
+    --primary-brand__preview: rgb(92, 48, 142);
+
+}
+
+.dark {
+    --bg: 17 24 39;
+    /* gray-900 */
+    --bg__preview: rgb(17, 24, 39);
+
+    --fg: 243 244 246;
+    /* gray-100 */
+    --fg__preview: rgb(243, 244, 246);
+
+    --card: 31 41 55;
+    /* gray-800 */
+    --card__preview: rgb(31, 41, 55);
+
+    --border: 75 85 99;
+    /* gray-600 */
+    --border__preview: rgb(75, 85, 99);
+
+    --muted: 55 65 81;
+    /* gray-700 */
+    --muted__preview: rgb(55, 65, 81);
+
+    --primary: 130 80 200;
+    /* purple-metro-light */
+    --primary__preview: rgb(130, 80, 200);
+
+    --bg-secondary: 30 41 59;
+    /* #1E293B */
+    --bg-secondary__preview: rgb(30, 41, 59);
+
+    --input: 51 65 85;
+    /* #334155 */
+    --input__preview: rgb(51, 65, 85);
+
+    --ring: 96 165 250;
+    /* #60A5FA */
+    --ring__preview: rgb(96, 165, 250);
+
+    --success: 126 211 33;
+    /* #7ED321 */
+    --warning: 251 191 36;
+    /* #FBBF24 */
+    --error: 248 113 113;
+    /* #F87171 */
+    --info: 96 165 250;
+    /* #60A5FA */
+
+    --primary-brand: 130 80 200;
+    /* purple-metro-light */
+    --primary-brand__preview: rgb(130, 80, 200);
+
+}
+
+.ag-cell-focus,
+.ag-cell-no-focus {
+    border: none !important;
+}
+
+/* This CSS is to not apply the border for the column having 'no-border' class */
+.no-border.ag-cell:focus {
+    border: none !important;
+    outline: none;
+}
+
+
+
+html,
+body,
+#app {
+    min-height: 100%;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--fg));
+}
+
+
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium
+           focus:outline-none focus:ring-2 focus:ring-offset-1
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Size */
+  .btn-sm { @apply px-3 py-1.5 text-sm; }
+  .btn-md { @apply px-4 py-2 text-base; }
+  .btn-lg { @apply px-6 py-3 text-lg; }
+  .btn-block { @apply w-full; }
+  .btn-icon { @apply p-2 aspect-square; }
+
+  /* Solid */
+  .btn-primary   { @apply bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-600; }
+  .btn-secondary { @apply bg-primary-300 text-gray-500 hover:bg-primary-400 focus:ring-primary-500; }
+  .btn-success   { @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-400; }
+  .btn-warning   { @apply bg-yellow-500 text-white hover:bg-yellow-600 focus:ring-yellow-400; }
+  .btn-danger    { @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-400; }
+
+  /* Outline */
+  .btn-outline { @apply bg-transparent border; }
+  .btn-outline-primary   { @apply btn-outline border-emerald-600 text-emerald-600 hover:bg-emerald-50; }
+  .btn-outline-secondary { @apply btn-outline border-gray-300 text-gray-800 hover:bg-gray-100; }
+  .btn-outline-success   { @apply btn-outline border-green-600 text-green-600 hover:bg-green-50; }
+  .btn-outline-warning   { @apply btn-outline border-yellow-500 text-yellow-500 hover:bg-yellow-50; }
+  .btn-outline-danger    { @apply btn-outline border-red-600 text-red-600 hover:bg-red-50; }
+
+  /* Ghost */
+  .btn-ghost-primary   { @apply bg-transparent text-emerald-600 hover:bg-emerald-50; }
+  .btn-ghost-secondary { @apply bg-transparent text-gray-800 hover:bg-gray-100; }
+  .btn-ghost-success   { @apply bg-transparent text-green-600 hover:bg-green-50; }
+  .btn-ghost-warning   { @apply bg-transparent text-yellow-500 hover:bg-yellow-50; }
+  .btn-ghost-danger    { @apply bg-transparent text-red-600 hover:bg-red-50; }
+
+  /* Link */
+  .btn-link { @apply bg-transparent p-0 h-auto text-emerald-600 hover:underline; }
+
+  /* Loading spinner */
+  .btn.is-loading { @apply relative; }
+  .btn.is-loading .spinner {
+    @apply inline-block h-4 w-4 animate-spin;
+  }
+}

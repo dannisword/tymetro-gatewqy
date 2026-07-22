@@ -1,0 +1,1077 @@
+{
+    "sections": [
+        {
+            "sectionType": "Params",
+            "apiUrl": {
+                "read": "api/Privilege",
+                "create": "api/Privilege",
+                "update": "api/Privilege",
+                "delete": "api/Privilege"
+            }
+        },
+        {
+            "sectionType": "Form",
+            "colNum": 12,
+            "dto": {
+                "id": 0,
+                "isActive": true,
+                "state": "Added",
+                "privilegeType": "",
+                "privilegeCode": "",
+                "privilegeName": "",
+                "parentCode": "",
+                "orderSeq": 0,
+                "icon": "",
+                "path": "",
+                "isRoot": false,
+                "component": "",
+                "isAffix": false,
+                "isKeepAlive": false
+            },
+            "schemas": [
+                {
+                    "prop": "privilegeCode",
+                    "type": "input",
+                    "label": "權限代碼",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入權限代碼"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "privilegeName",
+                    "type": "input",
+                    "label": "權限名稱",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入權限名稱"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "parentCode",
+                    "type": "input",
+                    "label": "上層選單",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入上層選單"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "orderSeq",
+                    "type": "input",
+                    "label": "排序",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入排序"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "icon",
+                    "type": "input",
+                    "label": "圖示",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入圖示"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "path",
+                    "type": "input",
+                    "label": "路徑",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入路徑"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "isRoot",
+                    "type": "select",
+                    "label": "管理選單",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請選擇路徑"
+                        }
+                    ],
+                    "optionType": "YesOrNo",
+                    "options": [],
+                    "value": ""
+                },
+                {
+                    "prop": "isActive",
+                    "type": "select",
+                    "label": "啟用",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請選擇啟用"
+                        }
+                    ],
+                    "optionType": "YesOrNo",
+                    "options": [],
+                    "value": ""
+                },
+                {
+                    "prop": "component",
+                    "type": "input",
+                    "label": "元件路徑",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入路徑"
+                        }
+                    ],
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Search",
+            "params": {
+                "code": "",
+                "direction": "ASC",
+                "name": "",
+                "page": 1,
+                "properties": "id",
+                "size": 10
+            },
+            "schemas": [
+                {
+                    "prop": "code",
+                    "type": "text",
+                    "label": "權限代碼",
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Table",
+            "singleRow": true,
+            "options": {},
+            "actions": [
+                {
+                    "label": "新增",
+                    "type": "primary",
+                    "field": "Add",
+                    "action": "Add",
+                    "icon": "mdiPlus",
+                    "iconOnly": false
+                }
+            ],
+            "columns": [
+                {
+                    "headerName": "項次",
+                    "maxWidth": 60,
+                    "sortable": false,
+                    "filter": false,
+                    "editable": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "pinned": "left",
+                    "valueGetter": "node.rowIndex + 1"
+                },
+                {
+                    "field": "privilegeType",
+                    "headerName": "權限類別",
+                    "minWidth": 120,
+                    "type": "primary",
+                    "cellRenderer": "AGTagCell",
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "權限代號",
+                    "field": "privilegeCode",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "樣權限名稱",
+                    "field": "privilegeName",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "上層選單",
+                    "field": "parentCode",
+                    "minWidth": 160,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "排序",
+                    "field": "orderSeq",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "圖示",
+                    "field": "icon",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "路徑",
+                    "field": "path",
+                    "minWidth": 160,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "管理選單",
+                    "field": "isRoot",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "啟用",
+                    "field": "isActive",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "操作",
+                    "field": "action",
+                    "pinned": "right",
+                    "cellRenderer": "AGActionButtonRenderer",
+                    "maxWidth": 100,
+                    "editable": false,
+                    "sortable": false,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "actionButtons": [
+                        {
+                            "label": "編輯",
+                            "type": "primary",
+                            "icon": "mdiPencil",
+                            "event": "Edit"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+},
+{
+    "sections": [
+        {
+            "sectionType": "Params",
+            "apiUrl": {
+                "read": "/api/Organization",
+                "create": "api/Organization",
+                "update": "api/Organization",
+                "delete": "api/Organization"
+            }
+        },
+        {
+            "sectionType": "Form",
+            "colNum": 12,
+            "dto": {
+                "id": 0,
+                "isActive": true,
+                "state": "",
+                "type": "",
+                "code": "",
+                "name": "",
+                "parentCode": ""
+            },
+            "schemas": [
+                {
+                    "prop": "code",
+                    "type": "input",
+                    "label": "組織代碼",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入組織代碼"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "name",
+                    "type": "input",
+                    "label": "組織名稱",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入組織名稱"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "isActive",
+                    "type": "checkbox",
+                    "label": "啟用",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        }
+                    ],
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Search",
+            "params": {
+                "code": "",
+                "direction": "ASC",
+                "name": "",
+                "page": 1,
+                "properties": "id",
+                "size": 10
+            },
+            "schemas": [
+                {
+                    "prop": "code",
+                    "type": "text",
+                    "label": "組織代碼",
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Table",
+            "options": {},
+            "actions": [
+                {
+                    "label": "新增",
+                    "type": "primary",
+                    "field": "Add",
+                    "action": "Add"
+                }
+            ],
+            "columns": [
+                {
+                    "headerName": "項次",
+                    "maxWidth": 60,
+                    "sortable": false,
+                    "filter": false,
+                    "editable": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "pinned": "left",
+                    "valueGetter": "node.rowIndex + 1"
+                },
+                {
+                    "field": "code",
+                    "headerName": "組織代碼",
+                    "minWidth": 100,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "field": "name",
+                    "headerName": "組織名稱",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "field": "isActive",
+                    "headerName": "啟用",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "操作",
+                    "field": "action",
+                    "pinned": "right",
+                    "cellRenderer": "AGActionButtonRenderer",
+                    "maxWidth": 100,
+                    "editable": false,
+                    "sortable": false,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "actionButtons": [
+                        {
+                            "label": "編輯",
+                            "type": "primary",
+                            "icon": "mdiPencil",
+                            "event": "Edit"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+{
+    "sections": [
+        {
+            "sectionType": "Params",
+            "apiUrl": {
+                "read": "api/User",
+                "create": "api/User",
+                "update": "api/User",
+                "delete": "api/User"
+            }
+        },
+        {
+            "sectionType": "Form",
+            "colNum": 12,
+            "dto": {
+                "id": 0,
+                "isActive": true,
+                "state": "Added",
+                "orgId": 0,
+                "orgCode": "",
+                "account": "",
+                "userName": "",
+                "password": "",
+                "enableAt": "",
+                "disableAt": "",
+                "lastModifyAt": "",
+                "lastLoginAt": "",
+                "isMobile": false,
+                "rolePrivileges": []
+            },
+            "schemas": [
+                {
+                    "prop": "account",
+                    "type": "input",
+                    "label": "使用者代碼",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入使用者代碼"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "userName",
+                    "type": "input",
+                    "label": "使用者名稱",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入使用者名稱"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "userRoles",
+                    "type": "multiple-select",
+                    "label": "使用者名稱",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入使用者名稱"
+                        }
+                    ],
+                    "optionType": "Roles",
+                    "options": [],
+                    "value": ""
+                },
+                {
+                    "prop": "enableAt",
+                    "type": "date",
+                    "label": "啟用日期",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入啟用日期"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "disableAt",
+                    "type": "date",
+                    "label": "停用日期",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入停用日期"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "isMobile",
+                    "type": "checkbox",
+                    "label": "手機用戶",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請勾選是否手機用戶"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "isActive",
+                    "type": "checkbox",
+                    "label": "啟用",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        }
+                    ],
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Search",
+            "params": {
+                "code": "",
+                "direction": "ASC",
+                "name": "",
+                "page": 1,
+                "properties": "id",
+                "size": 10
+            },
+            "schemas": [
+                {
+                    "prop": "code",
+                    "type": "text",
+                    "label": "使用者代碼",
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Table",
+            "options": {},
+            "actions": [
+                {
+                    "label": "新增",
+                    "type": "primary",
+                    "field": "Add",
+                    "action": "Add"
+                }
+            ],
+            "columns": [
+                {
+                    "headerName": "項次",
+                    "maxWidth": 60,
+                    "sortable": false,
+                    "filter": false,
+                    "editable": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "pinned": "left",
+                    "valueGetter": "node.rowIndex + 1"
+                },
+                {
+                    "headerName": "使用者代碼",
+                    "field": "account",
+                    "minWidth": 100,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "使用者名稱",
+                    "field": "userName",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "啟用日期",
+                    "field": "enableAt",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false,
+                    "format": "dayjs:YYYY-MM-DD",
+                    "input": "local"
+                },
+                {
+                    "headerName": "停用日期",
+                    "field": "disableAt",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false,
+                    "format": "date:short"
+                },
+                {
+                    "headerName": "啟用",
+                    "field": "isActive",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "操作",
+                    "field": "action",
+                    "pinned": "right",
+                    "cellRenderer": "AGActionButtonRenderer",
+                    "maxWidth": 200,
+                    "editable": false,
+                    "sortable": false,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "actionButtons": [
+                        {
+                            "label": "編輯",
+                            "type": "primary",
+                            "icon": "mdiPencil",
+                            "event": "Edit"
+                        },
+                        {
+                            "label": "權限",
+                            "type": "primary",
+                            "icon": "mdiApps",
+                            "event": "Menu"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "sectionType": "Dialog",
+            "key": "User",
+            "title": "使用者資料",
+            "visible": false,
+            "form": {
+                "dto": {},
+                "schemas": []
+            }
+        },
+        {
+            "sectionType": "Dialog",
+            "key": "UserRole",
+            "title": "使用者角色資料",
+            "visible": false,
+            "form": {
+                "dto": {},
+                "schemas": []
+            },
+            "table": {
+                "sectionType": "Table",
+                "options": {
+                    "api": "api/User/role"
+                },
+                "actions": [],
+                "columns": [
+                    {
+                        "headerName": "",
+                        "checkboxSelection": true,
+                        "headerCheckboxSelection": true,
+                        "sortable": false,
+                        "filter": false,
+                        "maxWidth": 60,
+                        "pinned": "left"
+                    },
+                    {
+                        "headerName": "項次",
+                        "maxWidth": 60,
+                        "sortable": false,
+                        "filter": false,
+                        "pinned": "left",
+                        "valueGetter": "node.rowIndex + 1"
+                    },
+                    {
+                        "headerName": "使用者代碼",
+                        "field": "userID",
+                        "minWidth": 100,
+                        "filter": true
+                    },
+                    {
+                        "headerName": "角色代碼",
+                        "field": "roleCode",
+                        "minWidth": 100,
+                        "filter": true
+                    },
+                    {
+                        "headerName": "角色名稱",
+                        "field": "roleName",
+                        "minWidth": 100,
+                        "filter": true
+                    },
+                    {
+                        "headerName": "角色等級",
+                        "field": "roleRank",
+                        "minWidth": 100,
+                        "filter": true
+                    }
+                ]
+            }
+        }
+    ]
+}
+
+{
+    "sections": [
+        {
+            "sectionType": "Params",
+            "apiUrl": {
+                "read": "/api/Role",
+                "create": "api/Role",
+                "update": "api/Role",
+                "delete": "api/Role"
+            }
+        },
+        {
+            "sectionType": "Form",
+            "colNum": 12,
+            "dto": {
+                "id": 0,
+                "isActive": true,
+                "state": "Added",
+                "orgID": 0,
+                "orgCode": "",
+                "roleCode": "",
+                "roleName": "",
+                "roleRank": ""
+            },
+            "schemas": [
+                {
+                    "prop": "roleCode",
+                    "type": "input",
+                    "label": "角色代碼",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入角色代碼"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "roleName",
+                    "type": "input",
+                    "label": "角色名稱",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入角色名稱"
+                        }
+                    ],
+                    "value": ""
+                },
+                {
+                    "prop": "roleRank",
+                    "type": "select",
+                    "label": "角色等級",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": true,
+                            "message": "",
+                            "trigger": "blur"
+                        },
+                        {
+                            "message": "請輸入角色等級"
+                        }
+                    ],
+                    "optionType": "RoleRankType",
+                    "options": "",
+                    "value": ""
+                },
+                {
+                    "prop": "isActive",
+                    "type": "checkbox",
+                    "label": "啟用",
+                    "disabled": false,
+                    "rules": [
+                        {
+                            "required": false,
+                            "message": "",
+                            "trigger": "blur"
+                        }
+                    ],
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Search",
+            "params": {
+                "code": "",
+                "direction": "ASC",
+                "name": "",
+                "page": 1,
+                "properties": "id",
+                "size": 10
+            },
+            "schemas": [
+                {
+                    "prop": "code",
+                    "type": "text",
+                    "label": "角色代碼",
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Table",
+            "options": {
+                "singleRow": true
+            },
+            "actions": [
+                {
+                    "label": "新增",
+                    "type": "success",
+                    "field": "Add",
+                    "action": "Add"
+                }
+            ],
+            "columns": [
+                {
+                    "headerName": "項次",
+                    "maxWidth": 60,
+                    "sortable": false,
+                    "filter": false,
+                    "editable": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "pinned": "left",
+                    "valueGetter": "node.rowIndex + 1"
+                },
+                {
+                    "headerName": "角色代碼",
+                    "field": "roleCode",
+                    "minWidth": 100,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "角色名稱",
+                    "field": "roleName",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "角色等級",
+                    "field": "roleRank",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "啟用",
+                    "field": "isActive",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "操作",
+                    "field": "action",
+                    "pinned": "right",
+                    "cellRenderer": "AGActionButtonRenderer",
+                    "maxWidth": 200,
+                    "editable": false,
+                    "sortable": false,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "actionButtons": [
+                        {
+                            "label": "編輯",
+                            "type": "primary",
+                            "icon": "mdiPencil",
+                            "event": "Edit"
+                        },
+                        {
+                            "label": "刪除",
+                            "type": "danger",
+                            "icon": "mdiDelete",
+                            "event": "Delete"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

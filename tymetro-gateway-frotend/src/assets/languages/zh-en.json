@@ -1,0 +1,9 @@
+{
+     "edit": "Edit",
+     "建立日期": "Create Date",
+     "title": "TyMetro",
+     "存檔": "save",
+     "system":{
+          "onMounted": "m1"
+     }
+}

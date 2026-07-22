@@ -1,0 +1,255 @@
+{
+  "carOptions": [
+    {
+      "value": 1,
+      "label": "第 1 節車廂",
+      "name": "1車"
+    },
+    {
+      "value": 2,
+      "label": "第 2 節車廂",
+      "name": "2車"
+    },
+    {
+      "value": 3,
+      "label": "第 3 節車廂",
+      "name": "3車"
+    },
+    {
+      "value": 4,
+      "label": "第 4 節車廂",
+      "name": "4車"
+    }
+  ],
+  "endpointsOptions": [
+    {
+      "value": 1,
+      "label": "端點 1"
+    },
+    {
+      "value": 2,
+      "label": "端點 2"
+    }
+  ],
+  "userDropdown": [
+    {
+      "label": "個人資料",
+      "icon": "mdiAccountOutline",
+      "to": "/profile"
+    },
+    {
+      "label": "功能選單",
+      "icon": "mdiCogOutline",
+      "to": "/mtr/tile-menus"
+    },
+    {
+      "divider": true
+    },
+    {
+      "label": "登出",
+      "icon": "mdiLogout",
+      "action": "logout"
+    }
+  ],
+  "carVins": [
+    {
+      "id": 1,
+      "trainNo": 101,
+      "carVin": 1101,
+      "name": "車廂1",
+      "equipment": [
+        {
+          "id": 1,
+          "endPosId": 1,
+          "name": "端點1",
+          "address": "192.168.16.91"
+        },
+        {
+          "id": 2,
+          "endPosId": 2,
+          "name": "端點2",
+          "address": "192.168.16.92"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "trainNo": 101,
+      "carVin": 1201,
+      "name": "車廂2",
+      "equipment": [
+        {
+          "id": 1,
+          "endPosId": 1,
+          "name": "端點1",
+          "address": "192.168.16.93"
+        },
+        {
+          "id": 2,
+          "endPosId": 2,
+          "name": "端點2",
+          "address": "192.168.16.94"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "trainNo": 101,
+      "carVin": 1301,
+      "name": "車廂3",
+      "equipment": [
+        {
+          "id": 1,
+          "endPosId": 1,
+          "name": "端點1",
+          "address": "192.168.16.96"
+        },
+        {
+          "id": 2,
+          "endPosId": 2,
+          "name": "端點2",
+          "address": "192.168.16.95"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "trainNo": 101,
+      "carVin": 1401,
+      "name": "車廂4",
+      "equipment": [
+        {
+          "id": 1,
+          "endPosId": 1,
+          "name": "端點1",
+          "address": "192.168.16.98"
+        },
+        {
+          "id": 2,
+          "endPosId": 2,
+          "name": "端點2",
+          "address": "192.168.16.97"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "id": 1,
+      "title": "時段設定",
+      "icon": "mdiCalendarArrowLeft",
+      "step": "初始設定",
+      "route": "/mtr/period-settings"
+    },
+    {
+      "id": 2,
+      "title": "排程設定",
+      "icon": "mdiCalendarArrowLeft",
+      "route": "/mtr/schedule"
+    },
+    {
+      "id": 3,
+      "title": "暫存器設定",
+      "icon": "mdiViewGridOutline",
+      "route": "/mtr/register-management"
+    },
+    {
+      "id": 4,
+      "title": "審計日誌",
+      "icon": "mdiShieldCheckOutline",
+      "route": "/mtr/audit-logs"
+    },
+    {
+      "id": 5,
+      "title": "歷史資料查詢",
+      "icon": "mdiHistory",
+      "route": "/mtr/history-records"
+    },
+    {
+      "id": 6,
+      "title": "感測器圖面配置",
+      "icon": "mdiVectorSquare",
+      "route": "/mtr/sensor-map-config"
+    }
+  ],
+  "scheduleTypes": [
+    {
+      "value": "hourly",
+      "label": "每小時排程 (hourly)"
+    },
+    {
+      "value": "minutely",
+      "label": "每分鐘排程 (minutely)"
+    },
+    {
+      "value": "fixed_time",
+      "label": "固定每日時間 (fixed_time)"
+    },
+    {
+      "value": "cycle_time",
+      "label": "固定間隔週期 (cycle_time)"
+    },
+    {
+      "value": "cron",
+      "label": "自訂 Cron 表達式"
+    }
+  ],
+  "registerGroups": [
+    {
+      "value": "realtime",
+      "label": "即時值"
+    },
+    {
+      "value": "initial",
+      "label": "初始值"
+    },
+    {
+      "value": "setting",
+      "label": "設定值"
+    },
+    {
+      "value": "controller_status",
+      "label": "控制器狀態"
+    }
+  ],
+  "freshAirDamperOptions": [
+    {
+      "value": 0,
+      "label": "關閉"
+    },
+    {
+      "value": 1,
+      "label": "50%"
+    },
+    {
+      "value": 2,
+      "label": "100%"
+    }
+  ],
+  "operationModes": [
+    {
+      "value": "停止",
+      "label": "停止運轉",
+      "iconName": "mdiPause",
+      "activeClass": "bg-slate-700 text-white border-slate-700 shadow-lg shadow-slate-700/20 scale-102"
+    },
+    {
+      "value": "測試",
+      "label": "強制測試",
+      "iconName": "mdiFlash",
+      "activeClass": "bg-amber-600 text-white border-amber-600 shadow-lg shadow-amber-600/20 scale-102"
+    },
+    {
+      "value": "自動",
+      "label": "自動恆溫",
+      "iconName": "mdiSnowflake",
+      "activeClass": "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-600/20 scale-102"
+    },
+    {
+      "value": "送風",
+      "label": "送風模式",
+      "iconName": "mdiWeatherWindy",
+      "activeClass": "bg-teal-600 text-white border-teal-600 shadow-lg shadow-teal-600/20 scale-102"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+[
+  {
+    "id": 1,
+    "label": "系統管理",
+    "icon": "mdiAccountCog",
+    "children": [
+      {
+        "id": 101,
+        "to": "/user-grecords",
+        "label": "使用者管理",
+        "icon": ""
+      },
+      {
+        "id": 102,
+        "to": "/role-records",
+        "label": "角色管理",
+        "icon": ""
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "label": "地圖管理",
+    "icon": "mdiMapMarkerCheckOutline",
+    "children": [
+      {
+        "id": 201,
+        "to": "/map-records",
+        "label": "地圖清單",
+        "icon": ""
+      },
+      {
+        "id": 202,
+        "to": "/map-view",
+        "label": "地圖檢視",
+        "icon": ""
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "to": "/customer-records",
+    "label": "客戶資料",
+    "icon": "mdiAccountGroupOutline"
+  },
+  {
+    "id": 4,
+    "label": "病房管理",
+    "icon": "mdiBedOutline",
+    "children": [
+      {
+        "id": 401,
+        "to": "/room-view",
+        "label": "病房床位",
+        "icon": ""
+      }
+    ]
+  }
+]

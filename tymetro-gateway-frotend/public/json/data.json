@@ -1,0 +1,116 @@
+{
+     "menus": [
+          {
+               "path": "/admin-manage",
+               "subs": [
+                    {
+                         "path": "/page-records",
+                         "name": "組織資料維護",
+                         "icon": null,
+                         "index": "page-records",
+                         "hasChilds": false,
+                         "authType": "menu",
+                         "params": null,
+                         "seq": 1002,
+                         "isShow": true
+                    },
+                    {
+                         "path": "/bim-base",
+                         "name": "BIM建模",
+                         "icon": null,
+                         "index": "bim-base",
+                         "hasChilds": false,
+                         "authType": "menu",
+                         "params": null,
+                         "seq": 1002,
+                         "isShow": true
+                    }
+               ],
+               "name": "管理控制台",
+               "icon": "Files",
+               "index": "admin-manage",
+               "hasChilds": true,
+               "authType": "menu",
+               "params": null,
+               "seq": 1001.0,
+               "isShow": true
+          }
+     ],
+     "columns": [
+          {
+               "headerName": "是否廢四樓",
+               "field": "make",
+               "maxWidth": 100,
+               "filter": true
+          },
+          {
+               "headerName": "會計回單時間",
+               "field": "model",
+               "maxWidth": 90,
+               "filter": true
+          },
+          {
+               "headerName": "預計送達時間",
+               "field": "price",
+               "maxWidth": 100
+          },
+          {
+               "headerName": "會計回單人",
+               "field": "price",
+               "maxWidth": 100
+          },
+          {
+               "headerName": "運輸類型",
+               "field": "price",
+               "maxWidth": 100
+          },
+          {
+               "headerName": "運輸類型描述",
+               "field": "price",
+               "maxWidth": 100
+          },
+          {
+               "headerName": "溫層",
+               "field": "price",
+               "maxWidth": 100
+          },
+          {
+               "headerName": "溫層描述",
+               "field": "price",
+               "editable": false,
+               "minWidth": 100
+          },
+          {
+               "headerName": "操作",
+               "field": "action",
+               "pinned": "right",
+               "cellRenderer": "AGActionButtonRenderer",
+               "editable": false,
+               "maxWidth": 200,
+               "actionButtons": [
+                    {
+                         "label": "編輯",
+                         "type": "primary",
+                         "icon": "Edit"
+                    },
+                    {
+                         "label": "刪除",
+                         "type": "danger",
+                         "icon": "Delete"
+                    }
+               ]
+          }
+     ],
+     "actions": [
+          {
+               "headerName": "列印",
+               "field": "print",
+               "type": "success"
+          },
+          {
+               "headerName": "匯出",
+               "field": "export",
+               "type": "success"
+          }
+     ]
+}

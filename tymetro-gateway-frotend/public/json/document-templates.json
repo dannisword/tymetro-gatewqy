@@ -1,0 +1,143 @@
+{
+    "docName": "DocName",
+    "documentType": "",
+    "sections": [
+        {
+            "sectionType": "Params",
+            "apiUrl": {
+                "read": "/api/v1/document-templates",
+                "create": "/api/v1/document-templates",
+                "update": "/api/v1/document-templates",
+                "delete": "/api/v1/document-templates"
+            }
+        },
+        {
+            "sectionType": "Search",
+            "params": {
+                "templateCode": "",
+                "direction": "DESC",
+                "templateName": "",
+                "page": 0,
+                "properties": "id",
+                "size": 100
+            },
+            "schemas": [
+                {
+                    "prop": "templateCode",
+                    "type": "text",
+                    "label": "樣板代碼",
+                    "value": ""
+                }
+            ]
+        },
+        {
+            "sectionType": "Table",
+            "options": {},
+            "actions": [
+                {
+                    "label": "新增",
+                    "type": "primary",
+                    "field": "Add",
+                    "action": "Add",
+                    "icon": "mdiPlus",
+                    "iconOnly": false
+                }
+            ],
+            "columns": [
+                {
+                    "headerName": "項次",
+                    "maxWidth": 60,
+                    "sortable": false,
+                    "filter": false,
+                    "editable": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "pinned": "left",
+                    "valueGetter": "node.rowIndex + 1"
+                },
+                {
+                    "headerName": "組織",
+                    "field": "orgCode",
+                    "minWidth": 100,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "樣板代碼",
+                    "field": "templateCode",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "樣板名稱",
+                    "field": "templateName",
+                    "minWidth": 180,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "元件名稱",
+                    "field": "component",
+                    "minWidth": 160,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "版本",
+                    "field": "version",
+                    "minWidth": 120,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false
+                },
+                {
+                    "headerName": "更新時間",
+                    "field": "updatedAt",
+                    "minWidth": 200,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": false,
+                    "format": "datetime"
+                },
+                {
+                    "headerName": "操作",
+                    "field": "action",
+                    "pinned": "right",
+                    "cellRenderer": "AGActionButtonRenderer",
+                    "maxWidth": 80,
+                    "editable": false,
+                    "sortable": true,
+                    "filter": false,
+                    "suppressMovable": false,
+                    "lockPosition": true,
+                    "actionButtons": [
+                        {
+                            "label": "編輯",
+                            "type": "primary",
+                            "icon": "mdiPencil",
+                            "event": "Edit",
+                            "iconOnly": true
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
