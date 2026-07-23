@@ -6,7 +6,6 @@ import aiomqtt
 from app.core.logger import logger
 from app.services.equipment_manager import equipment_manager
 from app.services.sqlite_writer import sqlite_writer
-from app.services.polling_service import memory_cache
 from app.database.db_config_repo import db_config_repo
 
 from app.core.config_yaml import yaml_settings

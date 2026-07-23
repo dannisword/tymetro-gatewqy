@@ -7,6 +7,7 @@ from app.models.sensor_model import Sensor
 from app.database.session import SessionLocal
 from app.core.config import settings
 from app.core.logger import logger
+from app.core.config_yaml import yaml_settings
 
 
 class DbConfigRepository:
@@ -67,6 +68,7 @@ class DbConfigRepository:
                 result.append({
                     "id": eq.equipmentName,
                     "name": eq.equipmentName,
+                    "protocol": getattr(eq, "protocol", None) or ("MQTT" if yaml_settings.network.mqtt.enabled else "MODBUS_TCP"),
                     "ip": ip,
                     "port": 502,
                     "slave_id": 1,
@@ -130,6 +132,15 @@ class DbConfigRepository:
                 query = query.filter(Equipment.endPos == int(end_pos))
             
             eq = query.first()
+
+            # 備援比對：若精確的 carVin (如 1102) 尚未註冊在 DB，則改以 carNo (1車) 與 endPos (1端) 對照 8 大設備
+            if not eq and car_vin and len(car_vin) >= 2 and car_vin[1].isdigit():
+                target_car_no = int(car_vin[1])
+                fallback_query = db.query(Equipment).join(Car, Equipment.carId == Car.id).filter(Car.carNo == target_car_no)
+                if end_pos is not None:
+                    fallback_query = fallback_query.filter(Equipment.endPos == int(end_pos))
+                eq = fallback_query.first()
+
             if eq:
                 info = {
                     "eq_id": str(eq.id or eq.equipmentName or car_vin),
