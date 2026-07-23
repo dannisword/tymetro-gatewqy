@@ -30,14 +30,26 @@ def init_outbox_table():
         logger.error(f"Failed to initialize outbox table: {e}")
 
 class OutboxRepository:
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None, max_capacity: int = 10000):
         self.db_path = db_path or yaml_settings.database.db_path
+        self.max_capacity = max_capacity
 
     def push(self, data: Dict[str, Any]) -> bool:
-        """寫入補傳訊息到 Outbox (Store)"""
+        """寫入補傳訊息到 Outbox (Store)，若超過容量上限自動刪除最舊資料 (FIFO)"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+            
+            # 檢查容量限制，防止硬碟撐爆
+            cursor.execute("SELECT COUNT(*) FROM outbox")
+            current_count = cursor.fetchone()[0]
+            if current_count >= self.max_capacity:
+                overflow = (current_count - self.max_capacity) + 1
+                cursor.execute(
+                    "DELETE FROM outbox WHERE id IN (SELECT id FROM outbox ORDER BY id ASC LIMIT ?)",
+                    (overflow,)
+                )
+
             cursor.execute(
                 "INSERT INTO outbox (payload, created_at, retry_count) VALUES (?, ?, 0)",
                 (json.dumps(data), time.time())
@@ -48,6 +60,7 @@ class OutboxRepository:
         except Exception as e:
             logger.error(f"Error pushing data to outbox: {e}")
             return False
+
 
     def fetch_batch(self, limit: int = 50) -> List[Dict[str, Any]]:
         """讀取暫存訊息準備補傳 (Forward)"""

@@ -12,15 +12,15 @@ class MemoryCache:
     """記憶體快取核心，不直接寫入 SQLite 避免硬碟磨損"""
     def __init__(self):
         self.devices: Dict[str, Dict[str, Any]] = {}
-        self.cached_device_configs: List[Dict[str, Any]] = []
+        self.cached_equipment_configs: List[Dict[str, Any]] = []
         self.gateway_id: str = "GW-TAU-01"
         self.last_update: float = 0.0
 
     def reload_configs(self):
-        """熱加載 (Hot Reload)：從 SQLite DB 刷新內存中的 PFC 設備與暫存器點位配置"""
-        self.cached_device_configs = db_config_repo.get_all_devices()
+        """熱加載 (Hot Reload)：從 SQLite DB 刷新內存中的 PFC 設備配置 (equipments)"""
+        self.cached_equipment_configs = db_config_repo.get_all_devices()
         self.gateway_id = db_config_repo.get_system_config("gateway.id", "GW-TAU-01")
-        logger.info(f"MemoryCache Hot Reloaded from DB: {len(self.cached_device_configs)} active devices.")
+        logger.info(f"MemoryCache Hot Reloaded from DB: {len(self.cached_equipment_configs)} active equipments.")
 
     def update_device(self, device_id: str, data: Dict[str, Any]):
         self.devices[device_id] = {
@@ -43,13 +43,13 @@ async def ipc_request_handler(req_id: Optional[int], cmd: str, params: Dict[str,
         data = memory_cache.get_realtime(dev_id)
         return {"id": req_id, "code": 200, "msg": "OK", "data": data}
     
-    elif cmd == "GET_ALL_DEVICES":
-        return {"id": req_id, "code": 200, "msg": "OK", "data": memory_cache.cached_device_configs}
+    elif cmd == "GET_ALL_DEVICES" or cmd == "GET_ALL_EQUIPMENTS":
+        return {"id": req_id, "code": 200, "msg": "OK", "data": memory_cache.cached_equipment_configs}
 
     elif cmd == "RELOAD_CONFIG":
         """接收 DB 變更後的 Hot Reload 通知指令"""
         memory_cache.reload_configs()
-        return {"id": req_id, "code": 200, "msg": "Config Reloaded Successfully", "data": {"device_count": len(memory_cache.cached_device_configs)}}
+        return {"id": req_id, "code": 200, "msg": "Config Reloaded Successfully", "data": {"equipment_count": len(memory_cache.cached_equipment_configs)}}
 
     elif cmd == "GET_SYSTEM_HEALTH":
         return {
@@ -86,7 +86,8 @@ class PollingService:
         while self._running:
             try:
                 # 動態自 memory_cache 讀取從 DB 載入的 PFC 設備清單
-                devices = memory_cache.cached_device_configs
+                devices = memory_cache.cached_equipment_configs
+
                 for dev in devices:
                     dev_id = dev.get("id")
                     if not dev_id:

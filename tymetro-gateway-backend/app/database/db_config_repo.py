@@ -1,7 +1,9 @@
 import json
 import sqlite3
 from typing import List, Dict, Any, Optional
-from app.models.config_model import SystemConfig, DeviceConfigModel, RegisterConfigModel
+from app.models.config_model import SystemConfig
+from app.models.equipment_model import Equipment
+from app.models.sensor_model import Sensor
 from app.database.session import SessionLocal
 from app.core.logger import logger
 
@@ -11,33 +13,46 @@ class DbConfigRepository:
         self.db_path = db_path
 
     def get_all_devices(self) -> List[Dict[str, Any]]:
-        """自 SQLite 資料庫直接載入所有啟用的 PFC 設備與暫存器點位"""
+        """自 SQLite 資料庫載入所有啟用的設備與其 REAL_TIME 類型的感測器/點位"""
         db = SessionLocal()
         try:
-            devices = db.query(DeviceConfigModel).filter(DeviceConfigModel.is_active == True).all()
+            equipments = db.query(Equipment).filter(Equipment.isActive == True).all()
             result = []
-            for dev in devices:
-                regs = [
-                    {
-                        "name": r.name,
-                        "address": r.address,
-                        "type": r.data_type,
-                        "scale": r.scale,
-                        "unit": r.unit
-                    }
-                    for r in dev.registers
-                ]
+            for eq in equipments:
+                sensors = db.query(Sensor).filter(
+                    Sensor.equipmentId == eq.id,
+                    Sensor.sensorType == "REAL_TIME",
+                    Sensor.isActive == True
+                ).all()
+
+                regs = []
+                for s in sensors:
+                    addr = 0
+                    if s.sensorCode and s.sensorCode.startswith("D") and s.sensorCode[1:].isdigit():
+                        addr = int(s.sensorCode[1:])
+                    
+                    regs.append({
+                        "code": s.sensorCode,
+                        "name": s.sensorName,
+                        "address": addr,
+                        "type": "INT16",
+                        "scale": 1.0,
+                        "unit": s.sensorUnit,
+                        "sensor_type": s.sensorType,
+                        "value": s.sensorValue
+                    })
+
                 result.append({
-                    "id": dev.device_id,
-                    "name": dev.name,
-                    "ip": dev.ip,
-                    "port": dev.port,
-                    "slave_id": dev.slave_id,
+                    "id": eq.equipmentName,
+                    "name": eq.equipmentName,
+                    "ip": eq.ipAddress or "127.0.0.1",
+                    "port": 502,
+                    "slave_id": 1,
                     "registers": regs
                 })
             return result
         except Exception as e:
-            logger.error(f"Error fetching devices from DB: {e}")
+            logger.error(f"Error fetching equipments and sensors from DB: {e}")
             return []
         finally:
             db.close()

@@ -6,6 +6,9 @@ from app.database.session import get_db
 from app.core.config import settings
 from app.services.user_service import UserService
 from app.services.config_service import ConfigService
+from app.services.equipment_service import EquipmentService
+from app.services.car_service import CarService
+from app.services.sensor_service import SensorService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/users/login/access-token")
 
@@ -14,6 +17,17 @@ def get_user_service(db: Session = Depends(get_db)) -> UserService:
 
 def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
     return ConfigService(db)
+
+def get_equipment_service(db: Session = Depends(get_db)) -> EquipmentService:
+    return EquipmentService(db)
+
+def get_car_service(db: Session = Depends(get_db)) -> CarService:
+    return CarService(db)
+
+def get_sensor_service(db: Session = Depends(get_db)) -> SensorService:
+    return SensorService(db)
+
+
 
 # JWT 認證依賴項
 def get_current_user(

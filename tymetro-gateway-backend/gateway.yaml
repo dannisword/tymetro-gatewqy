@@ -1,61 +1,520 @@
 gateway:
-  id: "GW-TAU-01"
-  name: "桃園捷運 冰水機房 Gateway 01"
-  location: "桃機 T2 冰水主機房"
+  id: GW-TAU-01
+  name: 桃園捷運 冰水機房 Gateway 01
+  location: 桃機 T2 冰水主機房
   poll_interval_ms: 1000
-
 network:
   central_server:
-    host: "10.200.1.50"
+    host: 10.200.1.50
     port: 9001
     tls_enabled: false
     reconnect_delay_sec: 5
-  ipc_socket_path: "/tmp/hvac_ipc.sock"
-
+  ipc_socket_path: /tmp/hvac_ipc.sock
 database:
-  db_path: "gateway.db"
+  db_path: gateway.db
   batch_flush_sec: 10
-
-devices:
-  - id: "PFC001"
-    name: "AHU-01 冰水風機"
-    ip: "192.168.10.101"
-    port: 502
-    slave_id: 1
-    registers:
-      - name: "temp"
-        address: 0
-        type: "INT16"
-        scale: 0.1
-        unit: "°C"
-      - name: "humidity"
-        address: 1
-        type: "INT16"
-        scale: 0.1
-        unit: "%"
-      - name: "status"
-        address: 2
-        type: "UINT16"
-        scale: 1.0
-        unit: ""
-  - id: "PFC002"
-    name: "AHU-02 冰水風機"
-    ip: "192.168.10.102"
-    port: 502
-    slave_id: 1
-    registers:
-      - name: "temp"
-        address: 0
-        type: "INT16"
-        scale: 0.1
-        unit: "°C"
-      - name: "humidity"
-        address: 1
-        type: "INT16"
-        scale: 0.1
-        unit: "%"
-      - name: "status"
-        address: 2
-        type: "UINT16"
-        scale: 1.0
-        unit: ""
+equipments:
+- id: PFC11011
+  name: PFC11011
+  ip: 192.168.16.91
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC11012
+  name: PFC11012
+  ip: 192.168.16.92
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC12011
+  name: PFC12011
+  ip: 192.168.16.93
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC12012
+  name: PFC12012
+  ip: 192.168.16.94
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40002
+    name: 數位輸入狀態 (DI3-DI 16)
+    address: 40002
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 3710
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC13011
+  name: PFC13011
+  ip: 192.168.16.95
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC13012
+  name: PFC13012
+  ip: 192.168.16.96
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC14011
+  name: PFC14011
+  ip: 192.168.16.97
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+- id: PFC14012
+  name: PFC14012
+  ip: 192.168.16.98
+  port: 502
+  slave_id: 1
+  registers:
+  - code: D40001
+    name: 主控制模式 (DI 1/2)
+    address: 40001
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 2
+  - code: D40009
+    name: 氨氣感測器值
+    address: 40009
+    type: INT16
+    scale: 1.0
+    unit: ppm
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40010
+    name: 擋板運行模式選擇
+    address: 40010
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40011
+    name: 新鮮空氣擋板位置 (回饋)
+    address: 40011
+    type: INT16
+    scale: 1.0
+    unit: '%'
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40012
+    name: 緊急空氣擋板位置 (回饋)
+    address: 40012
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40013
+    name: 回風擋板位置 (回饋)
+    address: 40013
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0
+  - code: D40014
+    name: 排氣擋板位置 (回饋)
+    address: 40014
+    type: INT16
+    scale: 1.0
+    unit: N/A
+    sensor_type: REAL_TIME
+    value: 0

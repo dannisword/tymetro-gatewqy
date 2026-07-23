@@ -3,7 +3,7 @@ import os
 import yaml
 from sqlalchemy.orm import Session
 from app.models.user_model import User
-from app.models.config_model import Config, SystemConfig, DeviceConfigModel, RegisterConfigModel
+from app.models.config_model import Config, SystemConfig
 from app.core.logger import logger
 from datetime import datetime, timezone
 from app.core.security import get_password_hash
@@ -35,39 +35,6 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml"):
 
             db.commit()
             logger.info("SystemConfigs synced from YAML successfully.")
-
-        # 2. 檢查是否已有 DeviceConfig 資料
-        if db.query(DeviceConfigModel).count() == 0:
-            logger.info(f"DeviceConfigs table is empty. Syncing devices from {yaml_path}...")
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-
-            devices_list = data.get("devices", [])
-            for dev in devices_list:
-                dev_model = DeviceConfigModel(
-                    device_id=dev.get("id"),
-                    name=dev.get("name"),
-                    ip=dev.get("ip"),
-                    port=dev.get("port", 502),
-                    slave_id=dev.get("slave_id", 1),
-                    is_active=True
-                )
-                db.add(dev_model)
-                db.flush()
-
-                for reg in dev.get("registers", []):
-                    reg_model = RegisterConfigModel(
-                        device_id=dev.get("id"),
-                        name=reg.get("name"),
-                        address=reg.get("address"),
-                        data_type=reg.get("type", "INT16"),
-                        scale=float(reg.get("scale", 1.0)),
-                        unit=reg.get("unit", "")
-                    )
-                    db.add(reg_model)
-            
-            db.commit()
-            logger.info(f"Synced {len(devices_list)} devices from YAML to SQLite successfully.")
 
     except Exception as e:
         db.rollback()
