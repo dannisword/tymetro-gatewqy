@@ -9,8 +9,8 @@ from app.middleware.logging_middleware import LoggingMiddleware
 from app.core.config_yaml import yaml_settings
 from app.core.logger import logger
 from app.api.v1.api import api_router
-from app.database.session import engine, Base, SessionLocal
-from app.database.init_db import init_mock_data
+from app.database.session import SessionLocal
+from app.database.init_db import create_tables, init_mock_data
 from app.services.polling_service import polling_service
 import app.models
 
@@ -20,8 +20,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Gateway Application starting up SDS Mode...")
     logger.info(f"Gateway ID: {yaml_settings.gateway.id} | Name: {yaml_settings.gateway.name}")
     try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables verified/created successfully.")
+        create_tables()
         db = SessionLocal()
         try:
             init_mock_data(db)

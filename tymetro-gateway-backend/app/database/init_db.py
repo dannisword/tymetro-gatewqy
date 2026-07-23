@@ -7,6 +7,12 @@ from app.models.config_model import Config, SystemConfig
 from app.core.logger import logger
 from datetime import datetime, timezone
 from app.core.security import get_password_hash
+from app.database.session import engine, Base
+
+def create_tables():
+    """初始化建立所有 SQLAlchemy ORM 資料表 (若尚不存在)"""
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables verified/created successfully via ORM Metadata.")
 
 def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml"):
     """

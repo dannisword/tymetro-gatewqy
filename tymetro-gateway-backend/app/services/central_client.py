@@ -4,7 +4,8 @@ import ssl
 from typing import Optional, Dict, Any
 from app.core.logger import logger
 from app.core.config_yaml import yaml_settings
-from app.database.outbox import outbox_repo
+from app.repositories.outbox_repository import outbox_repo
+
 
 class CentralTcpClient:
     """負責連線至中央 Linux Server (TLS/JSON Lines over TCP) 並維護 Store & Forward 補傳"""

@@ -41,7 +41,8 @@ class DbConfigRepository:
                         "scale": 1.0,
                         "unit": s.sensorUnit,
                         "sensor_type": s.sensorType,
-                        "value": s.sensorValue
+                        "value": s.sensorValue,
+                        "car_id": s.carId
                     })
 
                 ip = eq.ipAddress or "127.0.0.1"
@@ -49,6 +50,7 @@ class DbConfigRepository:
                     parts = ip.split(".")
                     if len(parts) == 4:
                         ip = f"{settings.PLC_IP_SUBNET}.{parts[-1]}"
+                        #logger.info(f"IP Address modified for {eq.equipmentName}: {ip}")
 
                 result.append({
                     "id": eq.equipmentName,
@@ -76,6 +78,24 @@ class DbConfigRepository:
         except Exception as e:
             logger.error(f"Error fetching config key {key} from DB: {e}")
             return default
+        finally:
+            db.close()
+
+    def update_sensor_values(self, updates: Dict[str, float]):
+        """批量更新感測器即時數值 (sensorValue) 至 SQLite sensors 資料表"""
+        if not updates:
+            return
+        db = SessionLocal()
+        try:
+            for code, val in updates.items():
+                db.query(Sensor).filter(Sensor.sensorCode == code).update(
+                    {Sensor.sensorValue: val},
+                    synchronize_session=False
+                )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error updating sensor values to DB: {e}")
         finally:
             db.close()
 
