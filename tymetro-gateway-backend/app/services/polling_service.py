@@ -11,7 +11,7 @@ from app.services.central_client import central_tcp_client
 class MemoryCache:
     """記憶體快取核心，不直接寫入 SQLite 避免硬碟磨損"""
     def __init__(self):
-        self.devices: Dict[str, Dict[str, Any]] = {}
+        self.equipments: Dict[str, Dict[str, Any]] = {}
         self.cached_equipment_configs: List[Dict[str, Any]] = []
         self.gateway_id: str = "GW-TAU-01"
         self.last_update: float = 0.0
@@ -22,28 +22,29 @@ class MemoryCache:
         self.gateway_id = db_config_repo.get_system_config("gateway.id", "GW-TAU-01")
         logger.info(f"MemoryCache Hot Reloaded from DB: {len(self.cached_equipment_configs)} active equipments.")
 
-    def update_device(self, device_id: str, data: Dict[str, Any]):
-        self.devices[device_id] = {
+    def update_equipment(self, equipment_id: str, data: Dict[str, Any]):
+        self.equipments[equipment_id] = {
             **data,
             "updated_at": time.time()
         }
         self.last_update = time.time()
 
-    def get_realtime(self, device_id: Optional[str] = None) -> Any:
-        if device_id:
-            return self.devices.get(device_id)
-        return self.devices
+
+    def get_realtime(self, equipment_id: Optional[str] = None) -> Any:
+        if equipment_id:
+            return self.equipments.get(equipment_id)
+        return self.equipments
 
 memory_cache = MemoryCache()
 
 async def ipc_request_handler(req_id: Optional[int], cmd: str, params: Dict[str, Any]) -> Dict[str, Any]:
     """處理來自 API Service 的 IPC 指令"""
     if cmd == "GET_REALTIME":
-        dev_id = params.get("device_id")
-        data = memory_cache.get_realtime(dev_id)
+        eq_id = params.get("equipment_id") or params.get("device_id")
+        data = memory_cache.get_realtime(eq_id)
         return {"id": req_id, "code": 200, "msg": "OK", "data": data}
     
-    elif cmd == "GET_ALL_DEVICES" or cmd == "GET_ALL_EQUIPMENTS":
+    elif cmd in ("GET_ALL_EQUIPMENTS", "GET_ALL_DEVICES"):
         return {"id": req_id, "code": 200, "msg": "OK", "data": memory_cache.cached_equipment_configs}
 
     elif cmd == "RELOAD_CONFIG":
@@ -58,8 +59,8 @@ async def ipc_request_handler(req_id: Optional[int], cmd: str, params: Dict[str,
             "msg": "OK",
             "data": {
                 "gateway_id": memory_cache.gateway_id,
-                "central_connected": central_tcp_client.is_connected,
-                "memory_devices_count": len(memory_cache.devices),
+                "central_connected": False, # central_client 已暫停
+                "memory_equipments_count": len(memory_cache.equipments),
                 "last_update": memory_cache.last_update,
                 "uptime": time.time()
             }
@@ -78,28 +79,29 @@ class PollingService:
         # 從 DB 刷新配置
         memory_cache.reload_configs()
         await self.ipc_server.start()
-        await central_tcp_client.start_loop()
+        # 暫停連線中央伺服器與 Outbox 補傳
+        # await central_tcp_client.start_loop()
         asyncio.create_task(self._poll_loop())
         logger.info("Polling Service started successfully with DB configs.")
 
     async def _poll_loop(self):
         while self._running:
             try:
-                # 動態自 memory_cache 讀取從 DB 載入的 PFC 設備清單
-                devices = memory_cache.cached_equipment_configs
+                # 動態自 memory_cache 讀取從 DB 載入的 PFC 設備清單 (equipments)
+                equipments = memory_cache.cached_equipment_configs
 
-                for dev in devices:
-                    dev_id = dev.get("id")
-                    if not dev_id:
+                for eq in equipments:
+                    eq_id = eq.get("id")
+                    if not eq_id:
                         continue
 
                     simulated_temp = round(24.0 + random.uniform(-0.5, 0.5), 1)
                     simulated_humidity = round(60.0 + random.uniform(-1.0, 1.0), 1)
                     
                     data = {
-                        "device_id": dev_id,
-                        "name": dev.get("name"),
-                        "ip": dev.get("ip"),
+                        "equipment_id": eq_id,
+                        "name": eq.get("name"),
+                        "ip": eq.get("ip"),
                         "temp": simulated_temp,
                         "humidity": simulated_humidity,
                         "alarm_status": 0,
@@ -107,14 +109,14 @@ class PollingService:
                     }
                     
                     # 1. 更新記憶體快取
-                    memory_cache.update_device(dev_id, data)
+                    memory_cache.update_equipment(eq_id, data)
 
-                    # 2. 推播至中央伺服器 (若斷網會自動寫入 Outbox)
-                    await central_tcp_client.send_payload({
-                        "gateway_id": memory_cache.gateway_id,
-                        "type": "telemetry",
-                        "data": data
-                    })
+                    # 2. 暫停推播至中央伺服器/Outbox
+                    # await central_tcp_client.send_payload({
+                    #     "gateway_id": memory_cache.gateway_id,
+                    #     "type": "telemetry",
+                    #     "data": data
+                    # })
 
             except Exception as e:
                 logger.error(f"Error in polling loop: {e}")
@@ -123,7 +125,7 @@ class PollingService:
 
     async def stop(self):
         self._running = False
-        await central_tcp_client.stop()
+        # await central_tcp_client.stop()
         await self.ipc_server.stop()
         logger.info("Polling Service stopped.")
 

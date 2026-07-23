@@ -46,7 +46,6 @@ class AppYamlConfig(BaseModel):
     network: NetworkConfig = NetworkConfig()
     database: DatabaseConfig = DatabaseConfig()
     equipments: List[EquipmentConfig] = Field(default=[], alias="equipments")
-    devices: Optional[List[EquipmentConfig]] = None
 
 def load_gateway_config(config_path: str = "gateway.yaml") -> AppYamlConfig:
     if not os.path.exists(config_path):
@@ -55,12 +54,10 @@ def load_gateway_config(config_path: str = "gateway.yaml") -> AppYamlConfig:
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
-            # 相容原本的 devices 鍵名
-            if "equipments" not in data and "devices" in data:
-                data["equipments"] = data["devices"]
             return AppYamlConfig(**data)
     except Exception as e:
         logger.error(f"Error loading {config_path}: {e}")
         return AppYamlConfig()
+
 
 yaml_settings = load_gateway_config()

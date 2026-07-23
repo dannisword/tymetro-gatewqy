@@ -1,8 +1,10 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 from app.core.logger import logger
 
 class Settings(BaseSettings):
+
     """
     全域環境變數與安全設定 (.env)
     備註：PLC 點位、Modbus 設定、中央 Server 連線資訊與 Gateway ID 
@@ -12,12 +14,14 @@ class Settings(BaseSettings):
     SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")
     SERVER_PORT: int = int(os.getenv("SERVER_PORT", 5400))
     
-    # 資料庫設定
+    # 資料庫與 PLC 網段設定
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "gateway.db")
+    PLC_IP_SUBNET: Optional[str] = os.getenv("PLC_IP_SUBNET", None)  # 如: "192.168.68" (測試區) 或 "192.168.16" (正式區)
 
     @property
     def SQLALCHEMY_DATABASE_URL(self) -> str:
         return f"sqlite:///./{self.SQLITE_DB_PATH}"
+
 
     # Logging
     LOG_PATH: str = os.getenv("LOG_PATH", "app/logs/gateway.log")

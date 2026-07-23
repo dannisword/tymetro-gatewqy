@@ -27,7 +27,7 @@ async def get_gateway_status():
             "uptime_seconds": int(time.time() - START_TIME),
             "ipc_status": "connected",
             "central_server_connected": health_data.get("central_connected", False),
-            "devices_monitored": len(yaml_settings.devices),
+            "equipments_monitored": len(yaml_settings.equipments),
             "version": "1.0.0 (SDS Ready)",
             "timestamp": int(time.time())
         }
@@ -36,10 +36,11 @@ async def get_gateway_status():
         return ResponseUtil.error(message=f"IPC Health Check Failed: {ipc_resp.get('msg')}", code=503)
 
 @router.get("/realtime", response_model=ResponseBase, summary="透過 IPC 查詢記憶體即時資料")
-async def get_realtime_data(device_id: str = Query(None, description="指定設備 ID (如 PFC001)")):
+async def get_realtime_data(equipment_id: str = Query(None, description="指定設備 ID (如 PFC11011)")):
     """透過 Unix Domain Socket 不經資料庫直接從記憶體快取獲取最新採樣數值"""
-    params = {"device_id": device_id} if device_id else {}
+    params = {"equipment_id": equipment_id} if equipment_id else {}
     ipc_resp = await ipc_client.send_command("GET_REALTIME", params=params)
+
     
     if ipc_resp.get("code") == 200:
         return ResponseUtil.success(data=ipc_resp.get("data"), message="Realtime data retrieved via IPC")

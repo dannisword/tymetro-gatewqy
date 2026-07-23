@@ -5,7 +5,9 @@ from app.models.config_model import SystemConfig
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
 from app.database.session import SessionLocal
+from app.core.config import settings
 from app.core.logger import logger
+
 
 class DbConfigRepository:
     """提供全系統與 Polling Service 不直接相依 ORM 而是自資料庫快速讀取配置的 Repository"""
@@ -42,14 +44,21 @@ class DbConfigRepository:
                         "value": s.sensorValue
                     })
 
+                ip = eq.ipAddress or "127.0.0.1"
+                if settings.PLC_IP_SUBNET and ip != "127.0.0.1":
+                    parts = ip.split(".")
+                    if len(parts) == 4:
+                        ip = f"{settings.PLC_IP_SUBNET}.{parts[-1]}"
+
                 result.append({
                     "id": eq.equipmentName,
                     "name": eq.equipmentName,
-                    "ip": eq.ipAddress or "127.0.0.1",
+                    "ip": ip,
                     "port": 502,
                     "slave_id": 1,
                     "registers": regs
                 })
+
             return result
         except Exception as e:
             logger.error(f"Error fetching equipments and sensors from DB: {e}")
