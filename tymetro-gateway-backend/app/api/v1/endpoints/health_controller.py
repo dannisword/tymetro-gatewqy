@@ -33,7 +33,7 @@ async def get_gateway_status():
         }
         return ResponseUtil.success(data=data, message="Gateway health check via IPC succeeded")
     else:
-        return ResponseUtil.error(message=f"IPC Health Check Failed: {ipc_resp.get('msg')}", code=503)
+        return ResponseUtil.error(message=f"IPC Health Check Failed: {ipc_resp.get('msg')}", status_code=503)
 
 @router.get("/realtime", response_model=ResponseBase, summary="透過 IPC 查詢記憶體即時資料")
 async def get_realtime_data(equipment_id: str = Query(None, description="指定設備 ID (如 PFC11011)")):
@@ -45,7 +45,8 @@ async def get_realtime_data(equipment_id: str = Query(None, description="指定�
     if ipc_resp.get("code") == 200:
         return ResponseUtil.success(data=ipc_resp.get("data"), message="Realtime data retrieved via IPC")
     else:
-        return ResponseUtil.error(message=f"IPC Query Failed: {ipc_resp.get('msg')}", code=500)
+        return ResponseUtil.error(message=f"IPC Query Failed: {ipc_resp.get('msg')}", status_code=500)
+
 
 @router.websocket("/ws/diff")
 async def websocket_diff_endpoint(websocket: WebSocket):

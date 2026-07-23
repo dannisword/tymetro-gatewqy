@@ -1,6 +1,7 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from fastapi import HTTPException, status
 from app.schemas.response_schema import ResponseBase, ResponseList
+
 
 class ResponseUtil:
     @staticmethod
@@ -35,11 +36,13 @@ class ResponseUtil:
         )
 
     @staticmethod
-    def error(message: str = "操作失敗", status_code: int = status.HTTP_400_BAD_REQUEST):
+    def error(message: str = "操作失敗", status_code: int = status.HTTP_400_BAD_REQUEST, code: Optional[int] = None):
+        final_status = code if code is not None else status_code
         raise HTTPException(
-            status_code=status_code,
+            status_code=final_status,
             detail=message
         )
+
 
     @staticmethod
     def not_found(message: str = "找不到相關資料"):
