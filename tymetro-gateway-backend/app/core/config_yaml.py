@@ -16,9 +16,11 @@ class RegisterConfig(BaseModel):
 class EquipmentConfig(BaseModel):
     id: str
     name: str
-    ip: str
-    port: int = 502
-    slave_id: int = 1
+    protocol: Optional[str] = "MQTT"
+    mqtt_topic: Optional[str] = None
+    ip: Optional[str] = "127.0.0.1"
+    port: Optional[int] = 502
+    slave_id: Optional[int] = 1
     registers: List[RegisterConfig] = []
 
 class CentralServerConfig(BaseModel):
@@ -27,7 +29,14 @@ class CentralServerConfig(BaseModel):
     tls_enabled: bool = False
     reconnect_delay_sec: int = 5
 
+class MQTTYamlConfig(BaseModel):
+    enabled: bool = True
+    broker_host: str = "127.0.0.1"
+    broker_port: int = 1883
+    topic_prefix: str = "PFC200/+/data"
+
 class NetworkConfig(BaseModel):
+    mqtt: MQTTYamlConfig = MQTTYamlConfig()
     central_server: CentralServerConfig = CentralServerConfig()
     ipc_socket_path: str = "/tmp/hvac_ipc.sock"
 

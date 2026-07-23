@@ -1,12 +1,13 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, func
+from sqlalchemy import Column, Integer, String, Float, DateTime, func
+from app.models.base import IdType
 from app.database.session import Base
 
 class SensorHistory(Base):
     """感測器歷史資料表 (sensor_histories)"""
     __tablename__ = "sensor_histories"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment="流水序")
+    id = Column(IdType, primary_key=True, autoincrement=True, comment="流水序")
     carId = Column("car_id", Integer, nullable=False, default=0, comment="車廂 ID / 車廂號")
     carVin = Column("car_vin", String(50), nullable=True, comment="車廂唯一識別碼/車號")
     carNo = Column("car_no", Integer, nullable=True, comment="車廂序號")

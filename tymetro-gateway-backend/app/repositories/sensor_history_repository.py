@@ -52,4 +52,47 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
             if not self._external_db:
                 db.close()
 
+    def get_history(
+        self,
+        sensor_code: Optional[str] = None,
+        car_vin: Optional[str] = None,
+        equipment_name: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[SensorHistory]:
+        """查詢感測器歷史數據 (支援分頁與多條件篩選)"""
+        db = self.db if self._external_db else SessionLocal()
+        try:
+            query = db.query(SensorHistory)
+            if sensor_code:
+                query = query.filter(SensorHistory.sensorCode == sensor_code)
+            if car_vin:
+                query = query.filter(SensorHistory.carVin == car_vin)
+            if equipment_name:
+                query = query.filter(SensorHistory.equipmentName == equipment_name)
+
+            return query.order_by(SensorHistory.recordedAt.desc()).offset(offset).limit(limit).all()
+        except Exception as e:
+            logger.error(f"Error fetching sensor history: {e}")
+            return []
+        finally:
+            if not self._external_db:
+                db.close()
+
+    def clear_all(self) -> int:
+        """清空 sensor_histories 資料表中所有歷史紀錄"""
+        db = self.db if self._external_db else SessionLocal()
+        try:
+            num_deleted = db.query(SensorHistory).delete()
+            db.commit()
+            logger.info(f"[SensorHistoryRepository] Cleared all {num_deleted} sensor history records.")
+            return num_deleted
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error clearing sensor history records: {e}")
+            return 0
+        finally:
+            if not self._external_db:
+                db.close()
+
 sensor_history_repo = SensorHistoryRepository()

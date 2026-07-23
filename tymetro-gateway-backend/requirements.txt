@@ -13,3 +13,5 @@ bcrypt==5.0.0
 python-jose==3.5.0
 types-python-jose==3.3.4.20240106
 python-multipart==0.0.24
+aiomqtt>=2.3.0
+apscheduler>=3.10.4

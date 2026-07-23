@@ -4,21 +4,25 @@ gateway:
   location: 桃機 T2 冰水主機房
   poll_interval_ms: 1000
 network:
+  mqtt:
+    enabled: true
+    broker_host: 220.133.144.73
+    broker_port: 1883
+    topic_prefix: "TYMC/AIR/#"
   central_server:
     host: 10.200.1.50
-    port: 9001
     tls_enabled: false
     reconnect_delay_sec: 5
   ipc_socket_path: /tmp/hvac_ipc.sock
 database:
   db_path: gateway.db
-  batch_flush_sec: 10
+  batch_size: 100
+  batch_flush_sec: 5
 equipments:
-- id: PFC11011
-  name: PFC11011
+- id: "1"
+  protocol: MQTT
+  name: 1車端點1
   ip: 192.168.16.91
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -76,11 +80,10 @@ equipments:
     unit: N/A
     sensor_type: REAL_TIME
     value: 0
-- id: PFC11012
-  name: PFC11012
+- id: "2"
+  protocol: MQTT
+  name: 1車端點2
   ip: 192.168.16.92
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -138,11 +141,10 @@ equipments:
     unit: N/A
     sensor_type: REAL_TIME
     value: 0
-- id: PFC12011
-  name: PFC12011
+- id: "3"
+  protocol: MQTT
+  name: 2車端點1
   ip: 192.168.16.93
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -200,11 +202,10 @@ equipments:
     unit: N/A
     sensor_type: REAL_TIME
     value: 0
-- id: PFC12012
-  name: PFC12012
+- id: "4"
+  protocol: MQTT
+  name: 2車端點2
   ip: 192.168.16.94
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -270,11 +271,10 @@ equipments:
     unit: ppm
     sensor_type: REAL_TIME
     value: 0
-- id: PFC13011
-  name: PFC13011
+- id: "5"
+  protocol: MQTT
+  name: 3車端點1
   ip: 192.168.16.95
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -332,11 +332,10 @@ equipments:
     unit: ppm
     sensor_type: REAL_TIME
     value: 0
-- id: PFC13012
-  name: PFC13012
+- id: "6"
+  protocol: MQTT
+  name: 3車端點2
   ip: 192.168.16.96
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -394,11 +393,10 @@ equipments:
     unit: N/A
     sensor_type: REAL_TIME
     value: 0
-- id: PFC14011
-  name: PFC14011
+- id: "7"
+  protocol: MQTT
+  name: 4車端點1
   ip: 192.168.16.97
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)
@@ -456,11 +454,10 @@ equipments:
     unit: N/A
     sensor_type: REAL_TIME
     value: 0
-- id: PFC14012
-  name: PFC14012
+- id: "8"
+  protocol: MQTT
+  name: 4車端點2
   ip: 192.168.16.98
-  port: 502
-  slave_id: 1
   registers:
   - code: D40001
     name: 主控制模式 (DI 1/2)

@@ -5,9 +5,15 @@ from app.services.equipment_service import EquipmentService
 from app.schemas.equipment_schema import EquipmentCreate, EquipmentUpdate, EquipmentResponse
 from app.schemas.response_schema import ResponseBase, ResponseList
 from app.utils.response_util import ResponseUtil
+from app.services.equipment_manager import equipment_manager
 from app.models.user_model import User
 
 router = APIRouter()
+
+@router.get("/states/live", summary="獲取 8 台 (及所有) PFC200 設備實時心跳與連線狀態")
+def get_live_equipment_states():
+    states = equipment_manager.get_all_equipment_states()
+    return ResponseUtil.success(data=states, message="Equipment live states retrieved successfully")
 
 @router.get("", response_model=ResponseList[EquipmentResponse], summary="獲取設備清單")
 def get_equipments(

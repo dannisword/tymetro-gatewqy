@@ -27,7 +27,7 @@ class MemoryCache:
 
     def reload_configs(self):
         """熱加載 (Hot Reload)：從 SQLite DB 刷新內存中的 PFC 設備配置 (equipments)"""
-        self.cached_equipment_configs = db_config_repo.get_all_devices()
+        self.cached_equipment_configs = db_config_repo.get_all_equipments()
         self.gateway_id = db_config_repo.get_system_config("gateway.id", "GW-TAU-01")
         logger.info(f"MemoryCache Hot Reloaded from DB: {len(self.cached_equipment_configs)} active equipments.")
 
@@ -105,6 +105,7 @@ class PollingService:
     async def _get_modbus_client(self, eq_id: str, ip: str, port: int) -> Optional[Any]:
         """維護 Modbus TCP 長連線 (Persistent Connection)"""
         if AsyncModbusTcpClient is None:
+            logger.warning("[Modbus Debug] pymodbus library is not installed or available.")
             return None
 
         client = self._modbus_clients.get(eq_id)
@@ -122,12 +123,16 @@ class PollingService:
 
         # 2. 建立新長連線
         try:
-            new_client = AsyncModbusTcpClient(ip, port=port, timeout=1.0)
+            logger.info(f"[Modbus Debug] Attempting to connect Modbus TCP for {eq_id} ({ip}:{port})...")
+            new_client = AsyncModbusTcpClient(ip, port=port, timeout=1.5)
             if await new_client.connect():
+                logger.info(f"[Modbus Debug] Successfully connected Modbus TCP for {eq_id} ({ip}:{port}).")
                 self._modbus_clients[eq_id] = new_client
                 return new_client
+            else:
+                logger.warning(f"[Modbus Debug] Failed to connect Modbus TCP for {eq_id} ({ip}:{port}) - Socket refused/timeout.")
         except Exception as e:
-            logger.warning(f"Failed to establish Modbus TCP long connection for {eq_id} ({ip}:{port}): {e}")
+            logger.warning(f"[Modbus Debug] Connection exception for {eq_id} ({ip}:{port}): {e}")
 
         return None
 
@@ -154,6 +159,11 @@ class PollingService:
                     if not eq_id:
                         continue
 
+                    protocol = eq.get("protocol", "MODBUS_TCP")
+                    if protocol.upper() == "MQTT":
+                        # 此設備設定為 MQTT 通訊協定，由 MQTTService 發起 Sub 非同步接收，跳過 Modbus TCP Polling
+                        continue
+
                     ip = eq.get("ip", "127.0.0.1")
                     port = eq.get("port", 502)
                     slave_id = eq.get("slave_id", 1)
@@ -163,6 +173,9 @@ class PollingService:
                     sensor_values: Dict[str, Any] = {}
                     updated_sensors: List[Dict[str, Any]] = []
 
+                    if len(registers) == 0:
+                        logger.warning(f"[Modbus Debug] Equipment {eq_id} ({ip}:{port}) has 0 registers configured.")
+
                     # 1. 重用/維護長連線發起 Modbus TCP 讀取
                     if AsyncModbusTcpClient is not None and ip and ip != "127.0.0.1":
                         client = await self._get_modbus_client(eq_id, ip, port)
@@ -170,17 +183,26 @@ class PollingService:
                             try:
                                 for reg in registers:
                                     code = reg.get("code")
-                                    addr = reg.get("address", 0)
+                                    raw_addr = reg.get("address", 0)
                                     scale = reg.get("scale", 1.0)
                                     
-                                    res = await client.read_holding_registers(address=addr, count=1, device_id=slave_id)
+                                    # Modbus 5位數表記轉 0-based 位址偏移量 (40001 -> 0, 40009 -> 8)
+                                    modbus_addr = raw_addr
+                                    if modbus_addr >= 40001:
+                                        modbus_addr -= 40001
+                                    elif modbus_addr >= 40000:
+                                        modbus_addr -= 40000
+
+                                    res = await client.read_holding_registers(address=modbus_addr, count=1, device_id=slave_id)
                                     if not res.isError() and hasattr(res, 'registers') and len(res.registers) > 0:
                                         raw_val = res.registers[0]
                                         if raw_val > 32767:
                                             raw_val -= 65536
                                         val = round(raw_val * scale, 2)
+                                        logger.info(f"[Modbus Debug] {eq_id} ({ip}) READ SUCCESS -> code={code}, raw_addr={raw_addr}, offset={modbus_addr}, raw={raw_val}, val={val}")
                                     else:
                                         val = reg.get("value")
+                                        logger.warning(f"[Modbus Debug] {eq_id} ({ip}) READ ERROR -> code={code}, raw_addr={raw_addr}, offset={modbus_addr}, response={res}")
                                     
                                     sensor_item = {**reg, "value": val}
                                     updated_sensors.append(sensor_item)
@@ -189,14 +211,14 @@ class PollingService:
 
                                 modbus_success = True
                             except Exception as read_err:
-                                logger.warning(f"Modbus read error for {eq_id} ({ip}:{port}): {read_err}")
+                                logger.warning(f"[Modbus Debug] Read Exception for {eq_id} ({ip}:{port}): {read_err}")
                                 try:
                                     client.close()
                                 except Exception:
                                     pass
                                 self._modbus_clients.pop(eq_id, None)
 
-                    # 2. 若 Modbus 連線/讀取未成功，保持原本屬性結構，不使用隨機模擬數據
+                    # 2. 若 Modbus 連線/讀取未成功，僅保持資料結構
                     if not modbus_success:
                         for reg in registers:
                             code = reg.get("code", "")

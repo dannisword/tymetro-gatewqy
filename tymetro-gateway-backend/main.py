@@ -7,11 +7,15 @@ from contextlib import asynccontextmanager
 
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.core.config_yaml import yaml_settings
+from app.core.config import settings
 from app.core.logger import logger
 from app.api.v1.api import api_router
 from app.database.session import SessionLocal
 from app.database.init_db import create_tables, init_mock_data
 from app.services.polling_service import polling_service
+from app.services.sqlite_writer import sqlite_writer
+from app.services.mqtt_service import mqtt_service
+from app.services.scheduler_service import scheduler_service
 import app.models
 
 @asynccontextmanager
@@ -29,13 +33,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error creating database tables or initializing mock data: {e}")
 
-    # 啟動 Polling Service (含 Modbus Polling, IPC Server, Central TCP Client)
+    # 1. 啟動 SQLite 佇列批次寫入器 (SQLite Batch Writer)
+    await sqlite_writer.start()
+
+    # 2. 啟動 MQTT 訂閱服務 (MQTT Subscriber Service)
+    if yaml_settings.network.mqtt.enabled:
+        await mqtt_service.start()
+    else:
+        logger.info("[MQTTService] MQTT Service is disabled in gateway.yaml.")
+
+    # 3. 啟動 APScheduler 背景定期排程 (Heartbeat Check & Daily Backup)
+    scheduler_service.start()
+
+    # 4. 啟動 Polling Service (含 Modbus Polling, IPC Server, Central TCP Client)
     await polling_service.start()
     
     yield
 
     # 【關閉階段】
     logger.info("Gateway Application shutting down...")
+    scheduler_service.stop()
+    await mqtt_service.stop()
+    await sqlite_writer.stop()
     await polling_service.stop()
 
 app = FastAPI(title=f"tymetro-gateway ({yaml_settings.gateway.id})", lifespan=lifespan)
