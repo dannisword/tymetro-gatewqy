@@ -6,11 +6,9 @@ pydantic_core==2.41.5
 starlette==0.52.1
 loguru==0.7.3
 python-dotenv==1.2.1
-paho-mqtt==2.1.0
 pymodbus==3.11.4
 SQLAlchemy==2.0.45
-PyMySQL==1.1.2
-redis==7.1.0
+PyYAML==6.0.2
 bcrypt==5.0.0
 python-jose==3.5.0
 types-python-jose==3.3.4.20240106

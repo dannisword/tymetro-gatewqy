@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI, HTTPException, Request 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -5,18 +6,19 @@ from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 
 from app.middleware.logging_middleware import LoggingMiddleware
-from app.core.config import settings
+from app.core.config_yaml import yaml_settings
 from app.core.logger import logger
 from app.api.v1.api import api_router
 from app.database.session import engine, Base, SessionLocal
 from app.database.init_db import init_mock_data
-import app.models  # 確保載入所有 Model 的 Metadata
+from app.services.polling_service import polling_service
+import app.models
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 【啟動階段】
-    logger.info(f"Gateway Application starting up in {settings.APP_MODE} mode...")
-    logger.info(f"Gateway ID: {settings.GATEWAY_ID} | Name: {settings.GATEWAY_NAME}")
+    logger.info(f"Gateway Application starting up SDS Mode...")
+    logger.info(f"Gateway ID: {yaml_settings.gateway.id} | Name: {yaml_settings.gateway.name}")
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
@@ -27,11 +29,17 @@ async def lifespan(app: FastAPI):
             db.close()
     except Exception as e:
         logger.error(f"Error creating database tables or initializing mock data: {e}")
+
+    # 啟動 Polling Service (含 Modbus Polling, IPC Server, Central TCP Client)
+    await polling_service.start()
+    
     yield
+
     # 【關閉階段】
     logger.info("Gateway Application shutting down...")
+    await polling_service.stop()
 
-app = FastAPI(title=f"tymetro-gateway ({settings.GATEWAY_ID})", lifespan=lifespan)
+app = FastAPI(title=f"tymetro-gateway ({yaml_settings.gateway.id})", lifespan=lifespan)
 
 # 掛載中介軟體
 app.add_middleware(LoggingMiddleware)

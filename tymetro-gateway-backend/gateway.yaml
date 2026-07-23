@@ -1,0 +1,61 @@
+gateway:
+  id: "GW-TAU-01"
+  name: "桃園捷運 冰水機房 Gateway 01"
+  location: "桃機 T2 冰水主機房"
+  poll_interval_ms: 1000
+
+network:
+  central_server:
+    host: "10.200.1.50"
+    port: 9001
+    tls_enabled: false
+    reconnect_delay_sec: 5
+  ipc_socket_path: "/tmp/hvac_ipc.sock"
+
+database:
+  db_path: "gateway.db"
+  batch_flush_sec: 10
+
+devices:
+  - id: "PFC001"
+    name: "AHU-01 冰水風機"
+    ip: "192.168.10.101"
+    port: 502
+    slave_id: 1
+    registers:
+      - name: "temp"
+        address: 0
+        type: "INT16"
+        scale: 0.1
+        unit: "°C"
+      - name: "humidity"
+        address: 1
+        type: "INT16"
+        scale: 0.1
+        unit: "%"
+      - name: "status"
+        address: 2
+        type: "UINT16"
+        scale: 1.0
+        unit: ""
+  - id: "PFC002"
+    name: "AHU-02 冰水風機"
+    ip: "192.168.10.102"
+    port: 502
+    slave_id: 1
+    registers:
+      - name: "temp"
+        address: 0
+        type: "INT16"
+        scale: 0.1
+        unit: "°C"
+      - name: "humidity"
+        address: 1
+        type: "INT16"
+        scale: 0.1
+        unit: "%"
+      - name: "status"
+        address: 2
+        type: "UINT16"
+        scale: 1.0
+        unit: ""
