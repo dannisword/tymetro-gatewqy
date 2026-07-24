@@ -23,21 +23,26 @@ class EquipmentConfig(BaseModel):
     slave_id: Optional[int] = 1
     registers: List[RegisterConfig] = []
 
-class CentralServerConfig(BaseModel):
-    host: str = "127.0.0.1"
-    port: int = 9001
-    tls_enabled: bool = False
-    reconnect_delay_sec: int = 5
-
 class MQTTYamlConfig(BaseModel):
     enabled: bool = True
-    broker_host: str = "127.0.0.1"
-    broker_port: int = 1883
-    topic_prefix: str = "PFC200/+/data"
+    broker_host: str = Field(default_factory=lambda: os.getenv("MQTT_BROKER_HOST", "127.0.0.1"))
+    broker_port: int = Field(default_factory=lambda: int(os.getenv("MQTT_BROKER_PORT", "1883")))
+    topic_prefix: str = Field(default_factory=lambda: os.getenv("MQTT_TOPIC_PREFIX", "PFC200/+/data"))
+
+class CloudMQTTYamlConfig(BaseModel):
+    enabled: bool = True
+    broker_host: str = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_HOST", "127.0.0.1"))
+    broker_port: int = Field(default_factory=lambda: int(os.getenv("CLOUD_MQTT_PORT", "1883")))
+    username: Optional[str] = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_USER", None))
+    password: Optional[str] = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_PASS", None))
+    client_id: Optional[str] = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_CLIENT_ID", "GW-TAU-01-CLOUD"))
+    publish_topic_prefix: str = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_TOPIC", "TYMC/CLOUD/101"))
+    qos: int = 0
+    reconnect_delay_sec: int = 5
 
 class NetworkConfig(BaseModel):
     mqtt: MQTTYamlConfig = MQTTYamlConfig()
-    central_server: CentralServerConfig = CentralServerConfig()
+    cloud_mqtt: CloudMQTTYamlConfig = CloudMQTTYamlConfig()
     ipc_socket_path: str = "/tmp/hvac_ipc.sock"
 
 class DatabaseConfig(BaseModel):

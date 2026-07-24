@@ -6,6 +6,7 @@ import aiomqtt
 from app.core.logger import logger
 from app.services.equipment_manager import equipment_manager
 from app.services.sqlite_writer import sqlite_writer
+from app.services.cloud_mqtt_service import cloud_mqtt_service
 from app.database.db_config_repo import db_config_repo
 
 from app.core.config_yaml import yaml_settings
@@ -24,10 +25,9 @@ class MQTTService:
         port: Optional[int] = None,
         topic_prefix: Optional[str] = None
     ):
-        # 單一來源：完全讀取 gateway.yaml
-        self.host = host or yaml_settings.network.mqtt.broker_host
-        self.port = port or yaml_settings.network.mqtt.broker_port
-        self.topic_prefix = topic_prefix or yaml_settings.network.mqtt.topic_prefix
+        self.host = host or db_config_repo.get_system_config("mqtt.broker_host") or yaml_settings.network.mqtt.broker_host
+        self.port = int(port or db_config_repo.get_system_config("mqtt.broker_port") or yaml_settings.network.mqtt.broker_port)
+        self.topic_prefix = topic_prefix or db_config_repo.get_system_config("mqtt.topic_prefix") or yaml_settings.network.mqtt.topic_prefix
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
         # 異動存記憶體快取 (Delta Saving Cache): "eq_id:sensor_code" -> last_value
@@ -160,6 +160,11 @@ class MQTTService:
 
             if history_items:
                 await sqlite_writer.push_many(history_items)
+
+            # 7. 拋轉 (Forward) 資料至桃捷雲 Cloud MQTT Broker
+            if yaml_settings.network.cloud_mqtt.enabled:
+                topic_suffix = f"{car_vin}/{end_pos}" if car_vin and end_pos is not None else str(eq_id)
+                await cloud_mqtt_service.push_telemetry(data, topic_suffix=topic_suffix)
 
             #logger.info(f"[MQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
 
