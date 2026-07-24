@@ -14,18 +14,21 @@ def create_tables():
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified/created successfully via ORM Metadata.")
 
-def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml"):
+def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = False):
     """
-    Auto Sync 機制：若 DB 為空，自動讀取 gateway.yaml 並匯入 SQLite 資料庫
+    Auto Sync 機制：若 DB 為空 (或指定 force=True)，自動讀取 gateway.yaml 並匯入 SQLite 資料庫
     """
     if not os.path.exists(yaml_path):
         logger.warning(f"YAML config file {yaml_path} not found. Skipping auto-sync.")
         return
 
     try:
-        # 1. 檢查是否已有 SystemConfig 資料
-        if db.query(SystemConfig).count() == 0:
-            logger.info(f"SystemConfigs table is empty. Syncing from {yaml_path}...")
+        # 1. 檢查是否已有 SystemConfig 資料 (或強制覆蓋)
+        if force or db.query(SystemConfig).count() == 0:
+            if force:
+                db.query(SystemConfig).delete()
+                db.commit()
+            logger.info(f"Syncing system configs from {yaml_path} to DB...")
             with open(yaml_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
