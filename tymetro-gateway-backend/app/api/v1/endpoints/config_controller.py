@@ -28,24 +28,26 @@ def reload_config(db: Session = Depends(get_db)):
 
 @router.post("/sync", response_model=ResponseBase, summary="從 gateway.yaml 重置並同步設定至資料庫")
 def sync_yaml_configs(db: Session = Depends(get_db)):
-    """清空現有 system_configs 並從 gateway.yaml 重新匯入"""
+    """清空現有 system_configs 並從 gateway.yaml 重新匯入與預熱快取"""
     try:
         sync_yaml_to_db(db, force=True)
         db_config_repo.clear_cache()
-        return ResponseUtil.success(message="Successfully re-synced system configs from gateway.yaml to DB.")
+        db_config_repo.get_all_equipments()
+        return ResponseUtil.success(message="Successfully re-synced system configs from gateway.yaml to DB and pre-warmed RAM cache.")
     except Exception as e:
         return ResponseUtil.error(message=f"Failed to sync configs from YAML: {e}")
 
 @router.delete("", response_model=ResponseBase, summary="清空所有系統設定 (Clear System Configs)")
 def clear_system_configs(db: Session = Depends(get_db)):
-    """清空 system_configs 資料表中所有系統設定紀錄"""
+    """清空 system_configs 資料表中所有系統設定紀錄並重置 RAM 快取"""
     try:
         num_deleted = db.query(SystemConfig).delete()
         db.commit()
         db_config_repo.clear_cache()
+        db_config_repo.get_all_equipments()
         return ResponseUtil.success(
             data={"cleared_count": num_deleted},
-            message=f"Successfully cleared {num_deleted} system config records."
+            message=f"Successfully cleared {num_deleted} system config records and re-initialized RAM cache."
         )
     except Exception as e:
         db.rollback()
