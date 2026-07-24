@@ -94,6 +94,10 @@ class CloudMQTTService:
                             payload_str = json.dumps(payload, ensure_ascii=False)
                             await client.publish(topic, payload_str, qos=self.qos)
                             # logger.info(f"[CloudMQTTService] Forwarded data to 桃捷雲 topic '{topic}' successfully.")
+                        except aiomqtt.MqttError as mqtt_err:
+                            logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
+                            await self._queue.put(item)
+                            raise mqtt_err
                         except Exception as pub_err:
                             logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
                         finally:
