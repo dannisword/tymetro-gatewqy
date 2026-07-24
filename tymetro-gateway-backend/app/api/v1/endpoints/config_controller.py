@@ -1,18 +1,33 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database.session import get_db
-from app.models.equipment_model import Equipment
 from app.schemas.response_schema import ResponseBase
 from app.utils.response_util import ResponseUtil
-from app.ipc.client import ipc_client
+from app.database.db_config_repo import db_config_repo
+from app.models.config_model import SystemConfig
 
 router = APIRouter()
 
-@router.post("/reload", response_model=ResponseBase, summary="觸發 Polling Service 熱重載內存快取")
+@router.post("/reload", response_model=ResponseBase, summary="觸發熱重載內存快取")
 async def reload_config():
-    """發送 IPC RELOAD_CONFIG 指令通知 Polling Service 重新自 DB 載入設備配置"""
+    """重新自 DB 載入設備配置快取"""
     try:
-        res = await ipc_client.send_command("RELOAD_CONFIG")
-        return ResponseUtil.success(data=res, message="Config reload signal sent successfully.")
+        db_config_repo.clear_cache()
+        return ResponseUtil.success(message="Config cache reloaded successfully.")
     except Exception as e:
-        return ResponseUtil.error(message=f"Failed to send reload signal: {e}")
+        return ResponseUtil.error(message=f"Failed to reload config: {e}")
+
+@router.delete("", response_model=ResponseBase, summary="清空所有系統設定 (Clear System Configs)")
+def clear_system_configs(db: Session = Depends(get_db)):
+    """清空 system_configs 資料表中所有系統設定紀錄"""
+    try:
+        num_deleted = db.query(SystemConfig).delete()
+        db.commit()
+        db_config_repo.clear_cache()
+        return ResponseUtil.success(
+            data={"cleared_count": num_deleted},
+            message=f"Successfully cleared {num_deleted} system config records."
+        )
+    except Exception as e:
+        db.rollback()
+        return ResponseUtil.error(message=f"Failed to clear system configs: {e}")

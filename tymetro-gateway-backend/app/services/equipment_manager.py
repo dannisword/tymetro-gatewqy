@@ -14,8 +14,17 @@ class EquipmentManager:
         # eq_id -> { "equipment_id": str, "name": str, "ip": str, "is_online": bool, "last_heartbeat": float, "firmware": str, "sensors": dict }
         self._equipments: Dict[str, Dict[str, Any]] = {}
 
-    def register_equipment(self, eq_id: str, name: Optional[str] = None, ip: Optional[str] = "127.0.0.1", firmware: str = "v1.0"):
-        """初始化註冊設備"""
+    def register_equipment(
+        self,
+        eq_id: str,
+        name: Optional[str] = None,
+        ip: Optional[str] = "127.0.0.1",
+        firmware: str = "v1.0",
+        train_no: Optional[str] = None,
+        car_vin: Optional[str] = None,
+        end_pos: Optional[int] = None
+    ):
+        """初始化註冊設備 (包含車組 train_no、車廂 car_vin、端點 end_pos)"""
         if eq_id not in self._equipments:
             self._equipments[eq_id] = {
                 "equipment_id": eq_id,
@@ -24,8 +33,10 @@ class EquipmentManager:
                 "is_online": False,
                 "last_heartbeat": 0.0,
                 "firmware": firmware,
-                "sensors": {},
-                "sensor_values": {}
+                "train_no": train_no,
+                "car_vin": car_vin,
+                "end_pos": end_pos,
+                "sensors": {}
             }
 
     def update_telemetry(self, eq_id: str, payload: Dict[str, Any]):
@@ -37,7 +48,10 @@ class EquipmentManager:
             self.register_equipment(
                 eq_id=eq_id,
                 name=eq_name,
-                ip=eq_ip
+                ip=eq_ip,
+                train_no=payload.get("train_no") or payload.get("trainNo"),
+                car_vin=payload.get("car_vin") or payload.get("carVin"),
+                end_pos=payload.get("end_pos") or payload.get("endPos")
             )
 
         equipment = self._equipments[eq_id]
@@ -45,12 +59,24 @@ class EquipmentManager:
         equipment["last_heartbeat"] = now
         if "ip" in payload and payload["ip"]:
             equipment["ip"] = payload["ip"]
+        if "train_no" in payload and payload["train_no"]:
+            equipment["train_no"] = payload["train_no"]
+        elif "trainNo" in payload and payload["trainNo"]:
+            equipment["train_no"] = payload["trainNo"]
+        if "car_vin" in payload and payload["car_vin"]:
+            equipment["car_vin"] = payload["car_vin"]
+        elif "carVin" in payload and payload["carVin"]:
+            equipment["car_vin"] = payload["carVin"]
+        if "end_pos" in payload and payload["end_pos"] is not None:
+            equipment["end_pos"] = payload["end_pos"]
+        elif "endPos" in payload and payload["endPos"] is not None:
+            equipment["end_pos"] = payload["endPos"]
 
-        # 更新感測器快取
+        # 更新感測器快取 (僅保留單一 sensors 欄位)
         if "sensors" in payload:
             equipment["sensors"] = payload["sensors"]
-        if "sensor_values" in payload:
-            equipment["sensor_values"] = payload["sensor_values"]
+        elif "sensor_values" in payload:
+            equipment["sensors"] = payload["sensor_values"]
 
     def check_health(self, timeout_sec: float = 60.0) -> List[str]:
         """由 APScheduler 排程定期呼叫：檢查心跳超時，逾時自動標示 Offline"""
@@ -65,8 +91,18 @@ class EquipmentManager:
         return offline_equipments
 
     def get_all_equipment_states(self) -> List[Dict[str, Any]]:
-        """給 REST API / UI 讀取當前所有設備狀態與心跳"""
-        return list(self._equipments.values())
+        """給 REST API / UI 讀取當前所有設備狀態與心跳 (包含 Unix 時間戳記與人類可讀時間)"""
+        from datetime import datetime
+        result = []
+        for eq in self._equipments.values():
+            item = dict(eq)
+            ts = item.get("last_heartbeat", 0.0)
+            if ts and ts > 0:
+                item["last_heartbeat_time"] = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                item["last_heartbeat_time"] = None
+            result.append(item)
+        return result
 
     def get_equipment_state(self, eq_id: str) -> Optional[Dict[str, Any]]:
         return self._equipments.get(eq_id)

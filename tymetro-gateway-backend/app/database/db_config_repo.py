@@ -17,6 +17,11 @@ class DbConfigRepository:
         # 記憶體快取 (RAM Cache): (car_vin, end_pos) -> eq_info (O(1) 超高效能對照)
         self._equipment_cache: Dict[Any, Dict[str, Any]] = {}
 
+    def clear_cache(self):
+        """清空設備對照之記憶體快取"""
+        self._equipment_cache.clear()
+        logger.info("[DbConfigRepository] Equipment memory cache cleared.")
+
     def get_all_equipments(self) -> List[Dict[str, Any]]:
         """自 SQLite 資料庫載入所有啟用的設備與其 REAL_TIME 類型的感測器/點位，並預熱快取"""
         db = SessionLocal()

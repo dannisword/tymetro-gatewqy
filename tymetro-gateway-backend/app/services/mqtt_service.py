@@ -146,10 +146,11 @@ class MQTTService:
             # 5. 更新 EquipmentManager 心跳與狀態
             equipment_manager.update_telemetry(eq_id, {
                 "equipment_id": eq_id,
+                "equipment_name": equipment_name,
+                "train_no": str(train_no) if train_no else None,
                 "car_vin": car_vin,
                 "end_pos": end_pos,
                 "sensors": sensor_values,
-                "sensor_values": sensor_values,
                 "timestamp": timestamp
             })
 
@@ -160,7 +161,7 @@ class MQTTService:
             if history_items:
                 await sqlite_writer.push_many(history_items)
 
-            logger.info(f"[MQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
+            #logger.info(f"[MQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
 
         except json.JSONDecodeError:
             logger.warning(f"[MQTTService] Non-JSON payload received on topic {message.topic}: {message.payload}")
