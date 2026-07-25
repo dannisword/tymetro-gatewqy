@@ -105,40 +105,56 @@ EOF
 ### 2. 編輯 `gateway.yaml` (邊緣與 PFC 控制器點位)
 ```yaml
 gateway:
-  id: "GW-TAU-01"
-  name: "桃園捷運 冰水機房 Gateway 01"
-  location: "桃機 T2 冰水主機房"
+  id: G-101
+  name: 桃園捷運 車組 101
+  location: 桃園捷運
   poll_interval_ms: 1000
 
 network:
-  central_server:
-    host: "10.200.1.50"
-    port: 9001
-    tls_enabled: false
+  broker_mqtt:
+    enabled: true
+    broker_host: 220.133.144.73
+    broker_port: 1883
+    topic_prefix: "TYMC/AIR/101/#"
+  cloud_mqtt:
+    enabled: true
+    broker_host: 220.133.144.73
+    broker_port: 1883
+    username: ""
+    password: ""
+    client_id: "GW-TAU-01-CLOUD"
+    publish_topic_prefix: "TYMC/CLOUD/101"
+    qos: 0
     reconnect_delay_sec: 5
-  ipc_socket_path: "/tmp/hvac_ipc.sock"
+  ipc_socket_path: /tmp/hvac_ipc.sock
 
 database:
-  db_path: "gateway.db"
-  batch_flush_sec: 10
+  db_path: gateway.db
+  batch_size: 100
+  batch_flush_sec: 5
 
-devices:
-  - id: "PFC001"
-    name: "AHU-01 冰水風機"
-    ip: "192.168.10.101"
-    port: 502
-    slave_id: 1
+equipments:
+  - id: "1"
+    protocol: MQTT
+    name: 1車端點1
+    ip: 192.168.16.91
     registers:
-      - name: "temp"
-        address: 0
-        type: "INT16"
-        scale: 0.1
-        unit: "°C"
-      - name: "humidity"
-        address: 1
-        type: "INT16"
-        scale: 0.1
-        unit: "%"
+      - code: D40001
+        name: 主控制模式 (DI 1/2)
+        address: 40001
+        type: INT16
+        scale: 1.0
+        unit: N/A
+        sensor_type: REAL_TIME
+        value: 2
+      - code: D40009
+        name: 氨氣感測器值
+        address: 40009
+        type: INT16
+        scale: 1.0
+        unit: ppm
+        sensor_type: REAL_TIME
+        value: 0
 ```
 
 ---
