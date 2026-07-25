@@ -25,31 +25,47 @@ FRONTEND_DIR="${INSTALL_DIR}/tymetro-gateway-frotend"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 2. 更新系統套件庫並安裝必備元件
-echo -e "${YELLOW}[1/6] 安裝系統依賴套件 (Python3, Nginx, SQLite3, Node.js)...${NC}"
+echo -e "${YELLOW}[1/7] 安裝系統依賴套件 (Python3, Nginx, SQLite3, Mosquitto MQTT Broker)...${NC}"
 if command -v apt-get &> /dev/null; then
     apt-get update -y
-    apt-get install -y python3 python3-venv python3-pip nginx sqlite3 curl
+    apt-get install -y python3 python3-venv python3-pip nginx sqlite3 mosquitto mosquitto-clients curl
 elif command -v opkg &> /dev/null; then
     # WAGO PFC200 OpenWrt/Linux opkg
     opkg update
-    opkg install python3 python3-venv python3-pip nginx sqlite3-cli
+    opkg install python3 python3-venv python3-pip nginx sqlite3-cli mosquitto mosquitto-client
+fi
+
+# 2.5 配置與啟動 Mosquitto MQTT Broker (原生無 Docker)
+echo -e "${YELLOW}[2/7] 配置 Mosquitto MQTT Broker (開放本地與區域網 1883 埠)...${NC}"
+mkdir -p /etc/mosquitto/conf.d
+cat << 'EOF' > /etc/mosquitto/conf.d/gateway.conf
+listener 1883 0.0.0.0
+allow_anonymous true
+EOF
+
+if command -v systemctl &> /dev/null; then
+    systemctl enable mosquitto || true
+    systemctl restart mosquitto || true
+elif [ -f /etc/init.d/mosquitto ]; then
+    /etc/init.d/mosquitto enable || true
+    /etc/init.d/mosquitto restart || true
 fi
 
 # 3. 部署專案程式碼至 /opt/tymetro-gateway
-echo -e "${YELLOW}[2/6] 部署專案檔案至 ${INSTALL_DIR}...${NC}"
+echo -e "${YELLOW}[3/7] 部署專案檔案至 ${INSTALL_DIR}...${NC}"
 mkdir -p "${INSTALL_DIR}"
 cp -r "${SCRIPT_DIR}/tymetro-gateway-backend" "${INSTALL_DIR}/"
 cp -r "${SCRIPT_DIR}/tymetro-gateway-frotend" "${INSTALL_DIR}/"
 
 # 4. 建立 Python 虛擬環境與安裝 Python 依賴
-echo -e "${YELLOW}[3/6] 設定 Python 虛擬環境與安裝依賴...${NC}"
+echo -e "${YELLOW}[4/7] 設定 Python 虛擬環境與安裝依賴...${NC}"
 cd "${BACKEND_DIR}"
 python3 -m venv .venv
 ./.venv/bin/pip install --upgrade pip
 ./.venv/bin/pip install -r requirements.txt
 
 # 5. 編譯 Vue 3 前端靜態資源 (如果有 Node.js/npm)
-echo -e "${YELLOW}[4/6] 檢查並編譯 Vue 3 前端網頁...${NC}"
+echo -e "${YELLOW}[5/7] 檢查並編譯 Vue 3 前端網頁...${NC}"
 if command -v npm &> /dev/null; then
     cd "${FRONTEND_DIR}"
     npm install
@@ -60,11 +76,12 @@ else
 fi
 
 # 6. 設定 systemd 服務
-echo -e "${YELLOW}[5/6] 配置 systemd 背景常駐服務 (tymetro-gateway.service)...${NC}"
+echo -e "${YELLOW}[6/7] 配置 systemd 背景常駐服務 (tymetro-gateway.service)...${NC}"
 cat << 'EOF' > /etc/systemd/system/tymetro-gateway.service
 [Unit]
 Description=HVAC Edge Gateway Backend & Polling Service
-After=network.target
+After=network.target mosquitto.service
+Wants=mosquitto.service
 
 [Service]
 Type=simple

@@ -1,15 +1,17 @@
 # HVAC Edge Gateway (PFC200 / Linux) 原生 Native 部署指南
 
-本指南專為 **WAGO PFC200 控制器** 或 **嵌入式 Linux 主機** 設計。本架構已完全移除了 Docker Compose 與 MQTT Broker，改採 Linux 原生 **systemd + Nginx + Python venv + Unix Domain Socket IPC**，能節省超過 **60% RAM 與 CPU** 開銷並大幅延長 SD 卡/Flash 壽命。
+本指南專為 **WAGO PFC200 控制器** 或 **嵌入式 Linux 主機** 設計。本架構採用 Linux 原生 **systemd + Mosquitto MQTT Broker + Nginx + Python venv** (免用 Docker)，大幅降低記憶體與 CPU 負擔並提升系統穩定度與讀寫壽命。
 
 ---
 
 ## 🏗️ 系統架構簡介
 
-- **前端 (Web UI)**: Vue 3 靜態編譯包，由 **Nginx** 託管 (Port 80/443)。
-- **後端 (API & Polling Service)**: Python 3.10+ FastAPI 服務，透過 **systemd** 常駐執行。
-- **邊緣 IPC 通訊**: Unix Domain Socket (`/tmp/hvac_ipc.sock`)，< 0.2ms 超低延遲。
+- **MQTT Broker**: 原生 **Mosquitto** (Port 1883)，不依賴 Docker。
+- **後端 (API & Polling Service)**: Python 3.10+ FastAPI 服務，透過 **systemd (`tymetro-gateway.service`)** 背景常駐。
+- **前端 (Web UI)**: Vue 3 靜態編譯包，由 **Nginx** 託管 (Port 80)。
 - **儲存**: SQLite WAL 模式 + Store & Forward 暫存佇列。
+
+---
 
 ## ⚡ 極速一鍵安裝 (One-Click Auto Install)
 
@@ -21,22 +23,39 @@ sudo ./deploy.sh
 ```
 
 一鍵腳本會自動完成：
-1. 套件依賴安裝 (`python3`, `nginx`, `sqlite3`...)
-2. Python venv 虛擬環境建立與 `requirements.txt` 安裝
-3. Vue 3 前端編譯 (npm build)
-4. systemd 背景常駐服務配置與啟動 (`tymetro-gateway.service`)
-5. Nginx Web 伺服器與 API / WebSocket 反向代理配置
+1. 套件依賴安裝 (`python3`, `mosquitto`, `nginx`, `sqlite3`...)
+2. Mosquitto MQTT Broker 配置 (`/etc/mosquitto/conf.d/gateway.conf`) 與服務啟動
+3. Python venv 虛擬環境建立與 `requirements.txt` 安裝
+4. Vue 3 前端靜態資源編譯 (如有 node/npm) 或部署
+5. systemd 背景常駐服務配置與啟動 (`tymetro-gateway.service`)
+6. Nginx Web 伺服器與 API / WebSocket 反向代理配置
 
 ---
 
 ## 🛠️ 第一步：手動環境預備 (Prerequisites)
 
-在 Linux / PFC200 上安裝必要套件：
+在 PFC200 / Linux 上安裝必要套件與 MQTT Broker：
 
 ```bash
-# Ubuntu / Debian / PFC200 (OpenWrt/Linux)
+# Debian / Ubuntu 環境 (PFC200 FW22+):
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip nginx sqlite3
+sudo apt install -y python3 python3-venv python3-pip nginx sqlite3 mosquitto mosquitto-clients
+
+# OpenWrt / opkg 環境 (PFC200):
+sudo opkg update
+sudo opkg install python3 python3-venv python3-pip nginx sqlite3-cli mosquitto mosquitto-client
+```
+
+### 配置 Mosquitto MQTT Broker (開放本地與區域網訪問)
+```bash
+sudo mkdir -p /etc/mosquitto/conf.d
+sudo cat << 'EOF' | sudo tee /etc/mosquitto/conf.d/gateway.conf
+listener 1883 0.0.0.0
+allow_anonymous true
+EOF
+
+sudo systemctl enable mosquitto
+sudo systemctl restart mosquitto
 ```
 
 ---
@@ -132,7 +151,8 @@ devices:
 sudo cat << 'EOF' | sudo tee /etc/systemd/system/tymetro-gateway.service
 [Unit]
 Description=HVAC Edge Gateway Backend & Polling Service
-After=network.target
+After=network.target mosquitto.service
+Wants=mosquitto.service
 
 [Service]
 Type=simple
@@ -218,3 +238,34 @@ sudo systemctl restart nginx
 2. **API 健康檢查**: `curl http://127.0.0.1:5400/api/v1/status`
 3. **IPC Socket 檢查**: `ls -l /tmp/hvac_ipc.sock` (回應權限與狀態)。
 4. **即時日誌監看**: `journalctl -u tymetro-gateway -f`
+
+---
+
+## 🗑️ 服務移除與清理 (Uninstallation)
+
+若需完全移除部署的服務，可執行一鍵解除安裝腳本：
+
+```bash
+sudo chmod +x uninstall.sh
+sudo ./uninstall.sh
+```
+
+或手動執行以下步驟：
+
+```bash
+# 1. 停止並註銷 systemd 服務
+sudo systemctl stop tymetro-gateway
+sudo systemctl disable tymetro-gateway
+sudo rm -f /etc/systemd/system/tymetro-gateway.service
+sudo systemctl daemon-reload
+
+# 2. 清理 Nginx 與 Mosquitto 站點設定
+sudo rm -f /etc/nginx/sites-enabled/tymetro-gateway /etc/nginx/sites-available/tymetro-gateway
+sudo systemctl restart nginx
+
+sudo rm -f /etc/mosquitto/conf.d/gateway.conf
+sudo systemctl restart mosquitto
+
+# 3. 刪除部署目錄
+sudo rm -rf /opt/tymetro-gateway
+```
