@@ -41,9 +41,13 @@ class CloudMQTTYamlConfig(BaseModel):
     reconnect_delay_sec: int = 5
 
 class NetworkConfig(BaseModel):
-    mqtt: MQTTYamlConfig = MQTTYamlConfig()
+    broker_mqtt: MQTTYamlConfig = Field(default_factory=MQTTYamlConfig)
     cloud_mqtt: CloudMQTTYamlConfig = CloudMQTTYamlConfig()
     ipc_socket_path: str = "/tmp/hvac_ipc.sock"
+
+    @property
+    def mqtt(self) -> MQTTYamlConfig:
+        return self.broker_mqtt
 
 class DatabaseConfig(BaseModel):
     db_path: str = "gateway.db"

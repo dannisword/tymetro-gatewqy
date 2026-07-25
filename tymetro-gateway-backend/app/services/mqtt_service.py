@@ -25,9 +25,9 @@ class MQTTService:
         port: Optional[int] = None,
         topic_prefix: Optional[str] = None
     ):
-        self.host = host or db_config_repo.get_system_config("mqtt.broker_host") or yaml_settings.network.mqtt.broker_host
-        self.port = int(port or db_config_repo.get_system_config("mqtt.broker_port") or yaml_settings.network.mqtt.broker_port)
-        self.topic_prefix = topic_prefix or db_config_repo.get_system_config("mqtt.topic_prefix") or yaml_settings.network.mqtt.topic_prefix
+        self.host = host or db_config_repo.get_system_config("broker_mqtt.broker_host") or db_config_repo.get_system_config("mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
+        self.port = int(port or db_config_repo.get_system_config("broker_mqtt.broker_port") or db_config_repo.get_system_config("mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
+        self.topic_prefix = topic_prefix or db_config_repo.get_system_config("broker_mqtt.topic_prefix") or db_config_repo.get_system_config("mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
         # 異動存記憶體快取 (Delta Saving Cache): "eq_id:sensor_code" -> last_value

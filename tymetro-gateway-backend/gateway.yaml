@@ -4,7 +4,7 @@ gateway:
   location: 桃園捷運
   poll_interval_ms: 1000
 network:
-  mqtt:
+  broker_mqtt:
     enabled: true
     broker_host: 220.133.144.73
     broker_port: 1883
