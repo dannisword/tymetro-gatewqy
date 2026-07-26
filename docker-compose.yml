@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # 1. Mosquitto MQTT Broker (開放 1883 埠)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: tymetro-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/etc/mosquitto/conf.d/default.conf
+
+  # 2. HVAC Edge Gateway 後端服務 (Port 5400)
+  backend:
+    build:
+      context: ./tymetro-gateway-backend
+      dockerfile: Dockerfile
+    container_name: tymetro-gateway-backend
+    restart: always
+    ports:
+      - "5400:5400"
+    volumes:
+      # 持久化資料庫與點位 YAML 配置檔
+      - ./tymetro-gateway-backend/gateway.db:/app/gateway.db
+      - ./tymetro-gateway-backend/gateway.yaml:/app/gateway.yaml
+      - ./tymetro-gateway-backend/.env:/app/.env
+    depends_on:
+      - mosquitto

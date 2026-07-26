@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # =================================================================
-# HVAC Edge Gateway 一鍵部署與安裝腳本 (PFC200 / Linux Native)
+# HVAC Edge Gateway Docker 一鍵部署腳本 (PFC200 / SD 卡)
+# 預設部署路徑: /media/sd/tymetro-gateway
+# 說明: 使用 Docker 容器化技術部署後端 Python 服務與 Mosquitto Broker
 # =================================================================
 set -e
 
@@ -10,141 +12,75 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN} 🚀 開始安裝 HVAC Edge Gateway (Native systemd + Nginx)${NC}"
+echo -e "${GREEN} 🚀 開始 Docker 一鍵部署 HVAC Edge Gateway${NC}"
+echo -e "${GREEN} 📁 部署目標目錄: ${INSTALL_DIR:-/media/sd/tymetro-gateway}${NC}"
 echo -e "${GREEN}=====================================================${NC}"
 
-# 1. 檢查是否以 root 權限執行
+# 1. 檢查權限 (須為 root 權限)
 if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}錯誤: 請以 root 權限或 sudo 執行此安裝腳本。${NC}"
   exit 1
 fi
 
-INSTALL_DIR="/opt/tymetro-gateway"
-BACKEND_DIR="${INSTALL_DIR}/tymetro-gateway-backend"
-FRONTEND_DIR="${INSTALL_DIR}/tymetro-gateway-frotend"
+INSTALL_DIR="${INSTALL_DIR:-/media/sd/tymetro-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 2. 更新系統套件庫並安裝必備元件
-echo -e "${YELLOW}[1/7] 安裝系統依賴套件 (Python3, Nginx, SQLite3, Mosquitto MQTT Broker)...${NC}"
-if command -v apt-get &> /dev/null; then
-    apt-get update -y
-    apt-get install -y python3 python3-venv python3-pip nginx sqlite3 mosquitto mosquitto-clients curl
-elif command -v opkg &> /dev/null; then
-    # WAGO PFC200 OpenWrt/Linux opkg
-    opkg update
-    opkg install python3 python3-venv python3-pip nginx sqlite3-cli mosquitto mosquitto-client
-fi
-
-# 2.5 配置與啟動 Mosquitto MQTT Broker (原生無 Docker)
-echo -e "${YELLOW}[2/7] 配置 Mosquitto MQTT Broker (開放本地與區域網 1883 埠)...${NC}"
-mkdir -p /etc/mosquitto/conf.d
-cat << 'EOF' > /etc/mosquitto/conf.d/gateway.conf
-listener 1883 0.0.0.0
-allow_anonymous true
-EOF
-
-if command -v systemctl &> /dev/null; then
-    systemctl enable mosquitto || true
-    systemctl restart mosquitto || true
-elif [ -f /etc/init.d/mosquitto ]; then
-    /etc/init.d/mosquitto enable || true
-    /etc/init.d/mosquitto restart || true
-fi
-
-# 3. 部署專案程式碼至 /opt/tymetro-gateway
-echo -e "${YELLOW}[3/7] 部署專案檔案至 ${INSTALL_DIR}...${NC}"
+# 2. 檢查並建立 SD 卡部署目錄與複製檔案
+echo -e "${YELLOW}[1/4] 檢查 SD 卡掛載點與專案目錄...${NC}"
 mkdir -p "${INSTALL_DIR}"
-cp -r "${SCRIPT_DIR}/tymetro-gateway-backend" "${INSTALL_DIR}/"
-cp -r "${SCRIPT_DIR}/tymetro-gateway-frotend" "${INSTALL_DIR}/"
 
-# 4. 建立 Python 虛擬環境與安裝 Python 依賴
-echo -e "${YELLOW}[4/7] 設定 Python 虛擬環境與安裝依賴...${NC}"
-cd "${BACKEND_DIR}"
-python3 -m venv .venv
-./.venv/bin/pip install --upgrade pip
-./.venv/bin/pip install -r requirements.txt
-
-# 5. 編譯 Vue 3 前端靜態資源 (如果有 Node.js/npm)
-echo -e "${YELLOW}[5/7] 檢查並編譯 Vue 3 前端網頁...${NC}"
-if command -v npm &> /dev/null; then
-    cd "${FRONTEND_DIR}"
-    npm install
-    npm run build
-    echo -e "${GREEN}Vue 3 前端編譯成功！${NC}"
-else
-    echo -e "${YELLOW}警告: 未檢測到 npm/node，若已有預先編譯好的 dist 目錄將直接使用。${NC}"
+if [ "${SCRIPT_DIR}" != "${INSTALL_DIR}" ]; then
+    echo -e "${YELLOW}複製專案檔案至 ${INSTALL_DIR}...${NC}"
+    cp -r "${SCRIPT_DIR}"/* "${INSTALL_DIR}/" 2>/dev/null || true
 fi
 
-# 6. 設定 systemd 服務
-echo -e "${YELLOW}[6/7] 配置 systemd 背景常駐服務 (tymetro-gateway.service)...${NC}"
-cat << 'EOF' > /etc/systemd/system/tymetro-gateway.service
-[Unit]
-Description=HVAC Edge Gateway Backend & Polling Service
-After=network.target mosquitto.service
-Wants=mosquitto.service
+cd "${INSTALL_DIR}"
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/tymetro-gateway/tymetro-gateway-backend
-ExecStart=/opt/tymetro-gateway/tymetro-gateway-backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 5400 --workers 1
-Restart=always
-RestartSec=5
-Environment=PYTHONUNBUFFERED=1
+# 3. 檢查並啟動 Docker 引擎
+echo -e "${YELLOW}[2/4] 檢查 Docker 服務狀態...${NC}"
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}錯誤: 控制器上未檢測到 docker 指令！${NC}"
+    echo -e "${YELLOW}請先在 PFC200 網頁管理介面 (WBM) 進入 Configuration -> Docker 勾選啟用 Docker。${NC}"
+    exit 1
+fi
 
-[Install]
-WantedBy=multi-user.target
-EOF
+# 啟動 Docker 服務 (若尚未啟動)
+if command -v systemctl &> /dev/null; then
+    systemctl enable docker 2>/dev/null || true
+    systemctl start docker 2>/dev/null || true
+elif [ -f /etc/init.d/docker ]; then
+    /etc/init.d/docker start 2>/dev/null || true
+fi
 
-systemctl daemon-reload
-systemctl enable tymetro-gateway.service
-systemctl restart tymetro-gateway.service
+# 4. 判斷 Docker Compose 指令格式
+echo -e "${YELLOW}[3/4] 檢測 Docker Compose...${NC}"
+DOCKER_COMPOSE_CMD=""
 
-# 7. 配置 Nginx 反向代理
-echo -e "${YELLOW}[6/6] 配置 Nginx 網頁伺服器與 WebSocket 代理...${NC}"
-mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+fi
 
-cat << 'EOF' > /etc/nginx/sites-available/tymetro-gateway
-server {
-    listen 80;
-    server_name _;
+# 4.5 確保資料庫檔案存在 (避免 Docker 將未存在的檔案掛載為目錄)
+touch "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db" 2>/dev/null || true
 
-    location / {
-        root /opt/tymetro-gateway/tymetro-gateway-frotend/dist;
-        index index.html;
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:5400;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    location /api/v1/ws/ {
-        proxy_pass http://127.0.0.1:5400;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
-    }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/tymetro-gateway /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-
-if nginx -t &> /dev/null; then
-    systemctl restart nginx
-    echo -e "${GREEN}Nginx 啟動成功！${NC}"
+# 5. 啟動容器
+echo -e "${YELLOW}[4/4] 構建並啟動 Docker 容器 (Mosquitto + Backend API)...${NC}"
+if [ -n "${DOCKER_COMPOSE_CMD}" ]; then
+    ${DOCKER_COMPOSE_CMD} up -d --build
 else
-    echo -e "${RED}Nginx 設定驗證失敗，請檢查設定檔。${NC}"
+    echo -e "${YELLOW}提示: 未找到 docker-compose，使用標準 docker 命令建置與啟動...${NC}"
+    docker build -t tymetro-gateway-backend ./tymetro-gateway-backend
+    docker run -d --name tymetro-mosquitto --restart always -p 1883:1883 -v "${INSTALL_DIR}/mosquitto.conf:/etc/mosquitto/conf.d/default.conf" eclipse-mosquitto:2.0 2>/dev/null || true
+    docker run -d --name tymetro-gateway-backend --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db:/app/gateway.db" -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.yaml:/app/gateway.yaml" -v "${INSTALL_DIR}/tymetro-gateway-backend/.env:/app/.env" tymetro-gateway-backend 2>/dev/null || true
 fi
 
 echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN} 🎉 HVAC Edge Gateway 一鍵部署完成！${NC}"
-echo -e "${GREEN} 🌐 Web 管理介面: http://<PFC200_IP>${NC}"
-echo -e "${GREEN} 🔍 服務狀態查詢: sudo systemctl status tymetro-gateway${NC}"
-echo -e "${GREEN} 📜 即時日誌監看: sudo journalctl -u tymetro-gateway -f${NC}"
+echo -e "${GREEN} 🎉 HVAC Edge Gateway Docker 一鍵部署完成！${NC}"
+echo -e "${GREEN} 📁 安裝路徑: ${INSTALL_DIR}${NC}"
+echo -e "${GREEN} 🔌 API 端點服務: http://<PFC200_IP>:5400/api/v1/status${NC}"
+echo -e "${GREEN} 📡 MQTT Broker: tcp://<PFC200_IP>:1883${NC}"
+echo -e "${GREEN} 🔍 容器狀態查詢: docker ps${NC}"
+echo -e "${GREEN} 📜 即時日誌監看: docker compose logs -f${NC}"
 echo -e "${GREEN}=====================================================${NC}"

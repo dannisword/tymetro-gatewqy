@@ -63,19 +63,19 @@ sudo systemctl restart mosquitto
 ## 📦 第二步：部署專案碼與虛擬環境
 
 ### 1. 複製與放置程式碼
-將專案放置於 `/opt/tymetro-gateway` 目錄：
+將專案放置於 `/media/sd/tymetro-gateway` 目錄：
 
 ```bash
-sudo mkdir -p /opt/tymetro-gateway
-sudo chown -R $USER:$USER /opt/tymetro-gateway
-cd /opt/tymetro-gateway
+sudo mkdir -p /media/sd/tymetro-gateway
+sudo chown -R $USER:$USER /media/sd/tymetro-gateway
+cd /media/sd/tymetro-gateway
 
-# 複製後端與前端源碼至 /opt/tymetro-gateway
+# 複製後端與前端源碼至 /media/sd/tymetro-gateway
 ```
 
 ### 2. 建立 Python 虛擬環境與安裝依賴
 ```bash
-cd /opt/tymetro-gateway/tymetro-gateway-backend
+cd /media/sd/tymetro-gateway/tymetro-gateway-backend
 
 # 建立 venv
 python3 -m venv .venv
@@ -92,7 +92,7 @@ pip install -r requirements.txt
 
 ### 1. 編輯 `.env` (環境變數)
 ```bash
-cat << 'EOF' > /opt/tymetro-gateway/tymetro-gateway-backend/.env
+cat << 'EOF' > /media/sd/tymetro-gateway/tymetro-gateway-backend/.env
 APP_MODE=production
 SERVER_HOST=127.0.0.1
 SERVER_PORT=5400
@@ -173,8 +173,8 @@ Wants=mosquitto.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/tymetro-gateway/tymetro-gateway-backend
-ExecStart=/opt/tymetro-gateway/tymetro-gateway-backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 5400 --workers 1
+WorkingDirectory=/media/sd/tymetro-gateway/tymetro-gateway-backend
+ExecStart=/media/sd/tymetro-gateway/tymetro-gateway-backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 5400 --workers 1
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -200,7 +200,7 @@ sudo systemctl status tymetro-gateway
 
 ### 1. 編譯前端網頁 (Vue 3)
 ```bash
-cd /opt/tymetro-gateway/tymetro-gateway-frotend
+cd /media/sd/tymetro-gateway/tymetro-gateway-frotend
 npm install
 npm run build
 # 編譯產出位於 dist/
@@ -214,7 +214,7 @@ server {
 
     # 1. 靜態網頁 (Vue 3)
     location / {
-        root /opt/tymetro-gateway/tymetro-gateway-frotend/dist;
+        root /media/sd/tymetro-gateway/tymetro-gateway-frotend/dist;
         index index.html;
         try_files $uri $uri/ /index.html;
     }
@@ -283,5 +283,5 @@ sudo rm -f /etc/mosquitto/conf.d/gateway.conf
 sudo systemctl restart mosquitto
 
 # 3. 刪除部署目錄
-sudo rm -rf /opt/tymetro-gateway
+sudo rm -rf /media/sd/tymetro-gateway
 ```
