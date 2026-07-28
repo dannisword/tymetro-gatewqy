@@ -54,9 +54,9 @@ class DatabaseConfig(BaseModel):
     batch_flush_sec: int = 10
 
 class GatewayInfoConfig(BaseModel):
-    id: str = "GW-TAU-01"
-    name: str = "桃園捷運 冰水機房 Gateway"
-    location: str = "桃機 T2 冰水主機房"
+    id: str = "Gateway"
+    name: str = "Gateway"
+    location: str = ""
     poll_interval_ms: int = 1000
 
 class AppYamlConfig(BaseModel):

@@ -16,39 +16,43 @@ def create_tables():
 
 def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = False):
     """
-    Auto Sync 機制：若 DB 為空 (或指定 force=True)，自動讀取 gateway.yaml 並匯入 SQLite 資料庫
+    Auto Sync 機制：自動讀取 gateway.yaml 並更新/同步至 SQLite 資料庫 (SystemConfig)
     """
     if not os.path.exists(yaml_path):
         logger.warning(f"YAML config file {yaml_path} not found. Skipping auto-sync.")
         return
 
     try:
-        # 1. 檢查是否已有 SystemConfig 資料 (或強制覆蓋)
-        if force or db.query(SystemConfig).count() == 0:
-            if force:
-                db.query(SystemConfig).delete()
-                db.commit()
-            logger.info(f"Syncing system configs from {yaml_path} to DB...")
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
+        logger.info(f"Syncing system configs from {yaml_path} to DB...")
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
 
-            gateway_cfg = data.get("gateway", {})
-            for k, v in gateway_cfg.items():
-                db.add(SystemConfig(category="gateway", key=f"gateway.{k}", value=str(v)))
+        def upsert_config(category: str, key: str, value: Any):
+            val_str = str(value) if value is not None else ""
+            item = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+            if item:
+                item.value = val_str
+                item.category = category
+            else:
+                db.add(SystemConfig(category=category, key=key, value=val_str))
 
-            network_cfg = data.get("network", {})
-            broker_mqtt_cfg = network_cfg.get("broker_mqtt", {}) or network_cfg.get("mqtt", {})
-            for k, v in broker_mqtt_cfg.items():
-                db.add(SystemConfig(category="network", key=f"broker_mqtt.{k}", value=str(v)))
+        gateway_cfg = data.get("gateway", {}) or {}
+        for k, v in gateway_cfg.items():
+            upsert_config("gateway", f"gateway.{k}", v)
 
-            cloud_mqtt_cfg = network_cfg.get("cloud_mqtt", {})
-            for k, v in cloud_mqtt_cfg.items():
-                db.add(SystemConfig(category="network", key=f"cloud_mqtt.{k}", value=str(v)))
+        network_cfg = data.get("network", {}) or {}
+        broker_mqtt_cfg = network_cfg.get("broker_mqtt", {}) or network_cfg.get("mqtt", {}) or {}
+        for k, v in broker_mqtt_cfg.items():
+            upsert_config("network", f"broker_mqtt.{k}", v)
 
-            db.add(SystemConfig(category="network", key="ipc_socket_path", value=network_cfg.get("ipc_socket_path", "/tmp/hvac_ipc.sock")))
+        cloud_mqtt_cfg = network_cfg.get("cloud_mqtt", {}) or {}
+        for k, v in cloud_mqtt_cfg.items():
+            upsert_config("network", f"cloud_mqtt.{k}", v)
 
-            db.commit()
-            logger.info("SystemConfigs synced from YAML successfully.")
+        upsert_config("network", "ipc_socket_path", network_cfg.get("ipc_socket_path", "/tmp/hvac_ipc.sock"))
+
+        db.commit()
+        logger.info("SystemConfigs synced from YAML to DB successfully.")
 
     except Exception as e:
         db.rollback()

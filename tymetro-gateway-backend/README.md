@@ -67,8 +67,8 @@ curl http://127.0.0.1:5400/api/v1/health/status
   "success": true,
   "message": "Gateway backend is running normally",
   "data": {
-    "gateway_id": "GW-TYMETRO-001",
-    "gateway_name": "桃園捷運 IoT Gateway",
+    "gateway_id": "G-101",
+    "gateway_name": "桃園捷運 車組 101",
     "app_mode": "development",
     "status": "online",
     "uptime_seconds": 12,
