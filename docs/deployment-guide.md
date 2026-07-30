@@ -8,7 +8,7 @@
 
 - **部署根目錄**：`/media/sd/tymetro-gateway` (SD 卡)
 - **Docker Data Root**：`/media/sd/docker-data` (將容器與 Image 移至 SD 卡，避免填滿 PFC200 內建 Flash)
-- **MQTT Broker**：`eclipse-mosquitto:2.0` 容器 (Port `1883`)
+- **MQTT Broker**：`eclipse-mosquitto:2.0` 容器 (TCP Port `1883` & WebSocket Port `9001`)
 - **後端 API 與 Polling 服務**：FastAPI / Uvicorn 容器 (Port `5400`)
 - **前端 Web UI & Nginx 反向代理**：`nginx:alpine` 容器 (Port `8080`)
   - `http://<PFC200_IP>:8080` ➔ Vue 3 SPA 網頁

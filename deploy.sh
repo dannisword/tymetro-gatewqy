@@ -35,6 +35,18 @@ fi
 # 3. 確保必備檔案與目錄結構存在並開放權限
 mkdir -p "${INSTALL_DIR}/tymetro-gateway-backend/app/logs"
 touch "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db" 2>/dev/null || true
+
+# 若缺少 mosquitto.conf 則自動填入完整配置 (含 1883 TCP 與 9001 WebSocket)
+if [ ! -f "${INSTALL_DIR}/mosquitto.conf" ]; then
+    cat << 'EOF' > "${INSTALL_DIR}/mosquitto.conf"
+listener 1883 0.0.0.0
+allow_anonymous true
+
+listener 9001 0.0.0.0
+protocol websockets
+EOF
+fi
+
 chmod -R 777 "${INSTALL_DIR}" 2>/dev/null || true
 
 # 4. 檢測 Docker Compose 指令
@@ -55,9 +67,18 @@ else
     echo -e "${YELLOW}提示: 未找到 docker-compose，使用標準 docker 命令建置與啟動...${NC}"
     docker build -t tymetro-gateway-backend ./tymetro-gateway-backend
     docker network create tymetro-net 2>/dev/null || true
-    docker run -d --name tymetro-mosquitto --network tymetro-net --restart always -p 1883:1883 -v "${INSTALL_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf" eclipse-mosquitto:2.0 2>/dev/null || true
-    docker run -d --name tymetro-gateway-backend --network tymetro-net --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db:/app/gateway.db" -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.yaml:/app/gateway.yaml" -v "${INSTALL_DIR}/tymetro-gateway-backend/.env:/app/.env" tymetro-gateway-backend 2>/dev/null || true
-    docker run -d --name tymetro-gateway-frontend --network tymetro-net --restart always -p 8080:8080 -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" nginx:alpine 2>/dev/null || true
+    
+    echo -e "${YELLOW}拉取並啟動 Mosquitto 容器...${NC}"
+    docker rm -f tymetro-mosquitto 2>/dev/null || true
+    docker run -d --name tymetro-mosquitto --network tymetro-net --restart always -p 1883:1883 -p 9001:9001 -v "${INSTALL_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf" eclipse-mosquitto:2.0
+
+    echo -e "${YELLOW}啟動 Backend 容器...${NC}"
+    docker rm -f tymetro-gateway-backend 2>/dev/null || true
+    docker run -d --name tymetro-gateway-backend --network tymetro-net --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db:/app/gateway.db" -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.yaml:/app/gateway.yaml" -v "${INSTALL_DIR}/tymetro-gateway-backend/.env:/app/.env" tymetro-gateway-backend
+
+    echo -e "${YELLOW}拉取並啟動 Frontend Nginx 容器...${NC}"
+    docker rm -f tymetro-gateway-frontend 2>/dev/null || true
+    docker run -d --name tymetro-gateway-frontend --network tymetro-net --restart always -p 8080:8080 -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" nginx:alpine
 fi
 
 echo -e "${GREEN}=====================================================${NC}"
@@ -65,7 +86,7 @@ echo -e "${GREEN} 🎉 HVAC Edge Gateway 服務部署啟動完成！${NC}"
 echo -e "${GREEN} 📁 部署路徑: ${INSTALL_DIR}${NC}"
 echo -e "${GREEN} 🌐 Web UI 主頁面: http://<PFC200_IP>:8080${NC}"
 echo -e "${GREEN} 🔌 REST API 文件: http://<PFC200_IP>:8080/docs${NC}"
-echo -e "${GREEN} 📡 MQTT Broker: tcp://<PFC200_IP>:1883${NC}"
+echo -e "${GREEN} 📡 MQTT Broker: tcp://<PFC200_IP>:1883 | ws://<PFC200_IP>:9001${NC}"
 echo -e "${GREEN} 🔍 容器狀態查詢: docker ps${NC}"
 echo -e "${GREEN} 📜 即時日誌監看: docker compose logs -f${NC}"
 echo -e "${GREEN}=====================================================${NC}"

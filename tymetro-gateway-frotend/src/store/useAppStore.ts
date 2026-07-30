@@ -31,10 +31,9 @@ export const useAppStore = defineStore('useAppStore', {
       if (!data) {
         return
       }
-      this.user = data
-      this.user.accessToken = "";
-      useAuthStore().setToken(data.accessToken)
-
+      const token = data.accessToken
+      this.user = { ...data, accessToken: "" }
+      useAuthStore().setToken(token)
     },
 
     setSysInfo(sysInfo: any) {

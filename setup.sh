@@ -61,18 +61,27 @@ mkdir -p /etc/docker
 if [ ! -f /etc/docker/daemon.json ]; then
     cat << EOF > /etc/docker/daemon.json
 {
-  "data-root": "${DOCKER_DATA_ROOT}"
+  "data-root": "${DOCKER_DATA_ROOT}",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "2m",
+    "max-file": "5"
+  }
 }
 EOF
     echo -e "${GREEN}✓ 已建立 /etc/docker/daemon.json 並指定 data-root 為 ${DOCKER_DATA_ROOT}${NC}"
     DOCKER_RESTART_NEEDED=1
-elif ! grep -q "data-root" /etc/docker/daemon.json; then
-    # 若 daemon.json 存在但尚未包含 data-root，進行插入
-    sed -i 's/{/{\n  "data-root": "\/media\/sd\/docker-data",/' /etc/docker/daemon.json 2>/dev/null || true
-    echo -e "${GREEN}✓ 已將 data-root (${DOCKER_DATA_ROOT}) 加入 /etc/docker/daemon.json${NC}"
+elif ! grep -q "${DOCKER_DATA_ROOT}" /etc/docker/daemon.json; then
+    # 若 data-root 非 SD 卡路徑，替換或更新
+    if grep -q "data-root" /etc/docker/daemon.json; then
+        sed -i 's|"data-root": *"[^"]*"|"data-root": "'"${DOCKER_DATA_ROOT}"'"|' /etc/docker/daemon.json 2>/dev/null || true
+    else
+        sed -i 's/{/{\n  "data-root": "'"${DOCKER_DATA_ROOT}"'",/' /etc/docker/daemon.json 2>/dev/null || true
+    fi
+    echo -e "${GREEN}✓ 已將 data-root 更新為 SD 卡路徑 (${DOCKER_DATA_ROOT})${NC}"
     DOCKER_RESTART_NEEDED=1
 else
-    echo -e "${GREEN}✓ /etc/docker/daemon.json 已設定 data-root${NC}"
+    echo -e "${GREEN}✓ /etc/docker/daemon.json 已設定為 SD 卡路徑 (${DOCKER_DATA_ROOT})${NC}"
 fi
 
 # 啟動或重啟 Docker 服務
