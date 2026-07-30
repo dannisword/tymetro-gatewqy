@@ -130,9 +130,6 @@ class MQTTService:
             for code, raw_val in register_dict.items():
                 try:
                     val = float(raw_val)
-                    # 處理 INT16 Signed 補碼 (若 > 32767 轉為負數)
-                    if val > 32767:
-                        val -= 65536
                 except (ValueError, TypeError):
                     val = 0.0
 
