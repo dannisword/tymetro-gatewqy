@@ -31,8 +31,21 @@ class CloudMQTTService:
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
 
+    def reload_config(self):
+        """重新讀取 DB / yaml_settings 最新 Cloud MQTT 設定"""
+        self.host = db_config_repo.get_system_config("cloud_mqtt.broker_host") or yaml_settings.network.cloud_mqtt.broker_host
+        self.port = int(db_config_repo.get_system_config("cloud_mqtt.broker_port") or yaml_settings.network.cloud_mqtt.broker_port)
+        self.username = db_config_repo.get_system_config("cloud_mqtt.username") or yaml_settings.network.cloud_mqtt.username or None
+        self.password = db_config_repo.get_system_config("cloud_mqtt.password") or yaml_settings.network.cloud_mqtt.password or None
+        self.client_id = db_config_repo.get_system_config("cloud_mqtt.client_id") or yaml_settings.network.cloud_mqtt.client_id or "GW-TAU-01-CLOUD"
+        self.publish_topic_prefix = db_config_repo.get_system_config("cloud_mqtt.publish_topic_prefix") or yaml_settings.network.cloud_mqtt.publish_topic_prefix
+        self.qos = int(db_config_repo.get_system_config("cloud_mqtt.qos") or yaml_settings.network.cloud_mqtt.qos)
+        self.reconnect_delay_sec = int(db_config_repo.get_system_config("cloud_mqtt.reconnect_delay_sec") or yaml_settings.network.cloud_mqtt.reconnect_delay_sec)
+        logger.info(f"[CloudMQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.publish_topic_prefix}', ClientID='{self.client_id}'")
+
     async def start(self):
         """啟動桃捷雲 MQTT 拋轉任務"""
+        self.reload_config()
         self._running = True
         self._worker_task = asyncio.create_task(self._publish_loop())
         logger.info(
@@ -50,6 +63,12 @@ class CloudMQTTService:
             except asyncio.CancelledError:
                 pass
         logger.info("[CloudMQTTService] Cloud MQTT Forwarder stopped.")
+
+    async def restart(self):
+        """重載設定並重新連線 Cloud MQTT 拋轉"""
+        logger.info("[CloudMQTTService] Restarting Cloud MQTT Service with updated configuration...")
+        await self.stop()
+        await self.start()
 
     async def push_telemetry(self, payload: Dict[str, Any], topic_suffix: Optional[str] = None):
         """

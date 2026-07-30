@@ -25,16 +25,24 @@ class MQTTService:
         port: Optional[int] = None,
         topic_prefix: Optional[str] = None
     ):
-        self.host = host or db_config_repo.get_system_config("broker_mqtt.broker_host") or db_config_repo.get_system_config("mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
-        self.port = int(port or db_config_repo.get_system_config("broker_mqtt.broker_port") or db_config_repo.get_system_config("mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
-        self.topic_prefix = topic_prefix or db_config_repo.get_system_config("broker_mqtt.topic_prefix") or db_config_repo.get_system_config("mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
+        self.host = host or db_config_repo.get_system_config("broker_mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
+        self.port = int(port or db_config_repo.get_system_config("broker_mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
+        self.topic_prefix = topic_prefix or db_config_repo.get_system_config("broker_mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
         # 異動存記憶體快取 (Delta Saving Cache): "eq_id:sensor_code" -> last_value
         self._last_sensor_values: Dict[str, float] = {}
 
+    def reload_config(self):
+        """重新讀取 DB / yaml_settings 最新 MQTT 設定"""
+        self.host = db_config_repo.get_system_config("broker_mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
+        self.port = int(db_config_repo.get_system_config("broker_mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
+        self.topic_prefix = db_config_repo.get_system_config("broker_mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
+        logger.info(f"[MQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.topic_prefix}'")
+
     async def start(self):
         """啟動 MQTT 監聽任務"""
+        self.reload_config()
         self._running = True
         self._listener_task = asyncio.create_task(self._listen_loop())
         logger.info(f"[MQTTService] MQTT Service started. Targeting Broker {self.host}:{self.port}, Topic: '{self.topic_prefix}'")
@@ -49,6 +57,12 @@ class MQTTService:
             except asyncio.CancelledError:
                 pass
         logger.info("[MQTTService] MQTT Service stopped.")
+
+    async def restart(self):
+        """重載設定並重新連線 MQTT 監聽」"""
+        logger.info("[MQTTService] Restarting MQTT Service with updated configuration...")
+        await self.stop()
+        await self.start()
 
     async def _listen_loop(self):
         """MQTT 非同步監聽與自動斷線重連 Loop"""
