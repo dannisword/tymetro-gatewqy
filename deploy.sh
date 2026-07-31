@@ -74,7 +74,7 @@ else
 
     echo -e "${YELLOW}啟動 Backend 容器...${NC}"
     docker rm -f tymetro-gateway-backend 2>/dev/null || true
-    docker run -d --name tymetro-gateway-backend --network tymetro-net --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db:/app/gateway.db" -v "${INSTALL_DIR}/tymetro-gateway-backend/gateway.yaml:/app/gateway.yaml" -v "${INSTALL_DIR}/tymetro-gateway-backend/.env:/app/.env" tymetro-gateway-backend
+    docker run -d --name tymetro-gateway-backend --network tymetro-net --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend:/app" tymetro-gateway-backend
 
     echo -e "${YELLOW}拉取並啟動 Frontend Nginx 容器...${NC}"
     docker rm -f tymetro-gateway-frontend 2>/dev/null || true

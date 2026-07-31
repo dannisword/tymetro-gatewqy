@@ -80,8 +80,10 @@ def load_gateway_config(config_path: str = "gateway.yaml") -> AppYamlConfig:
 
 def reload_gateway_yaml_config(config_path: str = "gateway.yaml") -> AppYamlConfig:
     global yaml_settings
-    yaml_settings = load_gateway_config(config_path)
-    logger.info("[ConfigYAML] gateway.yaml reloaded into memory.")
+    new_config = load_gateway_config(config_path)
+    for key, value in new_config.__dict__.items():
+        setattr(yaml_settings, key, value)
+    logger.info("[ConfigYAML] gateway.yaml reloaded in-place into memory.")
     return yaml_settings
 
 yaml_settings = load_gateway_config()

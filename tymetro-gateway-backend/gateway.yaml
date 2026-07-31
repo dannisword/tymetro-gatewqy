@@ -1,6 +1,6 @@
 gateway:
-  id: G-119
-  name: 桃園捷運 車組 119
+  id: G-106
+  name: 桃園捷運 車組 106
   location: 桃園捷運
   poll_interval_ms: 1000
 network:
@@ -8,15 +8,15 @@ network:
     enabled: true
     broker_host: 220.133.144.73
     broker_port: 1883
-    topic_prefix: "TYMC/AIR/119/#"
+    topic_prefix: "TYMC/AIR/106/#"
   cloud_mqtt:
     enabled: true
     broker_host: 220.133.144.73
     broker_port: 1883
     username: ""
     password: ""
-    client_id: "GW-TAU-119-CLOUD"
-    publish_topic_prefix: "MQT/TRA/OTR/TRC/119"
+    client_id: "GW-TAU-106-CLOUD"
+    publish_topic_prefix: "MQT/TRA/OTR/TRC/106"
     qos: 0
     reconnect_delay_sec: 5
   ipc_socket_path: /tmp/hvac_ipc.sock

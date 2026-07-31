@@ -22,10 +22,8 @@ services:
     ports:
       - "5400:5400"
     volumes:
-      # 持久化資料庫與點位 YAML 配置檔
-      - ./tymetro-gateway-backend/gateway.db:/app/gateway.db
-      - ./tymetro-gateway-backend/gateway.yaml:/app/gateway.yaml
-      - ./tymetro-gateway-backend/.env:/app/.env
+      # 掛載整個 backend 目錄，防止單一檔案 (gateway.yaml) FTP 覆蓋時因 Inode 變更導致容器內存舊檔問題
+      - ./tymetro-gateway-backend:/app
     depends_on:
       - mosquitto
 

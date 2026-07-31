@@ -87,6 +87,57 @@ npm run build
 
 ---
 
+### ⚙️ 車組設定說明 (Train Set Configuration)
+
+在部署至 PFC200 控制器前或更換車組時，需編輯後端配置檔 `tymetro-gateway-backend/gateway.yaml`：
+
+```yaml
+gateway:
+  id: G-106                         # 👈 1. 車組 Gateway 識別碼 (如 G-101, G-106)
+  name: 桃園捷運 車組 106             # 👈 2. 車組顯示名稱
+  location: 桃園捷運
+  poll_interval_ms: 1000
+
+network:
+  broker_mqtt:                      # 本地 PFC200 MQTT Broker
+    enabled: true
+    broker_host: 220.133.144.73
+    broker_port: 1883
+    topic_prefix: "TYMC/AIR/106/#"  # 👈 3. 本地端接收該車組點位的 Topic 前綴
+
+  cloud_mqtt:                       # 桃捷雲 MQTT 拋轉服務
+    enabled: true
+    broker_host: 220.133.144.73
+    broker_port: 1883
+    username: ""
+    password: ""
+    client_id: "GW-TAU-106-CLOUD"   # 👈 4. 雲端連線 Client ID (例如 GW-TAU-106-CLOUD)
+    publish_topic_prefix: "MQT/TRA/OTR/TRC/106" # 👈 5. 拋轉至雲端的 Topic 前綴
+    qos: 0
+    reconnect_delay_sec: 5
+```
+
+#### 修改後套用變更 (熱重載/重啟)
+修改 `gateway.yaml` 後，可選擇以下任一方式將設定套用至系統：
+1. **重啟後端容器**（啟動時自動同步寫入資料庫）：
+   ```bash
+   # 方式 A: 直接使用原生 Docker 命令 (推薦)
+   docker restart tymetro-gateway-backend
+
+   # 方式 B: 使用 docker-compose (於 /media/sd/tymetro-gateway 目錄下)
+   docker-compose restart backend
+   ```
+2. **免停機 API 熱重載**：
+   ```bash
+   # 方式 A: 直連後端 5400 Port (推薦本機指令)
+   curl -X POST http://localhost:5400/api/v1/configs/reload
+
+   # 方式 B: 經由 Nginx 8080 Port (外部或網頁轉發)
+   curl -X POST http://localhost:8080/api/v1/config/reload
+   ```
+
+---
+
 ### 3️⃣ 階段三：構建與啟動 Docker 容器 (PFC200 端)
 
 登入 PFC200 終端機，執行一鍵啟動腳本：
@@ -119,7 +170,11 @@ docker ps
 
 ### 3. 查看即時服務日誌
 ```bash
-docker compose logs -f
+# 方式 A: 原生 Docker 指令 (監看後端)
+docker logs -f tymetro-gateway-backend
+
+# 方式 B: docker-compose 監看全部服務
+docker-compose logs -f
 ```
 
 ---
@@ -131,14 +186,16 @@ docker compose logs -f
 2. FTP 將最新的 `dist/` 覆蓋至 `/media/sd/tymetro-gateway/tymetro-gateway-frotend/dist/`。
 3. 重啟前端容器 (1 秒完成)：
    ```bash
-   docker compose restart frontend
+   docker restart tymetro-gateway-frontend
+   # 或: docker-compose restart frontend
    ```
 
 ### 更新 Python 後端程式碼
 1. FTP 覆蓋後端更新檔案。
 2. 重建後端容器（**前端與 Mosquitto 不會中斷**）：
    ```bash
-   docker compose up -d --build backend
+   docker-compose up -d --build backend
+   # 若未安裝 docker-compose，可直接重新執行: ./deploy.sh
    ```
 
 ---

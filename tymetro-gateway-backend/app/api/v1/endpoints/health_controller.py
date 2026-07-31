@@ -9,6 +9,8 @@ from app.core.config_yaml import yaml_settings
 from app.services.equipment_manager import equipment_manager
 from app.core.logger import logger
 
+from app.database.db_config_repo import db_config_repo
+
 router = APIRouter()
 START_TIME = time.time()
 
@@ -18,9 +20,9 @@ async def get_gateway_status():
     states = equipment_manager.get_all_equipment_states()
     online_count = sum(1 for eq in states if eq.get("is_online"))
     data = {
-        "gateway_id": yaml_settings.gateway.id,
-        "gateway_name": yaml_settings.gateway.name,
-        "location": yaml_settings.gateway.location,
+        "gateway_id": db_config_repo.get_system_config("gateway.id") or yaml_settings.gateway.id,
+        "gateway_name": db_config_repo.get_system_config("gateway.name") or yaml_settings.gateway.name,
+        "location": db_config_repo.get_system_config("gateway.location") or yaml_settings.gateway.location,
         "status": "online",
         "uptime_seconds": int(time.time() - START_TIME),
         "equipments_monitored": len(states),
