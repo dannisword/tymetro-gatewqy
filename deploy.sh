@@ -60,7 +60,9 @@ elif command -v docker-compose &> /dev/null; then
 fi
 
 # 5. 構建並啟動 Docker 服務容器
-echo -e "${YELLOW}構建並啟動 Docker 容器 (Mosquitto + Backend API + Frontend Nginx)...${NC}"
+echo -e "${YELLOW}清除舊有重名容器衝突並構建啟動 Docker 容器 (Mosquitto + Backend API + Frontend Nginx)...${NC}"
+docker rm -f tymetro-mosquitto tymetro-gateway-backend tymetro-gateway-frontend 2>/dev/null || true
+
 if [ -n "${DOCKER_COMPOSE_CMD}" ]; then
     ${DOCKER_COMPOSE_CMD} up -d --build
 else
@@ -70,15 +72,15 @@ else
     
     echo -e "${YELLOW}拉取並啟動 Mosquitto 容器...${NC}"
     docker rm -f tymetro-mosquitto 2>/dev/null || true
-    docker run -d --name tymetro-mosquitto --network tymetro-net --restart always -p 1883:1883 -p 9001:9001 -v "${INSTALL_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf" eclipse-mosquitto:2.0
+    docker run -d --name tymetro-mosquitto --security-opt seccomp=unconfined --network tymetro-net --restart always -p 1883:1883 -p 9001:9001 -v "${INSTALL_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf" eclipse-mosquitto:2.0
 
     echo -e "${YELLOW}啟動 Backend 容器...${NC}"
     docker rm -f tymetro-gateway-backend 2>/dev/null || true
-    docker run -d --name tymetro-gateway-backend --network tymetro-net --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend:/app" tymetro-gateway-backend
+    docker run -d --name tymetro-gateway-backend --network tymetro-net --network-alias backend --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend:/app" tymetro-gateway-backend
 
     echo -e "${YELLOW}拉取並啟動 Frontend Nginx 容器...${NC}"
     docker rm -f tymetro-gateway-frontend 2>/dev/null || true
-    docker run -d --name tymetro-gateway-frontend --network tymetro-net --restart always -p 8080:8080 -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" nginx:alpine
+    docker run -d --name tymetro-gateway-frontend --security-opt seccomp=unconfined --network tymetro-net --restart always -p 8080:8080 -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" nginx:alpine
 fi
 
 echo -e "${GREEN}=====================================================${NC}"

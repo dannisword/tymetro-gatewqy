@@ -45,13 +45,11 @@ sudo ./setup.sh
 ```
 
 **`setup.sh` 自動完成的項目**：
-1. 建立 SD 卡目標目錄與結構：
-   - `/media/sd/tymetro-gateway`
-   - `/media/sd/tymetro-gateway/tymetro-gateway-frotend/dist`
-   - `/media/sd/tymetro-gateway/tymetro-gateway-backend/app/logs`
+1. 建立 SD 卡目標目錄與結構 (`/media/sd/tymetro-gateway`)。
 2. 將 Docker 數據根目錄 (`data-root`) 自動配置並移至 `/media/sd/docker-data`，保護 Flash 不爆滿。
 3. 自動下載並配置 `docker-compose` 二進位檔至 SD 卡 (`/media/sd/bin/docker-compose`)。
-4. 設定專案目錄權限 `chmod -R 777`，確保後續 FTP 上傳與 Docker 讀寫完全無權限障礙。
+4. 自動設定 `autostart.sh` 與 `/etc/rc.local` 開機防護，確保開機時自動等待 SD 卡掛載並啟動 Docker 與容器。
+5. 設定專案目錄權限 `chmod -R 777`，確保後續 FTP 上傳與 Docker 讀寫無權限障礙。
 
 ---
 

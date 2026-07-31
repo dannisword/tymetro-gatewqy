@@ -11,6 +11,8 @@ services:
       - "9001:9001"
     volumes:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+    security_opt:
+      - seccomp:unconfined
 
   # 2. HVAC Edge Gateway 後端服務 (Port 5400)
   backend:
@@ -39,5 +41,7 @@ services:
       - ./tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - backend
+    security_opt:
+      - seccomp:unconfined
 
 

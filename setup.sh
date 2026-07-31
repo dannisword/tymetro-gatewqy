@@ -102,29 +102,31 @@ else
 fi
 echo -e "${GREEN}✓ Docker 引擎運作正常 (Storage Root: ${DOCKER_DATA_ROOT})${NC}"
 
-# 4. 檢查與自動下載 Docker Compose 至 SD 卡
-echo -e "${YELLOW}[3/4] 檢測/安裝 Docker Compose 到 SD 卡...${NC}"
+# 4. 檢查與自動下載 Docker Compose 至系統路徑
+echo -e "${YELLOW}[3/3] 檢測/安裝 Docker Compose...${NC}"
 if docker compose version &> /dev/null; then
     echo -e "${GREEN}✓ 檢測到 Docker Compose (Plugin 模式)${NC}"
 elif command -v docker-compose &> /dev/null; then
     echo -e "${GREEN}✓ 檢測到 docker-compose (Standalone 模式)${NC}"
 else
-    echo -e "${YELLOW}未檢測到 Docker Compose，下載至 SD 卡 (${SD_BIN_DIR}/docker-compose)...${NC}"
+    echo -e "${YELLOW}未檢測到 Docker Compose，下載至系統路徑 (/usr/bin/docker-compose)...${NC}"
     
     ARCH="$(uname -m)"
-    COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-${ARCH}"
-    DEST_SD_BIN="${SD_BIN_DIR}/docker-compose"
+    if [ "${ARCH}" = "armv7l" ]; then
+        ARCH="armv7"
+    fi
+    COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-${ARCH}"
+    DEST_BIN="/usr/bin/docker-compose"
     
     if command -v curl &> /dev/null; then
-        curl -SL "${COMPOSE_URL}" -o "${DEST_SD_BIN}" 2>/dev/null || true
+        curl -SL "${COMPOSE_URL}" -o "${DEST_BIN}" 2>/dev/null || true
     elif command -v wget &> /dev/null; then
-        wget -O "${DEST_SD_BIN}" "${COMPOSE_URL}" 2>/dev/null || true
+        wget -O "${DEST_BIN}" "${COMPOSE_URL}" 2>/dev/null || true
     fi
 
-    if [ -f "${DEST_SD_BIN}" ]; then
-        chmod +x "${DEST_SD_BIN}"
-        ln -sf "${DEST_SD_BIN}" /usr/local/bin/docker-compose 2>/dev/null || ln -sf "${DEST_SD_BIN}" /usr/bin/docker-compose 2>/dev/null || true
-        echo -e "${GREEN}✓ Docker Compose 成功下載至 SD 卡並建立系統連結${NC}"
+    if [ -f "${DEST_BIN}" ]; then
+        chmod +x "${DEST_BIN}"
+        echo -e "${GREEN}✓ Docker Compose 成功下載至系統路徑 (/usr/bin/docker-compose)${NC}"
     else
         echo -e "${YELLOW}⚠️ 下載失敗 (無外網存取)，系統將退回使用標準 docker 命令。${NC}"
     fi
