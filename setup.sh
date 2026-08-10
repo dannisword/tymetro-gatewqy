@@ -34,6 +34,7 @@ echo -e "${YELLOW}[1/4] 建立 SD 卡掛載點與專案目錄結構...${NC}"
 mkdir -p "${INSTALL_DIR}"
 mkdir -p "${INSTALL_DIR}/tymetro-gateway-backend/app/logs"
 mkdir -p "${INSTALL_DIR}/tymetro-gateway-frotend/dist"
+mkdir -p "${INSTALL_DIR}/mosquitto-data"
 mkdir -p "${DOCKER_DATA_ROOT}"
 mkdir -p "${SD_BIN_DIR}"
 

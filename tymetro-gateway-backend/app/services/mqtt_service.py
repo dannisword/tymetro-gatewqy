@@ -117,7 +117,10 @@ class MQTTService:
             end_pos = int(end_pos_str) if end_pos_str is not None and str(end_pos_str).isdigit() else None
 
             # 3. 直接自 SQLite 資料庫對照查詢對應的 eq_id 與 equipment_name (完全由 SQLite DB 設定控制)
-            eq_info = db_config_repo.get_equipment_by_vin_and_pos(car_vin, end_pos)
+            loop = asyncio.get_running_loop()
+            eq_info = await loop.run_in_executor(
+                None, db_config_repo.get_equipment_by_vin_and_pos, car_vin, end_pos
+            )
             eq_id = eq_info["eq_id"]
             equipment_name = eq_info["equipment_name"]
 
@@ -167,7 +170,7 @@ class MQTTService:
 
             # 6. 更新 SQLite 即時點位與寫入 Queue 佇列
             if sensor_values:
-                db_config_repo.update_sensor_values(sensor_values)
+                await loop.run_in_executor(None, db_config_repo.update_sensor_values, sensor_values)
 
             if history_items:
                 await sqlite_writer.push_many(history_items)

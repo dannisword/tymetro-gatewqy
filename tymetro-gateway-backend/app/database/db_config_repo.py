@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 from typing import List, Dict, Any, Optional
 from app.models.config_model import SystemConfig
 from app.models.equipment_model import Equipment
@@ -16,6 +17,9 @@ class DbConfigRepository:
         self.db_path = db_path
         # 記憶體快取 (RAM Cache): (car_vin, end_pos) -> eq_info (O(1) 超高效能對照)
         self._equipment_cache: Dict[Any, Dict[str, Any]] = {}
+        # 記憶體快取 (即時狀態暫存區) 用於批次寫入
+        self._pending_sensor_updates: Dict[str, float] = {}
+        self._lock = threading.Lock()
 
     def clear_cache(self):
         """清空設備對照之記憶體快取"""
@@ -101,20 +105,32 @@ class DbConfigRepository:
             db.close()
 
     def update_sensor_values(self, updates: Dict[str, float]):
-        """批量更新感測器即時數值 (sensorValue) 至 SQLite sensors 資料表"""
+        """暫存感測器即時數值更新至記憶體快取，不立即執行資料庫寫入"""
         if not updates:
             return
+        with self._lock:
+            self._pending_sensor_updates.update(updates)
+
+    def flush_sensor_values(self):
+        """將記憶體快取中暫存的最新數值，一次性寫入 SQLite 資料庫 (單一 Transaction)"""
+        with self._lock:
+            if not self._pending_sensor_updates:
+                return
+            to_update = dict(self._pending_sensor_updates)
+            self._pending_sensor_updates.clear()
+
         db = SessionLocal()
         try:
-            for code, val in updates.items():
+            for code, val in to_update.items():
                 db.query(Sensor).filter(Sensor.sensorCode == code).update(
                     {Sensor.sensorValue: val},
                     synchronize_session=False
                 )
             db.commit()
+            logger.info(f"[DbConfigRepository] Flushed {len(to_update)} sensor values to SQLite successfully.")
         except Exception as e:
             db.rollback()
-            logger.error(f"Error updating sensor values to DB: {e}")
+            logger.error(f"Error flushing sensor values to SQLite: {e}")
         finally:
             db.close()
 

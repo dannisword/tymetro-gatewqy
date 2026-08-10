@@ -34,7 +34,24 @@ fi
 
 # 3. 確保必備檔案與目錄結構存在並開放權限
 mkdir -p "${INSTALL_DIR}/tymetro-gateway-backend/app/logs"
+mkdir -p "${INSTALL_DIR}/mosquitto-data"
 touch "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db" 2>/dev/null || true
+
+# 處理異常斷電導致的 mosquitto.db 毀損防護 (若檔案為空，自動刪除防死鎖)
+if [ -f "${INSTALL_DIR}/mosquitto-data/mosquitto.db" ]; then
+    if [ ! -s "${INSTALL_DIR}/mosquitto-data/mosquitto.db" ]; then
+        echo -e "${YELLOW}偵測到異常斷電產生的空 mosquitto.db 損毀檔，正在自動清除以防啟動失敗...${NC}"
+        rm -f "${INSTALL_DIR}/mosquitto-data/mosquitto.db"
+    fi
+fi
+
+# 處理異常斷電導致的 Docker JSON 日誌損毀 (Error grabbing logs: invalid character '\x00')
+# 自動尋找 Docker 資料目錄下的所有 json.log 檔案並清空，排除日誌讀取錯誤
+DOCKER_DATA_DIR="/media/sd/docker-data"
+if [ -d "${DOCKER_DATA_DIR}/containers" ]; then
+    echo -e "${YELLOW}正在清理因斷電可能損毀的 Docker 容器日誌檔 (*-json.log)...${NC}"
+    find "${DOCKER_DATA_DIR}/containers/" -name "*-json.log" -exec truncate -s 0 {} \; 2>/dev/null || true
+fi
 
 # 若缺少 mosquitto.conf 則自動填入完整配置 (含 1883 TCP 與 9001 WebSocket)
 if [ ! -f "${INSTALL_DIR}/mosquitto.conf" ]; then
@@ -44,6 +61,9 @@ allow_anonymous true
 
 listener 9001 0.0.0.0
 protocol websockets
+
+# 持久化設定 (設定為 false 改用純記憶體運作，避免任何異常斷電磁碟寫入導致的損毀)
+persistence false
 EOF
 fi
 
@@ -72,15 +92,44 @@ else
     
     echo -e "${YELLOW}拉取並啟動 Mosquitto 容器...${NC}"
     docker rm -f tymetro-mosquitto 2>/dev/null || true
-    docker run -d --name tymetro-mosquitto --security-opt seccomp=unconfined --network tymetro-net --restart always -p 1883:1883 -p 9001:9001 -v "${INSTALL_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf" eclipse-mosquitto:2.0
+    docker run -d --name tymetro-mosquitto \
+      --security-opt seccomp=unconfined \
+      --network tymetro-net \
+      --restart always \
+      -p 1883:1883 -p 9001:9001 \
+      -v "${INSTALL_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf" \
+      -v "${INSTALL_DIR}/mosquitto-data:/mosquitto/data" \
+      --log-driver local \
+      --log-opt max-size=10m \
+      --log-opt max-file=3 \
+      eclipse-mosquitto:2.0
 
     echo -e "${YELLOW}啟動 Backend 容器...${NC}"
     docker rm -f tymetro-gateway-backend 2>/dev/null || true
-    docker run -d --name tymetro-gateway-backend --network tymetro-net --network-alias backend --restart always -p 5400:5400 -v "${INSTALL_DIR}/tymetro-gateway-backend:/app" tymetro-gateway-backend
+    docker run -d --name tymetro-gateway-backend \
+      --network tymetro-net \
+      --network-alias backend \
+      --restart always \
+      -p 5400:5400 \
+      -v "${INSTALL_DIR}/tymetro-gateway-backend:/app" \
+      --log-driver local \
+      --log-opt max-size=10m \
+      --log-opt max-file=3 \
+      tymetro-gateway-backend
 
     echo -e "${YELLOW}拉取並啟動 Frontend Nginx 容器...${NC}"
     docker rm -f tymetro-gateway-frontend 2>/dev/null || true
-    docker run -d --name tymetro-gateway-frontend --security-opt seccomp=unconfined --network tymetro-net --restart always -p 8080:8080 -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" nginx:alpine
+    docker run -d --name tymetro-gateway-frontend \
+      --security-opt seccomp=unconfined \
+      --network tymetro-net \
+      --restart always \
+      -p 8080:8080 \
+      -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" \
+      -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" \
+      --log-driver local \
+      --log-opt max-size=10m \
+      --log-opt max-file=3 \
+      nginx:alpine
 fi
 
 echo -e "${GREEN}=====================================================${NC}"

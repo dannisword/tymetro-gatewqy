@@ -12,6 +12,7 @@ from app.core.logger import logger
 from app.api.v1.api import api_router
 from app.database.session import SessionLocal
 from app.database.init_db import create_tables, init_mock_data
+from app.database.db_config_repo import db_config_repo
 from app.services.sqlite_writer import sqlite_writer
 from app.services.mqtt_service import mqtt_service
 from app.services.cloud_mqtt_service import cloud_mqtt_service
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
             init_mock_data(db)
         finally:
             db.close()
+        # 預熱設備對照之記憶體快取
+        db_config_repo.get_all_equipments()
     except Exception as e:
         logger.error(f"Error creating database tables or initializing mock data: {e}")
 

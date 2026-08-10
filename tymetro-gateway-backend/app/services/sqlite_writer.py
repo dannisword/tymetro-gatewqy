@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from app.core.logger import logger
 from app.repositories.sensor_history_repository import sensor_history_repo
 from app.repositories.outbox_repository import outbox_repo
+from app.database.db_config_repo import db_config_repo
 
 class SQLiteWriter:
     """
@@ -66,8 +67,8 @@ class SQLiteWriter:
                     pass
 
                 now = time.time()
-                # 滿足 100 筆 或 超過 5 秒觸發批量寫入
-                if len(items) >= self.batch_size or (items and (now - last_flush_time) >= self.flush_interval_sec):
+                # 滿足 100 筆 或 超過 5 秒觸發批量寫入 / Flush
+                if len(items) >= self.batch_size or (now - last_flush_time) >= self.flush_interval_sec:
                     await self._write_batch(items)
                     items.clear()
                     last_flush_time = now
@@ -83,21 +84,26 @@ class SQLiteWriter:
 
     async def _write_batch(self, items: List[Dict[str, Any]]):
         """實際呼叫 Repository 執行 ORM 批量寫入"""
-        if not items:
-            return
         try:
             # 異步線程中執行資料庫 commit 寫入
             loop = asyncio.get_running_loop()
             
             # 1. 寫入 SensorHistory
-            h_success = await loop.run_in_executor(None, sensor_history_repo.add_batch, items)
-            # 2. 寫入 Outbox (離線補傳佇列)
-            o_success = await loop.run_in_executor(None, outbox_repo.push_batch, items)
+            h_success = True
+            o_success = True
+            if items:
+                h_success = await loop.run_in_executor(None, sensor_history_repo.add_batch, items)
+                # 2. 寫入 Outbox (離線補傳佇列)
+                o_success = await loop.run_in_executor(None, outbox_repo.push_batch, items)
 
-            if h_success and o_success:
-                logger.info(f"[SQLiteWriter] Executemany Success: Flushed {len(items)} telemetry records into SQLite.")
-            else:
-                logger.error(f"[SQLiteWriter] Failed to write batch of {len(items)} items to SQLite.")
+            # 3. 批次更新即時暫存值到 SQLite
+            await loop.run_in_executor(None, db_config_repo.flush_sensor_values)
+
+            if items:
+                if h_success and o_success:
+                    logger.info(f"[SQLiteWriter] Executemany Success: Flushed {len(items)} telemetry records into SQLite.")
+                else:
+                    logger.error(f"[SQLiteWriter] Failed to write batch of {len(items)} items to SQLite.")
         except Exception as e:
             logger.error(f"[SQLiteWriter] Error during _write_batch: {e}")
 
@@ -114,5 +120,11 @@ class SQLiteWriter:
         if remaining_items:
             logger.info(f"[SQLiteWriter] Flushing remaining {len(remaining_items)} queue items on shutdown...")
             await self._write_batch(remaining_items)
+        else:
+            # 即使沒有剩餘 telemetry 項目，關閉時也要確保暫存的點位寫入資料庫
+            try:
+                db_config_repo.flush_sensor_values()
+            except Exception as e:
+                logger.error(f"[SQLiteWriter] Error flushing sensor values on shutdown: {e}")
 
 sqlite_writer = SQLiteWriter()
