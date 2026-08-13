@@ -28,6 +28,13 @@ class MQTTService:
         self.host = host or db_config_repo.get_system_config("broker_mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
         self.port = int(port or db_config_repo.get_system_config("broker_mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
         self.topic_prefix = topic_prefix or db_config_repo.get_system_config("broker_mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
+        
+        db_clean = db_config_repo.get_system_config("broker_mqtt.clean_session")
+        if db_clean is not None:
+            self.clean_session = str(db_clean).lower() in ("true", "1")
+        else:
+            self.clean_session = yaml_settings.network.broker_mqtt.clean_session
+
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
         # 異動存記憶體快取 (Delta Saving Cache): "eq_id:sensor_code" -> last_value
@@ -38,14 +45,21 @@ class MQTTService:
         self.host = db_config_repo.get_system_config("broker_mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
         self.port = int(db_config_repo.get_system_config("broker_mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
         self.topic_prefix = db_config_repo.get_system_config("broker_mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
-        logger.info(f"[MQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.topic_prefix}'")
+        
+        db_clean = db_config_repo.get_system_config("broker_mqtt.clean_session")
+        if db_clean is not None:
+            self.clean_session = str(db_clean).lower() in ("true", "1")
+        else:
+            self.clean_session = yaml_settings.network.broker_mqtt.clean_session
+
+        logger.info(f"[MQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.topic_prefix}', CleanSession={self.clean_session}")
 
     async def start(self):
         """啟動 MQTT 監聽任務"""
         self.reload_config()
         self._running = True
         self._listener_task = asyncio.create_task(self._listen_loop())
-        logger.info(f"[MQTTService] MQTT Service started. Targeting Broker {self.host}:{self.port}, Topic: '{self.topic_prefix}'")
+        logger.info(f"[MQTTService] MQTT Service started. Targeting Broker {self.host}:{self.port}, Topic: '{self.topic_prefix}', CleanSession: {self.clean_session}")
 
     async def stop(self):
         """停止 MQTT 監聽"""
@@ -70,7 +84,7 @@ class MQTTService:
         while self._running:
             try:
                 logger.info(f"[MQTTService] Connecting to MQTT Broker at {self.host}:{self.port}...")
-                async with aiomqtt.Client(self.host, port=self.port) as client:
+                async with aiomqtt.Client(self.host, port=self.port, clean_session=self.clean_session) as client:
                     logger.info(f"[MQTTService] Successfully connected to MQTT Broker! Subscribing to '{self.topic_prefix}'...")
                     await client.subscribe(self.topic_prefix)
 

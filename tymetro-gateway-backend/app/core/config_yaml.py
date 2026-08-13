@@ -28,6 +28,7 @@ class MQTTYamlConfig(BaseModel):
     broker_host: str = Field(default_factory=lambda: os.getenv("MQTT_BROKER_HOST", "127.0.0.1"))
     broker_port: int = Field(default_factory=lambda: int(os.getenv("MQTT_BROKER_PORT", "1883")))
     topic_prefix: str = Field(default_factory=lambda: os.getenv("MQTT_TOPIC_PREFIX", "PFC200/+/data"))
+    clean_session: bool = True
 
 class CloudMQTTYamlConfig(BaseModel):
     enabled: bool = True
@@ -39,6 +40,8 @@ class CloudMQTTYamlConfig(BaseModel):
     publish_topic_prefix: str = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_TOPIC", "TYMC/CLOUD/101"))
     qos: int = 0
     reconnect_delay_sec: int = 5
+    keepalive: int = 20
+    clean_session: bool = True
 
 class NetworkConfig(BaseModel):
     broker_mqtt: MQTTYamlConfig = Field(default_factory=MQTTYamlConfig)

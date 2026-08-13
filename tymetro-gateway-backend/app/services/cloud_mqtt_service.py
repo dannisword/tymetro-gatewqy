@@ -26,6 +26,13 @@ class CloudMQTTService:
         self.publish_topic_prefix = publish_topic_prefix or db_config_repo.get_system_config("cloud_mqtt.publish_topic_prefix") or yaml_settings.network.cloud_mqtt.publish_topic_prefix
         self.qos = int(db_config_repo.get_system_config("cloud_mqtt.qos") or yaml_settings.network.cloud_mqtt.qos)
         self.reconnect_delay_sec = int(db_config_repo.get_system_config("cloud_mqtt.reconnect_delay_sec") or yaml_settings.network.cloud_mqtt.reconnect_delay_sec)
+        self.keepalive = int(db_config_repo.get_system_config("cloud_mqtt.keepalive") or yaml_settings.network.cloud_mqtt.keepalive)
+
+        db_clean = db_config_repo.get_system_config("cloud_mqtt.clean_session")
+        if db_clean is not None:
+            self.clean_session = str(db_clean).lower() in ("true", "1")
+        else:
+            self.clean_session = yaml_settings.network.cloud_mqtt.clean_session
 
         self._queue: asyncio.Queue = asyncio.Queue()
         self._running = False
@@ -41,7 +48,15 @@ class CloudMQTTService:
         self.publish_topic_prefix = db_config_repo.get_system_config("cloud_mqtt.publish_topic_prefix") or yaml_settings.network.cloud_mqtt.publish_topic_prefix
         self.qos = int(db_config_repo.get_system_config("cloud_mqtt.qos") or yaml_settings.network.cloud_mqtt.qos)
         self.reconnect_delay_sec = int(db_config_repo.get_system_config("cloud_mqtt.reconnect_delay_sec") or yaml_settings.network.cloud_mqtt.reconnect_delay_sec)
-        logger.info(f"[CloudMQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.publish_topic_prefix}', ClientID='{self.client_id}'")
+        self.keepalive = int(db_config_repo.get_system_config("cloud_mqtt.keepalive") or yaml_settings.network.cloud_mqtt.keepalive)
+        
+        db_clean = db_config_repo.get_system_config("cloud_mqtt.clean_session")
+        if db_clean is not None:
+            self.clean_session = str(db_clean).lower() in ("true", "1")
+        else:
+            self.clean_session = yaml_settings.network.cloud_mqtt.clean_session
+
+        logger.info(f"[CloudMQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.publish_topic_prefix}', ClientID='{self.client_id}', Keepalive={self.keepalive}, CleanSession={self.clean_session}")
 
     async def start(self):
         """啟動桃捷雲 MQTT 拋轉任務"""
@@ -50,7 +65,7 @@ class CloudMQTTService:
         self._worker_task = asyncio.create_task(self._publish_loop())
         logger.info(
             f"[CloudMQTTService] Cloud MQTT Forwarder started. "
-            f"Target Cloud Broker: {self.host}:{self.port}, Topic Prefix: '{self.publish_topic_prefix}'"
+            f"Target Cloud Broker: {self.host}:{self.port}, Topic Prefix: '{self.publish_topic_prefix}', CleanSession: {self.clean_session}"
         )
 
     async def stop(self):
@@ -89,7 +104,9 @@ class CloudMQTTService:
                 client_kwargs: Dict[str, Any] = {
                     "hostname": self.host,
                     "port": self.port,
-                    "identifier": self.client_id
+                    "identifier": self.client_id,
+                    "keepalive": self.keepalive,
+                    "clean_session": self.clean_session
                 }
                 if self.username:
                     client_kwargs["username"] = self.username
