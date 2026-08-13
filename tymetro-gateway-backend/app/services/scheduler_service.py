@@ -56,7 +56,7 @@ class SchedulerService:
             logger.error(f"[SchedulerService] Error in job_check_device_heartbeats: {e}")
 
     async def job_backup_database(self):
-        """SQLite DB 每日 03:00 自動備份 Job"""
+        """SQLite DB 每日 03:00 自動備份 Job (非同步複製 + 自動清理舊備份)"""
         try:
             db_path = "gateway.db"
             backup_dir = "data/backups"
@@ -65,8 +65,30 @@ class SchedulerService:
             if os.path.exists(db_path):
                 date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 backup_file = os.path.join(backup_dir, f"gateway_backup_{date_str}.db")
-                shutil.copy2(db_path, backup_file)
+                
+                # 1. 使用 run_in_executor 執行同步的複製操作，防止卡死主 Event Loop
+                import asyncio
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, shutil.copy2, db_path, backup_file)
                 logger.info(f"[SchedulerService] Database daily backup completed: {backup_file}")
+
+                # 2. 自動清除舊備份：僅保留最新的 7 個備份檔 (1周)
+                backup_files = [
+                    os.path.join(backup_dir, f)
+                    for f in os.listdir(backup_dir)
+                    if f.startswith("gateway_backup_") and f.endswith(".db")
+                ]
+                # 依檔名排序 (排序後舊的在前、新的在後)
+                backup_files.sort()
+                
+                if len(backup_files) > 7:
+                    files_to_delete = backup_files[:-7]
+                    for f_path in files_to_delete:
+                        try:
+                            os.remove(f_path)
+                            logger.info(f"[SchedulerService] Deleted expired database backup: {f_path}")
+                        except Exception as clean_err:
+                            logger.error(f"[SchedulerService] Failed to delete expired backup {f_path}: {clean_err}")
             else:
                 logger.warning(f"[SchedulerService] Database file {db_path} not found for backup.")
         except Exception as e:
