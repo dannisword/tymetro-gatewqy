@@ -76,6 +76,13 @@ export interface GatewayHealth {
   status: string;
   uptime_seconds: number;
   version: string;
+  git_version?: {
+    commit: string;
+    branch: string;
+    date: string;
+    dirty: boolean;
+    version: string;
+  };
   timestamp: number;
   services: Record<string, ServiceHealth>;
 }

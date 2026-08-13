@@ -222,8 +222,14 @@ const onClearAlarm = () => {
             <BaseIcon :path="mdiHeartPulse" :w="'8'" :h="'8'" size="32" class="text-[#2a7eb5] animate-pulse" />
             系統服務健康狀態
           </div>
-          <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+          <span 
+            class="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full cursor-help"
+            :title="healthData.git_version ? `分支: ${healthData.git_version.branch}\n提交: ${healthData.git_version.commit}\n時間: ${healthData.git_version.date}` : ''"
+          >
             版本 v{{ healthData.version }}
+            <span v-if="healthData.git_version && healthData.git_version.commit !== 'unknown'" class="text-slate-400 font-mono ml-1">
+              ({{ healthData.git_version.branch }}@{{ healthData.git_version.commit }})
+            </span>
           </span>
         </div>
 

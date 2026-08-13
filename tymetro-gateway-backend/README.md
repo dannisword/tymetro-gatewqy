@@ -90,3 +90,18 @@ curl http://127.0.0.1:5400/api/v1/health/status
   }
 }
 ```
+
+## Git 版本控制與部署說明
+
+本專案支援自動讀取 Git 版本並提供給前端展示，便於實機部署時追蹤代碼版本：
+
+### 1. 自動快取機制
+- 在本機開發啟動伺服器時，後端會自動偵測 `git` 指令，讀取最新的 Commit HASH、分支、最後提交時間與 dirty 狀態，並將結果儲存至 `app/git_version.json` 中。
+- 當將專案檔案透過 FTP/SFTP 部署上傳至 WAGO PLC 實機時（無 `git` 環境），後端啟動時將自動讀取該預先寫入的 `app/git_version.json` 檔案。
+
+### 2. 部署前手動更新指令
+若要在上傳部署檔案前手動確保 `git_version.json` 是最新狀態，請於本機執行：
+```bash
+python app/utils/git_version.py
+```
+執行後控制台將顯示更新狀態，並輸出產生的版本 JSON。

@@ -11,6 +11,8 @@ from app.core.logger import logger
 
 from app.database.db_config_repo import db_config_repo
 
+from app.utils.git_version import git_version_info
+
 router = APIRouter()
 START_TIME = time.time()
 
@@ -28,6 +30,7 @@ async def get_gateway_status():
         "equipments_monitored": len(states),
         "equipments_online": online_count,
         "version": "1.0.0 (SDS Ready)",
+        "git_version": git_version_info,
         "timestamp": int(time.time())
     }
     return ResponseUtil.success(data=data, message="Gateway health check succeeded")
