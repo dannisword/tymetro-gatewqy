@@ -6,6 +6,8 @@ services:
     image: eclipse-mosquitto:2.0
     container_name: tymetro-mosquitto
     restart: always
+    environment:
+      - TZ=Asia/Taipei
     ports:
       - "1883:1883"
       - "9001:9001"
@@ -27,6 +29,8 @@ services:
       dockerfile: Dockerfile
     container_name: tymetro-gateway-backend
     restart: always
+    environment:
+      - TZ=Asia/Taipei
     ports:
       - "5400:5400"
     volumes:
@@ -45,6 +49,8 @@ services:
     image: nginx:alpine
     container_name: tymetro-gateway-frontend
     restart: always
+    environment:
+      - TZ=Asia/Taipei
     ports:
       - "8080:8080"
     volumes:

@@ -26,8 +26,10 @@ def setup_logger():
 
     logger.configure(extra={"service": "GATEWAY"}) 
 
+    log_level_env = os.getenv("LOG_LEVEL", "INFO").upper()
+
     # 控制台輸出
-    logger.add(sys.stderr, format=console_format, level="INFO", enqueue=True)
+    logger.add(sys.stderr, format=console_format, level=log_level_env, enqueue=True)
 
     # 檔案輸出
     log_file_format = os.path.join(log_dir, "gateway_{time:YYYY-MM-DD}.log")
@@ -39,7 +41,7 @@ def setup_logger():
         encoding="utf-8",
         enqueue=True,
         format=file_format,
-        level="INFO"
+        level=log_level_env
     )
 
     return logger
