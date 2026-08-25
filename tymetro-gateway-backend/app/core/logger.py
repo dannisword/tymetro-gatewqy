@@ -50,10 +50,34 @@ def setup_logger():
     logger.add(sys.stderr, format=console_format, level=log_level_env, enqueue=True)
 
     # 檔案輸出
-    log_file_format = os.path.join(log_dir, "gateway_{time:YYYY-MM-DD}.log")
+    log_file_format = os.path.join(log_dir, "gateway.log")
+    
+    import datetime
+    try:
+        if os.path.exists(log_file_format):
+            mtime = os.path.getmtime(log_file_format)
+            current_date = datetime.date.fromtimestamp(mtime)
+        else:
+            current_date = datetime.date.today()
+    except Exception:
+        current_date = datetime.date.today()
+
+    def rotation_condition(message, file):
+        nonlocal current_date
+        # 1. 檢查大小是否超過 10 MB
+        file.seek(0, 2)
+        if file.tell() + len(message) > 10 * 1024 * 1024:
+            return True
+        # 2. 檢查是否跨天 (當前記錄的日期大於上次記錄/修改日期)
+        msg_date = message.record["time"].date()
+        if msg_date > current_date:
+            current_date = msg_date
+            return True
+        return False
+
     logger.add(
         log_file_format,
-        rotation="10 MB",
+        rotation=rotation_condition,
         retention="10 days",
         compression="zip",
         encoding="utf-8",

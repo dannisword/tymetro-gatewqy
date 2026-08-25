@@ -10,6 +10,7 @@ class SchedulerService:
     APScheduler 背景定期排程服務:
     - 每 1 分鐘：檢查 8 台 PFC200 設備心跳與在線狀態
     - 每日 03:00：自動備份 SQLite gateway.db 資料庫
+    - 每日 03:10：自動清理 10 天前的舊日誌檔案
     """
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
@@ -35,8 +36,18 @@ class SchedulerService:
             replace_existing=True
         )
 
+        # Job 3: 每日 03:10 執行舊日誌檔案自動清理
+        self.scheduler.add_job(
+            self.job_cleanup_old_logs,
+            'cron',
+            hour=3,
+            minute=10,
+            id='cleanup_old_logs',
+            replace_existing=True
+        )
+
         self.scheduler.start()
-        logger.info("[SchedulerService] APScheduler started successfully with Heartbeat Check & Daily Backup Jobs.")
+        logger.info("[SchedulerService] APScheduler started successfully with Heartbeat Check, Daily Backup & Log Cleanup Jobs.")
 
     def stop(self):
         """停止排程器"""
@@ -93,5 +104,41 @@ class SchedulerService:
                 logger.warning(f"[SchedulerService] Database file {db_path} not found for backup.")
         except Exception as e:
             logger.error(f"[SchedulerService] Error backing up database: {e}")
+
+    async def job_cleanup_old_logs(self):
+        """每日自動清理 10 天前的舊日誌檔案 (包含舊動態格式與滾動壓縮檔)"""
+        try:
+            log_path_env = os.getenv("LOG_PATH", "logs/gateway.log")
+            log_dir = os.path.dirname(log_path_env) or "logs"
+            
+            if not os.path.exists(log_dir):
+                logger.warning(f"[SchedulerService] Log directory {log_dir} does not exist.")
+                return
+
+            now = datetime.now()
+            limit_days = 10
+            cleaned_count = 0
+
+            for file_name in os.listdir(log_dir):
+                # 匹配所有以 gateway 開頭且為 .log 或 .zip 的檔案
+                if file_name.startswith("gateway") and (file_name.endswith(".log") or file_name.endswith(".zip")):
+                    file_path = os.path.join(log_dir, file_name)
+                    # 取得最後修改時間
+                    mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+                    # 判斷是否超過限期
+                    if (now - mtime).days >= limit_days:
+                        try:
+                            os.remove(file_path)
+                            logger.info(f"[SchedulerService] Deleted expired log file: {file_path}")
+                            cleaned_count += 1
+                        except Exception as file_err:
+                            logger.error(f"[SchedulerService] Failed to delete expired log file {file_path}: {file_err}")
+            
+            if cleaned_count > 0:
+                logger.info(f"[SchedulerService] Log cleanup completed. Deleted {cleaned_count} files.")
+            else:
+                logger.debug("[SchedulerService] Log cleanup: No expired log files found.")
+        except Exception as e:
+            logger.error(f"[SchedulerService] Error cleaning up logs: {e}")
 
 scheduler_service = SchedulerService()
