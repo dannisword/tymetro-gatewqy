@@ -14,7 +14,7 @@ from app.database.session import SessionLocal
 from app.database.init_db import create_tables, init_mock_data
 from app.database.db_config_repo import db_config_repo
 from app.services.sqlite_writer import sqlite_writer
-from app.services.mqtt_service import mqtt_service
+from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.services.cloud_mqtt_service import cloud_mqtt_service
 from app.services.scheduler_service import scheduler_service
 import app.models
@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
     # 2. 啟動 MQTT 訂閱服務 (MQTT Subscriber Service)
     if yaml_settings.network.gateway_mqtt.enabled:
-        await mqtt_service.start()
+        await gateway_mqtt_service.start()
     else:
         logger.info("[MQTTService] MQTT Service is disabled in gateway.yaml.")
 
@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
     if yaml_settings.network.cloud_mqtt.enabled:
         await cloud_mqtt_service.stop()
     if yaml_settings.network.gateway_mqtt.enabled:
-        await mqtt_service.stop()
+        await gateway_mqtt_service.stop()
     await sqlite_writer.stop()
 
 app = FastAPI(title=f"tymetro-gateway ({yaml_settings.gateway.id})", lifespan=lifespan)

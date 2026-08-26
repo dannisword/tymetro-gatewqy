@@ -11,7 +11,7 @@ from app.database.db_config_repo import db_config_repo
 
 from app.core.config_yaml import yaml_settings
 
-class MQTTService:
+class GatewayMQTTService:
     """
     MQTT Subscriber Service:
     - 專責連線 Mosquitto / Local MQTT Broker (1883)
@@ -19,26 +19,8 @@ class MQTTService:
     - 將收到的 Telemetry JSON 資料發送給 DeviceManager 更新心跳
     - 將數據推入 sqlite_writer 的 asyncio.Queue 記憶體佇列
     """
-    def __init__(
-        self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        topic_prefix: Optional[str] = None
-    ):
-        db_host = db_config_repo.get_system_config("gateway_mqtt.broker_host") or db_config_repo.get_system_config("broker_mqtt.broker_host")
-        self.host = host or db_host or yaml_settings.network.gateway_mqtt.broker_host
-
-        db_port = db_config_repo.get_system_config("gateway_mqtt.broker_port") or db_config_repo.get_system_config("broker_mqtt.broker_port")
-        self.port = int(port or db_port or yaml_settings.network.gateway_mqtt.broker_port)
-
-        db_topic = db_config_repo.get_system_config("gateway_mqtt.topic_prefix") or db_config_repo.get_system_config("broker_mqtt.topic_prefix")
-        self.topic_prefix = topic_prefix or db_topic or yaml_settings.network.gateway_mqtt.topic_prefix
-        
-        db_clean = db_config_repo.get_system_config("gateway_mqtt.clean_session") or db_config_repo.get_system_config("broker_mqtt.clean_session")
-        if db_clean is not None:
-            self.clean_session = str(db_clean).lower() in ("true", "1")
-        else:
-            self.clean_session = yaml_settings.network.gateway_mqtt.clean_session
+    def __init__(self):
+        self.reload_config()
 
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
@@ -46,30 +28,30 @@ class MQTTService:
         self._last_sensor_values: Dict[str, float] = {}
 
     def reload_config(self):
-        """重新讀取 DB / yaml_settings 最新 MQTT 設定"""
+        """重新讀取 DB 最新 MQTT 設定"""
         db_host = db_config_repo.get_system_config("gateway_mqtt.broker_host") or db_config_repo.get_system_config("broker_mqtt.broker_host")
-        self.host = db_host or yaml_settings.network.gateway_mqtt.broker_host
+        self.host = db_host or "127.0.0.1"
 
         db_port = db_config_repo.get_system_config("gateway_mqtt.broker_port") or db_config_repo.get_system_config("broker_mqtt.broker_port")
-        self.port = int(db_port or yaml_settings.network.gateway_mqtt.broker_port)
+        self.port = int(db_port or 1883)
 
         db_topic = db_config_repo.get_system_config("gateway_mqtt.topic_prefix") or db_config_repo.get_system_config("broker_mqtt.topic_prefix")
-        self.topic_prefix = db_topic or yaml_settings.network.gateway_mqtt.topic_prefix
+        self.topic_prefix = db_topic or "MQT/TRA/OTR/TRC/+/+"
         
         db_clean = db_config_repo.get_system_config("gateway_mqtt.clean_session") or db_config_repo.get_system_config("broker_mqtt.clean_session")
         if db_clean is not None:
             self.clean_session = str(db_clean).lower() in ("true", "1")
         else:
-            self.clean_session = yaml_settings.network.gateway_mqtt.clean_session
+            self.clean_session = True
 
-        logger.info(f"[MQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.topic_prefix}', CleanSession={self.clean_session}")
+        logger.info(f"[GatewayMQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.topic_prefix}', CleanSession={self.clean_session}")
 
     async def start(self):
         """啟動 MQTT 監聽任務"""
         self.reload_config()
         self._running = True
         self._listener_task = asyncio.create_task(self._listen_loop())
-        logger.info(f"[MQTTService] MQTT Service started. Targeting Broker {self.host}:{self.port}, Topic: '{self.topic_prefix}', CleanSession: {self.clean_session}")
+        logger.info(f"[GatewayMQTTService] MQTT Service started. Targeting Broker {self.host}:{self.port}, Topic: '{self.topic_prefix}', CleanSession: {self.clean_session}")
 
     async def stop(self):
         """停止 MQTT 監聽"""
@@ -80,11 +62,11 @@ class MQTTService:
                 await self._listener_task
             except asyncio.CancelledError:
                 pass
-        logger.info("[MQTTService] MQTT Service stopped.")
+        logger.info("[GatewayMQTTService] MQTT Service stopped.")
 
     async def restart(self):
         """重載設定並重新連線 MQTT 監聽」"""
-        logger.info("[MQTTService] Restarting MQTT Service with updated configuration...")
+        logger.info("[GatewayMQTTService] Restarting MQTT Service with updated configuration...")
         await self.stop()
         await self.start()
 
@@ -93,23 +75,23 @@ class MQTTService:
         reconnect_interval = 5
         while self._running:
             try:
-                logger.info(f"[MQTTService] Connecting to MQTT Broker at {self.host}:{self.port}...")
+                logger.info(f"[GatewayMQTTService] Connecting to MQTT Broker at {self.host}:{self.port}...")
                 async with aiomqtt.Client(self.host, port=self.port, clean_session=self.clean_session) as client:
-                    logger.info(f"[MQTTService] Successfully connected to MQTT Broker! Subscribing to '{self.topic_prefix}'...")
+                    logger.info(f"[GatewayMQTTService] Successfully connected to MQTT Broker! Subscribing to '{self.topic_prefix}'...")
                     await client.subscribe(self.topic_prefix)
-
+ 
                     async for message in client.messages:
                         if not self._running:
                             break
                         await self._handle_message(message)
-
+ 
             except asyncio.CancelledError:
                 break
             except aiomqtt.MqttError as err:
-                logger.warning(f"[MQTTService] MQTT Connection error: {err}. Reconnecting in {reconnect_interval}s...")
+                logger.warning(f"[GatewayMQTTService] MQTT Connection error: {err}. Reconnecting in {reconnect_interval}s...")
                 await asyncio.sleep(reconnect_interval)
             except Exception as e:
-                logger.error(f"[MQTTService] Unexpected error in MQTT loop: {e}. Reconnecting in {reconnect_interval}s...")
+                logger.error(f"[GatewayMQTTService] Unexpected error in MQTT loop: {e}. Reconnecting in {reconnect_interval}s...")
                 await asyncio.sleep(reconnect_interval)
 
     async def _handle_message(self, message: aiomqtt.Message):
@@ -204,20 +186,20 @@ class MQTTService:
                 topic_suffix = f"{car_vin}/{end_pos}" if car_vin and end_pos is not None else str(eq_id)
                 await cloud_mqtt_service.push_telemetry(data, topic_suffix=topic_suffix)
 
-            #logger.info(f"[MQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
+            #logger.info(f"[GatewayMQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
 
         except json.JSONDecodeError:
-            logger.warning(f"[MQTTService] Non-JSON payload received on topic {message.topic}: {message.payload}")
+            logger.warning(f"[GatewayMQTTService] Non-JSON payload received on topic {message.topic}: {message.payload}")
         except Exception as e:
-            logger.error(f"[MQTTService] Error processing MQTT payload: {e}")
+            logger.error(f"[GatewayMQTTService] Error processing MQTT payload: {e}")
 
     async def publish_message(self, topic: str, payload: str):
         """將訊息發布至 Local MQTT Broker"""
         try:
             async with aiomqtt.Client(self.host, port=self.port) as client:
                 await client.publish(topic, payload)
-                logger.info(f"[MQTTService] Successfully published message to Local Broker on topic '{topic}'")
+                logger.info(f"[GatewayMQTTService] Successfully published message to Local Broker on topic '{topic}'")
         except Exception as e:
-            logger.error(f"[MQTTService] Failed to publish message to Local Broker on topic '{topic}': {e}")
+            logger.error(f"[GatewayMQTTService] Failed to publish message to Local Broker on topic '{topic}': {e}")
 
-mqtt_service = MQTTService()
+gateway_mqtt_service = GatewayMQTTService()

@@ -123,7 +123,7 @@ network:
     username: ""
     password: ""
     client_id: "GW-TAU-01-CLOUD"
-    publish_topic_prefix: "TYMC/CLOUD/101"
+    cloud_topic_prefix: "TYMC/CLOUD/101"
     qos: 0
     reconnect_delay_sec: 5
   ipc_socket_path: /tmp/hvac_ipc.sock

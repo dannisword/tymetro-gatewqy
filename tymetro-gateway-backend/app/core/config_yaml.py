@@ -37,7 +37,7 @@ class CloudMQTTYamlConfig(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     client_id: Optional[str] = "GW-TAU-01-CLOUD"
-    publish_topic_prefix: str = "TYMC/CLOUD/101"
+    cloud_topic_prefix: str = "TYMC/CLOUD/101"
     qos: int = 0
     reconnect_delay_sec: int = 5
     keepalive: int = 20

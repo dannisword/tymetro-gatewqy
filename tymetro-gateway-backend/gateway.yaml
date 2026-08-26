@@ -17,7 +17,7 @@ network:
     username: ""
     password: ""
     client_id: "GW-TAU-102-CLOUD-DEV"
-    publish_topic_prefix: "MQT/TRA/OTR/TRC/102"
+    cloud_topic_prefix: "MQT/TRA/OTR/TRC/102"
     qos: 1
     reconnect_delay_sec: 5
     keepalive: 20

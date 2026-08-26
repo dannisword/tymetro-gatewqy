@@ -8,7 +8,7 @@ from app.models.config_model import SystemConfig
 
 from app.database.init_db import sync_yaml_to_db
 from app.core.config_yaml import reload_gateway_yaml_config
-from app.services.mqtt_service import mqtt_service
+from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.services.cloud_mqtt_service import cloud_mqtt_service
 
 router = APIRouter()
@@ -25,7 +25,7 @@ async def reload_config(db: Session = Depends(get_db)):
         db_config_repo.clear_cache()
         db_config_repo.get_all_equipments()
         # 4. 熱重載並重連 MQTT Subscriber 與 Publisher (Cloud MQTT)
-        await mqtt_service.restart()
+        await gateway_mqtt_service.restart()
         await cloud_mqtt_service.restart()
         return ResponseUtil.success(message="gateway.yaml reloaded, synced to DB, MQTT services restarted, and RAM cache pre-warmed successfully.")
     except Exception as e:
@@ -44,7 +44,7 @@ async def sync_yaml_configs(db: Session = Depends(get_db)):
         # 4. 重新自 DB 讀取並預熱最新快取
         db_config_repo.get_all_equipments()
         # 5. 熱重載並重連 MQTT Subscriber 與 Publisher (Cloud MQTT)
-        await mqtt_service.restart()
+        await gateway_mqtt_service.restart()
         await cloud_mqtt_service.restart()
         return ResponseUtil.success(message="Successfully re-synced system configs from gateway.yaml to DB, restarted MQTT services, and pre-warmed RAM cache.")
     except Exception as e:
