@@ -23,34 +23,34 @@ class EquipmentConfig(BaseModel):
     slave_id: Optional[int] = 1
     registers: List[RegisterConfig] = []
 
-class MQTTYamlConfig(BaseModel):
+class GatewayMQTTConfig(BaseModel):
     enabled: bool = True
-    broker_host: str = Field(default_factory=lambda: os.getenv("MQTT_BROKER_HOST", "127.0.0.1"))
-    broker_port: int = Field(default_factory=lambda: int(os.getenv("MQTT_BROKER_PORT", "1883")))
-    topic_prefix: str = Field(default_factory=lambda: os.getenv("MQTT_TOPIC_PREFIX", "PFC200/+/data"))
+    broker_host: str = "127.0.0.1"
+    broker_port: int = 1883
+    topic_prefix: str = "MQT/TRA/OTR/TRC/+/+"
     clean_session: bool = True
 
 class CloudMQTTYamlConfig(BaseModel):
     enabled: bool = True
-    broker_host: str = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_HOST", "127.0.0.1"))
-    broker_port: int = Field(default_factory=lambda: int(os.getenv("CLOUD_MQTT_PORT", "1883")))
-    username: Optional[str] = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_USER", None))
-    password: Optional[str] = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_PASS", None))
-    client_id: Optional[str] = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_CLIENT_ID", "GW-TAU-01-CLOUD"))
-    publish_topic_prefix: str = Field(default_factory=lambda: os.getenv("CLOUD_MQTT_TOPIC", "TYMC/CLOUD/101"))
+    broker_host: str = "127.0.0.1"
+    broker_port: int = 1883
+    username: Optional[str] = None
+    password: Optional[str] = None
+    client_id: Optional[str] = "GW-TAU-01-CLOUD"
+    publish_topic_prefix: str = "TYMC/CLOUD/101"
     qos: int = 0
     reconnect_delay_sec: int = 5
     keepalive: int = 20
     clean_session: bool = True
 
 class NetworkConfig(BaseModel):
-    broker_mqtt: MQTTYamlConfig = Field(default_factory=MQTTYamlConfig)
+    gateway_mqtt: GatewayMQTTConfig = Field(default_factory=GatewayMQTTConfig)
     cloud_mqtt: CloudMQTTYamlConfig = CloudMQTTYamlConfig()
     ipc_socket_path: str = "/tmp/hvac_ipc.sock"
 
     @property
-    def mqtt(self) -> MQTTYamlConfig:
-        return self.broker_mqtt
+    def mqtt(self) -> GatewayMQTTConfig:
+        return self.gateway_mqtt
 
 class DatabaseConfig(BaseModel):
     db_path: str = "gateway.db"

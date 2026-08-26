@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
     await sqlite_writer.start()
 
     # 2. 啟動 MQTT 訂閱服務 (MQTT Subscriber Service)
-    if yaml_settings.network.broker_mqtt.enabled:
+    if yaml_settings.network.gateway_mqtt.enabled:
         await mqtt_service.start()
     else:
         logger.info("[MQTTService] MQTT Service is disabled in gateway.yaml.")
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     scheduler_service.stop()
     if yaml_settings.network.cloud_mqtt.enabled:
         await cloud_mqtt_service.stop()
-    if yaml_settings.network.broker_mqtt.enabled:
+    if yaml_settings.network.gateway_mqtt.enabled:
         await mqtt_service.stop()
     await sqlite_writer.stop()
 

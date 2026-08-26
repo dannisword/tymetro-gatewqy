@@ -77,7 +77,7 @@ class DbConfigRepository:
                 result.append({
                     "id": eq.equipmentName,
                     "name": eq.equipmentName,
-                    "protocol": getattr(eq, "protocol", None) or ("MQTT" if yaml_settings.network.broker_mqtt.enabled else "MODBUS_TCP"),
+                    "protocol": getattr(eq, "protocol", None) or ("MQTT" if yaml_settings.network.gateway_mqtt.enabled else "MODBUS_TCP"),
                     "ip": ip,
                     "port": 502,
                     "slave_id": 1,

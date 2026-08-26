@@ -46,9 +46,9 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = 
             upsert_config("gateway", f"gateway.{k}", v)
 
         network_cfg = data.get("network", {}) or {}
-        broker_mqtt_cfg = network_cfg.get("broker_mqtt", {}) or network_cfg.get("mqtt", {}) or {}
-        for k, v in broker_mqtt_cfg.items():
-            upsert_config("network", f"broker_mqtt.{k}", v)
+        gateway_mqtt_cfg = network_cfg.get("gateway_mqtt", {}) or network_cfg.get("broker_mqtt", {}) or network_cfg.get("mqtt", {}) or {}
+        for k, v in gateway_mqtt_cfg.items():
+            upsert_config("network", f"gateway_mqtt.{k}", v)
 
         cloud_mqtt_cfg = network_cfg.get("cloud_mqtt", {}) or {}
         for k, v in cloud_mqtt_cfg.items():

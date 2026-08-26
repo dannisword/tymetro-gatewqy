@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from typing import Dict, Any, Optional
 import aiomqtt
 from app.core.logger import logger
@@ -37,6 +38,7 @@ class CloudMQTTService:
         self._queue: asyncio.Queue = asyncio.Queue()
         self._running = False
         self._worker_task: Optional[asyncio.Task] = None
+        self._sent_commands_cache: Dict[tuple, float] = {}
 
     def reload_config(self):
         """重新讀取 DB / yaml_settings 最新 Cloud MQTT 設定"""
@@ -89,7 +91,7 @@ class CloudMQTTService:
         """
         將 PFC200 點位資料寫入佇列準備拋轉至桃捷雲
         :param payload: JSON 點位封包
-        :param topic_suffix: 子 Topic 訊息，如 'car1102/pos1' 或 '101/data'
+        :param topic_suffix: 子 Topic 訊息，如 'MQT/TRA/OTR/TRC/102/1102'
         """
         if not self._running:
             return
@@ -123,30 +125,51 @@ class CloudMQTTService:
 
                     # 啟動背景監聽任務
                     listener_task = asyncio.create_task(self._listen_cloud_messages(client))
-
+                    # 啟動批次拋轉任務
                     try:
                         while self._running:
-                            item = await self._queue.get()
-                            try:
-                                payload = item["payload"]
-                                suffix = item.get("topic_suffix")
-                                
-                                if suffix:
-                                    topic = f"{self.publish_topic_prefix}/{suffix}".strip("/")
-                                else:
-                                    topic = self.publish_topic_prefix
+                            get_task = asyncio.create_task(self._queue.get())
+                            done, pending = await asyncio.wait(
+                                [listener_task, get_task],
+                                return_when=asyncio.FIRST_COMPLETED
+                            )
 
-                                payload_str = json.dumps(payload, ensure_ascii=False)
-                                await client.publish(topic, payload_str, qos=self.qos)
-                                # logger.info(f"[CloudMQTTService] Forwarded data to 桃捷雲 topic '{topic}' successfully.")
-                            except aiomqtt.MqttError as mqtt_err:
-                                logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
-                                await self._queue.put(item)
-                                raise mqtt_err
-                            except Exception as pub_err:
-                                logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
-                            finally:
-                                self._queue.task_done()
+                            if get_task not in done:
+                                get_task.cancel()
+                                try:
+                                    await get_task
+                                except asyncio.CancelledError:
+                                    pass
+
+                            if listener_task.done():
+                                exc = listener_task.exception()
+                                if exc:
+                                    raise exc
+                                else:
+                                    raise aiomqtt.MqttError("Cloud message listener stopped unexpectedly")
+
+                            if get_task in done and not get_task.cancelled():
+                                item = get_task.result()
+                                try:
+                                    payload = item["payload"]
+                                    suffix = item.get("topic_suffix")
+                                    
+                                    if suffix:
+                                        topic = f"{self.publish_topic_prefix}/{suffix}".strip("/")
+                                    else:
+                                        topic = self.publish_topic_prefix
+
+                                    payload_str = json.dumps(payload, ensure_ascii=False)
+                                    await client.publish(topic, payload_str, qos=self.qos)
+                                    # logger.info(f"[CloudMQTTService] Forwarded data to 桃捷雲 topic '{topic}' successfully.")
+                                except aiomqtt.MqttError as mqtt_err:
+                                    logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
+                                    await self._queue.put(item)
+                                    raise mqtt_err
+                                except Exception as pub_err:
+                                    logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
+                                finally:
+                                    self._queue.task_done()
                     finally:
                         listener_task.cancel()
                         try:
@@ -174,17 +197,87 @@ class CloudMQTTService:
             pass
         except Exception as e:
             logger.error(f"[CloudMQTTService] Error in cloud message listener: {e}")
+            raise
 
     async def _handle_cloud_message(self, message: aiomqtt.Message):
         """處理雲端傳入的訊息並判斷是否需要轉發"""
         try:
             topic = str(message.topic)
+           
             payload_str = message.payload.decode("utf-8")
+            
+            # 檢查重複指令 (防止當 Local Broker 與 Cloud Broker 為同一個時造成的無窮迴圈/Echo)
+            now = time.time()
+            self._sent_commands_cache = {k: v for k, v in self._sent_commands_cache.items() if now - v < 5.0}
+            cache_key = (topic, payload_str)
+            if cache_key in self._sent_commands_cache:
+                return
+            self._sent_commands_cache[cache_key] = now
             
             # 檢查主題格式是否符合控制指令 (最後一層是否以 R 結尾，例如 1R)
             parts = topic.split("/")
             if len(parts) >= 2 and parts[-1].endswith("R"):
-                logger.info(f"[CloudMQTTService] Received cloud command on topic '{topic}': {payload_str}")
+                logger.debug(f"[CloudMQTTService] Received cloud command on topic '{topic}': {payload_str}")
+                
+                # 新增到 setting logs
+                try:
+                    from app.database.session import SessionLocal
+                    from app.models.setting_log_model import SettingLog
+                    from app.models.sensor_model import Sensor
+                    
+                    setting_type = "雲端控制"
+                    val_str = payload_str
+                    operator = "Cloud"
+                    
+                    try:
+                        payload_data = json.loads(payload_str)
+                        regs = {}
+                        if isinstance(payload_data, dict):
+                            if "register" in payload_data and isinstance(payload_data["register"], dict):
+                                regs = payload_data["register"]
+                            else:
+                                regs = {k: v for k, v in payload_data.items() if k.startswith("D")}
+                                if not regs:
+                                    regs = payload_data
+                        
+                        if regs:
+                            first_code = list(regs.keys())[0]
+                            first_val = regs[first_code]
+                            val_str = str(first_val)
+                            
+                            db = SessionLocal()
+                            try:
+                                sensor = db.query(Sensor).filter(Sensor.sensorCode == first_code).first()
+                                if sensor and sensor.sensorName:
+                                    setting_type = sensor.sensorName
+                                else:
+                                    setting_type = f"設定 {first_code}"
+                            finally:
+                                db.close()
+                    except Exception as json_err:
+                        logger.debug(f"[CloudMQTTService] Payload not parsed as json or register dict: {json_err}")
+                    
+                    db = SessionLocal()
+                    try:
+                        log_entry = SettingLog(
+                            settingType=setting_type,
+                            value=val_str,
+                            operator=operator,
+                            isNotified=False,
+                            topic=topic,
+                            payload=payload_str
+                        )
+                        db.add(log_entry)
+                        db.commit()
+                        logger.info(f"[CloudMQTTService] Saved setting log: type={setting_type}, value={val_str}")
+                    except Exception as db_err:
+                        db.rollback()
+                        logger.error(f"[CloudMQTTService] Error saving setting log: {db_err}")
+                    finally:
+                        db.close()
+                except Exception as log_err:
+                    logger.error(f"[CloudMQTTService] General error writing setting log: {log_err}")
+
                 # 動態導入以防循環參照
                 from app.services.mqtt_service import mqtt_service
                 await mqtt_service.publish_message(topic, payload_str)

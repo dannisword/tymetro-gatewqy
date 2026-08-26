@@ -25,15 +25,20 @@ class MQTTService:
         port: Optional[int] = None,
         topic_prefix: Optional[str] = None
     ):
-        self.host = host or db_config_repo.get_system_config("broker_mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
-        self.port = int(port or db_config_repo.get_system_config("broker_mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
-        self.topic_prefix = topic_prefix or db_config_repo.get_system_config("broker_mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
+        db_host = db_config_repo.get_system_config("gateway_mqtt.broker_host") or db_config_repo.get_system_config("broker_mqtt.broker_host")
+        self.host = host or db_host or yaml_settings.network.gateway_mqtt.broker_host
+
+        db_port = db_config_repo.get_system_config("gateway_mqtt.broker_port") or db_config_repo.get_system_config("broker_mqtt.broker_port")
+        self.port = int(port or db_port or yaml_settings.network.gateway_mqtt.broker_port)
+
+        db_topic = db_config_repo.get_system_config("gateway_mqtt.topic_prefix") or db_config_repo.get_system_config("broker_mqtt.topic_prefix")
+        self.topic_prefix = topic_prefix or db_topic or yaml_settings.network.gateway_mqtt.topic_prefix
         
-        db_clean = db_config_repo.get_system_config("broker_mqtt.clean_session")
+        db_clean = db_config_repo.get_system_config("gateway_mqtt.clean_session") or db_config_repo.get_system_config("broker_mqtt.clean_session")
         if db_clean is not None:
             self.clean_session = str(db_clean).lower() in ("true", "1")
         else:
-            self.clean_session = yaml_settings.network.broker_mqtt.clean_session
+            self.clean_session = yaml_settings.network.gateway_mqtt.clean_session
 
         self._running = False
         self._listener_task: Optional[asyncio.Task] = None
@@ -42,15 +47,20 @@ class MQTTService:
 
     def reload_config(self):
         """重新讀取 DB / yaml_settings 最新 MQTT 設定"""
-        self.host = db_config_repo.get_system_config("broker_mqtt.broker_host") or yaml_settings.network.broker_mqtt.broker_host
-        self.port = int(db_config_repo.get_system_config("broker_mqtt.broker_port") or yaml_settings.network.broker_mqtt.broker_port)
-        self.topic_prefix = db_config_repo.get_system_config("broker_mqtt.topic_prefix") or yaml_settings.network.broker_mqtt.topic_prefix
+        db_host = db_config_repo.get_system_config("gateway_mqtt.broker_host") or db_config_repo.get_system_config("broker_mqtt.broker_host")
+        self.host = db_host or yaml_settings.network.gateway_mqtt.broker_host
+
+        db_port = db_config_repo.get_system_config("gateway_mqtt.broker_port") or db_config_repo.get_system_config("broker_mqtt.broker_port")
+        self.port = int(db_port or yaml_settings.network.gateway_mqtt.broker_port)
+
+        db_topic = db_config_repo.get_system_config("gateway_mqtt.topic_prefix") or db_config_repo.get_system_config("broker_mqtt.topic_prefix")
+        self.topic_prefix = db_topic or yaml_settings.network.gateway_mqtt.topic_prefix
         
-        db_clean = db_config_repo.get_system_config("broker_mqtt.clean_session")
+        db_clean = db_config_repo.get_system_config("gateway_mqtt.clean_session") or db_config_repo.get_system_config("broker_mqtt.clean_session")
         if db_clean is not None:
             self.clean_session = str(db_clean).lower() in ("true", "1")
         else:
-            self.clean_session = yaml_settings.network.broker_mqtt.clean_session
+            self.clean_session = yaml_settings.network.gateway_mqtt.clean_session
 
         logger.info(f"[MQTTService] Config reloaded: Host={self.host}:{self.port}, Topic='{self.topic_prefix}', CleanSession={self.clean_session}")
 

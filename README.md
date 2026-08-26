@@ -59,3 +59,7 @@ sudo ./deploy.sh
 - **熱重啟前端 (更新 dist)**：`docker compose restart frontend`
 - **更新後端服務**：`docker compose up -d --build backend`
 - **一鍵解除安裝清理**：`sudo ./uninstall.sh`
+
+
+MQT/TAR/OTR/TRC
+MQT/TAR/OTR/TRC/ACV/TRPAlert
