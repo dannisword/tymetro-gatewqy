@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, reactive, toRefs } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
@@ -22,7 +22,7 @@ import type {
   MapSensorConfig,
   MqttPayload
 } from '@/utils/types';
-import SvgViewer from '@/components/SvgViewer.vue';
+import CarSensorMap from '@/views/mtr/components/CarSensorMap.vue';
 import httpOperations from '@/utils/http-operations';
 import { logger } from '@/utils';
 import { 
@@ -37,7 +37,12 @@ import {
   mdiMinus,
   mdiMagnify
 } from '@mdi/js';
-
+// ==========================================
+// 0. Configuration Parameters
+// ==========================================
+const TEMP_LOCK_DELAY = 3000; // 設定溫度鎖定延遲時間 (毫秒)
+const HEARTBEAT_TIMEOUT = 5000; // 判定斷線超時時間 (毫秒)
+const HEARTBEAT_CHECK_INTERVAL = 1000; // 心跳檢查間隔 (毫秒)
 // ==========================================
 // 1. Hook & Utilities
 // ==========================================
@@ -48,9 +53,12 @@ const { TLError, TLWarning, TLInfo, TLSuccess } = useAlert();
 // ==========================================
 // 2. Core Route State & Derived Computeds
 // ==========================================
-const carNo = ref(Number(route.params.carNo) || 1101);
-const endPosId = ref(Number(route.params.endPos) || 1);
-const carInfoMap = ref<Record<number, TrainCarStatus>>({});
+const state = reactive({
+  carNo: Number(route.params.carNo) || 1101,
+  endPosId: Number(route.params.endPos) || 1,
+  carInfoMap: {} as Record<number, TrainCarStatus>
+});
+const { carNo, endPosId, carInfoMap } = toRefs(state);
 
 const carInfo = computed(() => carInfoMap.value[carNo.value] || carInfoMap.value[1101] || { id: 1101, name: '', ip: '', endpoints: [] });
 const epName = computed(() => `端點 ${endPosId.value}`);
@@ -66,14 +74,6 @@ const trainNo = computed(() => {
   return type * 100 + num;
 });
 const carType = computed(() => Math.floor(carNo.value / 1000));
-
-// ==========================================
-// 0. Configuration Parameters
-// ==========================================
-const TEMP_LOCK_DELAY = 3000; // 設定溫度鎖定延遲時間 (毫秒)
-const HEARTBEAT_TIMEOUT = 5000; // 判定斷線超時時間 (毫秒)
-const HEARTBEAT_CHECK_INTERVAL = 1000; // 心跳檢查間隔 (毫秒)
-
 // ==========================================
 // 3. MQTT Connection & Heartbeat Tracker State
 // ==========================================
@@ -90,7 +90,7 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 const activeTab = ref('dashboard');
 const breadcrumbItems = computed(() => [
   { label: '首頁', to: '/dashboard' },
-  { label: `${carInfo.value.name} - ${epName.value} 狀態` }
+  { label: `${carNo.value}車廂-${epName.value} 狀態` }
 ]);
 
 const rawCarOptions = ref<CarOption[]>([]);
@@ -265,9 +265,30 @@ const loadCarConfig = async () => {
         if (config.endpointsOptions && Array.isArray(config.endpointsOptions)) {
           endpointsOptions.value = config.endpointsOptions;
         }
-        if (config.carVins && Array.isArray(config.carVins)) {
-          configCarVinsList.value = config.carVins;
-          updateCarMap(config.carVins, !!config.carOptions);
+        const rawCarVins = config.metro_config?.carVins || config.carVins;
+        if (rawCarVins && Array.isArray(rawCarVins)) {
+          const currentTrainNo = trainNo.value || config.metro_config?.trainNo || 101;
+          const type = Math.floor(currentTrainNo / 100);
+          const num = currentTrainNo % 100;
+
+          const mappedCarVins = rawCarVins.map((c: any, index: number) => {
+            const carIndex = index + 1;
+            const resolvedCarNo = type * 1000 + carIndex * 100 + num;
+            return {
+              id: c.id || carIndex,
+              carNo: resolvedCarNo,
+              name: c.name || `第 ${carIndex} 節車廂`,
+              ip: c.ip || c.equipments?.[0]?.address || '127.0.0.1',
+              trainNo: currentTrainNo,
+              equipment: (c.equipments || c.equipment || []).map((eq: any) => ({
+                id: eq.endPosId || eq.id || 1,
+                name: eq.name || `端點 ${eq.endPosId || eq.id || 1}`,
+                address: eq.address || '127.0.0.1'
+              }))
+            };
+          });
+          configCarVinsList.value = mappedCarVins;
+          updateCarMap(mappedCarVins, !!config.carOptions);
         }
         if (config.freshAirDamperOptions && Array.isArray(config.freshAirDamperOptions)) {
           freshAirDamperOptions.value = config.freshAirDamperOptions;
@@ -297,7 +318,7 @@ const fetchInitialSensors = async () => {
   try {
     const res = await httpOperations.get('/api/v1/sensors/by-group', { registerGroup: 'initial' }, { meta: { loading: false } });
     if (res && res.success) {
-      const list = (res.data || []) as SensorData[];
+      const list = (Array.isArray(res.data) ? res.data : (res.data?.source || [])) as SensorData[];
       const reg: Record<string, number> = {};
       list.forEach((item) => {
         if (item.sensorCode && item.sensorValue !== null && item.sensorValue !== undefined) {
@@ -310,6 +331,9 @@ const fetchInitialSensors = async () => {
         const type = Math.floor(dbTrainNo / 100);
         const num = dbTrainNo % 100;
         
+        const currentCarIndex = Math.floor((carNo.value % 1000) / 100) || 1;
+        const newCarNo = type * 1000 + currentCarIndex * 100 + num;
+        
         if (configCarVinsList.value.length > 0) {
           configCarVinsList.value.forEach((car, index) => {
             const carIndex = index + 1;
@@ -317,6 +341,11 @@ const fetchInitialSensors = async () => {
             car.carNo = type * 1000 + carIndex * 100 + num;
           });
           updateCarMap(configCarVinsList.value, !!rawCarOptions.value.length);
+        }
+
+        if (carNo.value !== newCarNo) {
+          carNo.value = newCarNo;
+          router.replace(`/mtr/single-end-pos/${newCarNo}/${endPosId.value}`);
         }
       }
     }
@@ -332,7 +361,7 @@ const fetchRegisters = async () => {
     };
     const res = await httpOperations.get('/api/v1/sensors/by-group', params, { meta: { loading: false } });
     if (res && res.success) {
-      const list = (res.data || []) as SensorData[];
+      const list = (Array.isArray(res.data) ? res.data : (res.data?.source || [])) as SensorData[];
       list.sort((a, b) => (a.address || 0) - (b.address || 0));
       modbusRegisters.value = list.map((reg) => ({
         id: reg.id,
@@ -700,7 +729,7 @@ onUnmounted(() => {
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center gap-3">
                 <h1 class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight whitespace-nowrap m-0">
-                  {{ carInfo.name }} - {{ epName }}
+                  {{ carNo }}車廂-{{ epName }}
                 </h1>
                 
                 <BaseButton 
@@ -1039,28 +1068,11 @@ onUnmounted(() => {
       </div>
 
       <!-- SvgViewer 畫布 (圖面配置) -->
-      <div v-else-if="activeTab === 'map'" class="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 mb-4">
-        <div class="flex items-center justify-between mb-4">
-          <div class="font-extrabold text-slate-800 text-lg tracking-wide flex items-center gap-2">
-            <div class="w-1 h-4 bg-[#2a7eb5] rounded-full"></div>
-            車廂感測配置圖面
-          </div>
-          <span class="text-xs font-semibold text-slate-400">
-            唯讀模式
-          </span>
-        </div>
-        <div class="h-[500px] border border-slate-200/60 rounded-2xl overflow-hidden relative bg-white">
-          <SvgViewer
-            :src="planUrl"
-            :markers="mappedSensors"
-            :editable="false"
-            :zoomable="true"
-            :initialScale="0.7"
-            :minScale="0.5"
-            :maxScale="1.2"
-          />
-        </div>
-      </div>
+      <CarSensorMap
+        v-else-if="activeTab === 'map'"
+        :planUrl="planUrl"
+        :markers="mappedSensors"
+      />
 
       <!-- Modbus 暫存器監測表格 -->
       <div class="bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm space-y-4">
