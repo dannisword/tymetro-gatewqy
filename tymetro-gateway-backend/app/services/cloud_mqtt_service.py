@@ -116,28 +116,43 @@ class CloudMQTTService:
                 async with aiomqtt.Client(**client_kwargs) as client:
                     logger.info(f"[CloudMQTTService] Successfully connected to Cloud MQTT Broker ({self.host}:{self.port})!")
                     
-                    while self._running:
-                        item = await self._queue.get()
-                        try:
-                            payload = item["payload"]
-                            suffix = item.get("topic_suffix")
-                            
-                            if suffix:
-                                topic = f"{self.publish_topic_prefix}/{suffix}".strip("/")
-                            else:
-                                topic = self.publish_topic_prefix
+                    # 訂閱雲端控制指令主題: [publish_topic_prefix]/+/+
+                    sub_topic = f"{self.publish_topic_prefix}/+/+"
+                    await client.subscribe(sub_topic)
+                    logger.info(f"[CloudMQTTService] Subscribed to cloud command topic: '{sub_topic}'")
 
-                            payload_str = json.dumps(payload, ensure_ascii=False)
-                            await client.publish(topic, payload_str, qos=self.qos)
-                            # logger.info(f"[CloudMQTTService] Forwarded data to 桃捷雲 topic '{topic}' successfully.")
-                        except aiomqtt.MqttError as mqtt_err:
-                            logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
-                            await self._queue.put(item)
-                            raise mqtt_err
-                        except Exception as pub_err:
-                            logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
-                        finally:
-                            self._queue.task_done()
+                    # 啟動背景監聽任務
+                    listener_task = asyncio.create_task(self._listen_cloud_messages(client))
+
+                    try:
+                        while self._running:
+                            item = await self._queue.get()
+                            try:
+                                payload = item["payload"]
+                                suffix = item.get("topic_suffix")
+                                
+                                if suffix:
+                                    topic = f"{self.publish_topic_prefix}/{suffix}".strip("/")
+                                else:
+                                    topic = self.publish_topic_prefix
+
+                                payload_str = json.dumps(payload, ensure_ascii=False)
+                                await client.publish(topic, payload_str, qos=self.qos)
+                                # logger.info(f"[CloudMQTTService] Forwarded data to 桃捷雲 topic '{topic}' successfully.")
+                            except aiomqtt.MqttError as mqtt_err:
+                                logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
+                                await self._queue.put(item)
+                                raise mqtt_err
+                            except Exception as pub_err:
+                                logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
+                            finally:
+                                self._queue.task_done()
+                    finally:
+                        listener_task.cancel()
+                        try:
+                            await listener_task
+                        except asyncio.CancelledError:
+                            pass
 
             except asyncio.CancelledError:
                 break
@@ -147,5 +162,36 @@ class CloudMQTTService:
             except Exception as e:
                 logger.error(f"[CloudMQTTService] Unexpected error in Cloud MQTT loop: {e}. Reconnecting in {self.reconnect_delay_sec}s...")
                 await asyncio.sleep(self.reconnect_delay_sec)
+
+    async def _listen_cloud_messages(self, client: aiomqtt.Client):
+        """監聽從雲端 MQTT Broker 傳入的訊息"""
+        try:
+            async for message in client.messages:
+                if not self._running:
+                    break
+                await self._handle_cloud_message(message)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"[CloudMQTTService] Error in cloud message listener: {e}")
+
+    async def _handle_cloud_message(self, message: aiomqtt.Message):
+        """處理雲端傳入的訊息並判斷是否需要轉發"""
+        try:
+            topic = str(message.topic)
+            payload_str = message.payload.decode("utf-8")
+            
+            # 檢查主題格式是否符合控制指令 (最後一層是否以 R 結尾，例如 1R)
+            parts = topic.split("/")
+            if len(parts) >= 2 and parts[-1].endswith("R"):
+                logger.info(f"[CloudMQTTService] Received cloud command on topic '{topic}': {payload_str}")
+                # 動態導入以防循環參照
+                from app.services.mqtt_service import mqtt_service
+                await mqtt_service.publish_message(topic, payload_str)
+            else:
+                # 忽略非指令主題
+                pass
+        except Exception as e:
+            logger.error(f"[CloudMQTTService] Error handling cloud message: {e}")
 
 cloud_mqtt_service = CloudMQTTService()

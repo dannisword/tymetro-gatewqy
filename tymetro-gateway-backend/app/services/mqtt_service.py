@@ -201,4 +201,13 @@ class MQTTService:
         except Exception as e:
             logger.error(f"[MQTTService] Error processing MQTT payload: {e}")
 
+    async def publish_message(self, topic: str, payload: str):
+        """將訊息發布至 Local MQTT Broker"""
+        try:
+            async with aiomqtt.Client(self.host, port=self.port) as client:
+                await client.publish(topic, payload)
+                logger.info(f"[MQTTService] Successfully published message to Local Broker on topic '{topic}'")
+        except Exception as e:
+            logger.error(f"[MQTTService] Failed to publish message to Local Broker on topic '{topic}': {e}")
+
 mqtt_service = MQTTService()
