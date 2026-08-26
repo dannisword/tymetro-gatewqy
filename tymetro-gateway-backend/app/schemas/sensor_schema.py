@@ -1,11 +1,11 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+from typing import Optional, Union
 from datetime import date
 from app.schemas.base import AuditBase
 
 class SensorBase(BaseModel):
-    carId: int = Field(..., description="所屬車廂 ID")
-    equipmentId: Optional[int] = Field(None, description="所屬設備 ID")
+    carId: Union[int, str] = Field(..., description="所屬車廂 ID")
+    equipmentId: Optional[Union[int, str]] = Field(None, description="所屬設備 ID")
     sensorType: str = Field(..., description="感測器類型")
     sensorCode: str = Field(..., description="感測器編號")
     sensorName: str = Field(..., description="感測器名稱")
@@ -24,8 +24,8 @@ class SensorCreate(SensorBase):
     pass
 
 class SensorUpdate(BaseModel):
-    carId: Optional[int] = None
-    equipmentId: Optional[int] = None
+    carId: Optional[Union[int, str]] = None
+    equipmentId: Optional[Union[int, str]] = None
     sensorType: Optional[str] = None
     sensorCode: Optional[str] = None
     sensorName: Optional[str] = None
@@ -44,3 +44,10 @@ class SensorResponse(SensorBase, AuditBase):
     id: int
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    @computed_field
+    @property
+    def address(self) -> int:
+        if self.sensorCode and self.sensorCode.startswith("D") and self.sensorCode[1:].isdigit():
+            return int(self.sensorCode[1:]) - 40001
+        return 0
