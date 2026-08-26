@@ -48,11 +48,11 @@ const { TLError, TLWarning, TLInfo, TLSuccess } = useAlert();
 // ==========================================
 // 2. Core Route State & Derived Computeds
 // ==========================================
-const carVin = ref(Number(route.params.carVin) || 1101);
+const carNo = ref(Number(route.params.carNo) || 1101);
 const endPosId = ref(Number(route.params.endPos) || 1);
 const carInfoMap = ref<Record<number, TrainCarStatus>>({});
 
-const carInfo = computed(() => carInfoMap.value[carVin.value] || carInfoMap.value[1101] || { id: 1101, name: '', ip: '', endpoints: [] });
+const carInfo = computed(() => carInfoMap.value[carNo.value] || carInfoMap.value[1101] || { id: 1101, name: '', ip: '', endpoints: [] });
 const epName = computed(() => `端點 ${endPosId.value}`);
 const endPos = computed(() => {
   const info = carInfo.value;
@@ -61,11 +61,11 @@ const endPos = computed(() => {
 });
 const normalizedCarNo = computed(() => carInfo.value ? carInfo.value.id : 1101);
 const trainNo = computed(() => {
-  const type = Math.floor(carVin.value / 1000);
-  const num = carVin.value % 100;
+  const type = Math.floor(carNo.value / 1000);
+  const num = carNo.value % 100;
   return type * 100 + num;
 });
-const carType = computed(() => Math.floor(carVin.value / 1000));
+const carType = computed(() => Math.floor(carNo.value / 1000));
 
 // ==========================================
 // 0. Configuration Parameters
@@ -170,13 +170,13 @@ const selectedRegister = ref<ModbusRegisterRow | null>(null);
 
 // 車廂及端點切換與載入
 const handleCarChange = (newCarNo: number) => {
-  carVin.value = newCarNo;
+  carNo.value = newCarNo;
   router.replace(`/mtr/single-end-pos/${newCarNo}/${endPosId.value}`);
 };
 
 const handleEndpointChange = (newEndPosId: number) => {
   endPosId.value = newEndPosId;
-  router.replace(`/mtr/single-end-pos/${carVin.value}/${newEndPosId}`);
+  router.replace(`/mtr/single-end-pos/${carNo.value}/${newEndPosId}`);
 };
 
 const updateCarMap = (carVins: CarVinConfig[], hasPredefinedOptions = false) => {
@@ -184,7 +184,7 @@ const updateCarMap = (carVins: CarVinConfig[], hasPredefinedOptions = false) => 
   const options: CarOption[] = [];
 
   carVins.forEach((carVin) => {
-    const resolvedCarNo = carVin.carVin || carVin.carNo || carVin.id;    
+    const resolvedCarNo = carVin.carNo || carVin.id;    
     const endpoints: EndpointStatus[] = [];
     const equipments = carVin.equipment || [];
 
@@ -230,7 +230,7 @@ const updateCarMap = (carVins: CarVinConfig[], hasPredefinedOptions = false) => 
     const info: TrainCarStatus = {
       id: resolvedCarNo,
       trainNo: carVin.trainNo || trainNo.value,
-      carVin : resolvedCarNo,
+      carNo : resolvedCarNo,
       name: fullName,
       endpoints: endpoints
     };
@@ -314,7 +314,7 @@ const fetchInitialSensors = async () => {
           configCarVinsList.value.forEach((car, index) => {
             const carIndex = index + 1;
             car.trainNo = dbTrainNo;
-            car.carVin = type * 1000 + carIndex * 100 + num;
+            car.carNo = type * 1000 + carIndex * 100 + num;
           });
           updateCarMap(configCarVinsList.value, !!rawCarOptions.value.length);
         }
@@ -397,12 +397,12 @@ const setTargetTemp = () => {
   };
   const statusPayload = {
     events: "set_value",
-    carNo: carVin.value,
+    carNo: carNo.value,
     endPos: endPosId.value,
     register: register
   };
 
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carVin.value}/${endPosId.value}`, statusPayload);
+  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, statusPayload);
   TLSuccess(`控制指令已發送！設定溫度：${setTemp.value}°C，模式：${mode.value}`);
   syncStatusToRegisters();
 
@@ -413,15 +413,37 @@ const setTargetTemp = () => {
   }, TEMP_LOCK_DELAY);
 };
 
+// 變更設定溫度
+function publishSetTemp(temp: number) {
+  const payload = {
+    trainNo: trainNo.value,
+    carNo: carNo.value,
+    endPos: endPosId.value,
+    setTemp: temp
+  };
+  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
+}
+
+// 變更運作模式
+function publishMode(modeCode: number) {
+  const payload = {
+    trainNo: trainNo.value,
+    carNo: carNo.value,
+    endPos: endPosId.value,
+    mode: modeCode
+  };
+  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
+}
+
 const setFreshAirDamper = (val: number) => {
   freshAirDamperPos.value = val;
   const payload = {
     events: 'set_value',
-    carNo: carVin.value,
+    carNo: carNo.value,
     endPos: endPosId.value,
     register: { D40212: val }
   };
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carVin.value}/${endPosId.value}`, payload);
+  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label}`);
 };
 
@@ -429,11 +451,11 @@ const setEmergAirDamper = (val: number) => {
   emergAirDamper.value = val;
   const payload = {
     events: 'set_value',
-    carNo: carVin.value,
+    carNo: carNo.value,
     endPos: endPosId.value,
     register: { D40213: val }
   };
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carVin.value}/${endPosId.value}`, payload);
+  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`緊急供氣擋板指令已發送：${val === 1 ? '開啟' : '關閉'}`);
 };
 
@@ -514,7 +536,7 @@ watch(
   () => [route.params.carNo, route.params.endPos],
   ([newCar, newEp]) => {
     if (newCar !== undefined && newEp !== undefined) {
-      carVin.value = Number(newCar);
+      carNo.value = Number(newCar);
       endPosId.value = Number(newEp);
       onReload();
     }
@@ -573,17 +595,17 @@ onMounted(async () => {
     }
   }, HEARTBEAT_CHECK_INTERVAL);
 
-  // 訂閱單點設備狀態主題
+  const mqttTopicPrefix = import.meta.env.VITE_MQTT_TOPIC_PREFIX || 'TYMC/AIR';
   logger.info("trainNo.value", trainNo.value);
-  logger.info("carVin.value", carVin.value);
+  logger.info("carNo.value", carNo.value);
   logger.info("endPosId.value", endPosId.value);
-  logger.info(`TYMC/AIR/${trainNo.value}/${carVin.value}/#`);
-  subscribe(`TYMC/AIR/${trainNo.value}/${carVin.value}/#`, (topic: string, data: unknown) => {
+  logger.info(`${mqttTopicPrefix}/${trainNo.value}/${carNo.value}/#`);
+  subscribe(`${mqttTopicPrefix}/${trainNo.value}/${carNo.value}/#`, (topic: string, data: unknown) => {
     const payload = data as MqttPayload;
     logger.info('single-end-pos', topic, data);
-    const payloadCarVin = payload.carVin !== undefined ? Number(payload.carVin) : (payload.carNo !== undefined ? Number(payload.carNo) : undefined);
+    const payloadCarNo = payload.carNo !== undefined ? Number(payload.carNo) : (payload.carVin !== undefined ? Number(payload.carVin) : undefined);
     
-    if (payload && payloadCarVin === carVin.value && Number(payload.endPos) === endPosId.value) {   
+    if (payload && payloadCarNo === carNo.value && Number(payload.endPos) === endPosId.value) {   
       const reg = payload.register || payload || {};
       isDeviceConnected.value = true;
       lastMsgTime.value = Date.now();
@@ -1195,7 +1217,7 @@ onUnmounted(() => {
     <RegisterTrendModal
       v-model:visible="showTrendModal"
       :register="selectedRegister"
-      :car-no="carVin"
+      :car-no="carNo"
       :end-pos="endPosId"
     />
 

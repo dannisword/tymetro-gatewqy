@@ -14,13 +14,13 @@ import {
 
 const props = defineProps<{
   endpoint: EndpointStatus;
-  carId: number;
+  carNo: number;
 }>();
 
 const navigator = routeHandle().navigation;
 
 const goToDetail = () => {
-  navigator(`/mtr/single-end-pos/${props.carId}/${props.endpoint.id}`, `端點狀態-${props.carId}-${props.endpoint.id}`);
+  navigator(`/mtr/single-end-pos/${props.carNo}/${props.endpoint.id}`, `端點狀態-${props.carNo}-${props.endpoint.id}`);
 };
 
 // 狀態顏色輔助計算

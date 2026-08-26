@@ -79,8 +79,18 @@ export const useMtrStore = defineStore("useMtrStore", {
         const res = await fetch(`/config.json?t=${Date.now()}`);
         if (res.ok) {
           const config = await res.json();
-          if (config && Array.isArray(config.carVins)) {
-            this.carConfigs = config.carVins;
+          if (config && config.metro_config && Array.isArray(config.metro_config.carVins)) {
+            this.carConfigs = config.metro_config.carVins.map((c: any, index: number) => ({
+              id: index + 1,
+              name: `第 ${index + 1} 節車廂`,
+              ip: c.equipments?.[0]?.address || '127.0.0.1',
+              equipment: (c.equipments || []).map((eq: any) => ({
+                id: eq.id,
+                endPosId: eq.endPosId,
+                name: eq.name,
+                address: eq.address
+              }))
+            }));
           }
           if (config && Array.isArray(config.userDropdown)) {
             this.userDropdown = config.userDropdown;

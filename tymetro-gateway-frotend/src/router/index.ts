@@ -89,7 +89,7 @@ export const baseRoutes: RouteRecordRaw[] = [
             meta: { title: "車廂列表", affix: false, keepAlive: true, requiresAuth: false },
           },
           {
-            path: "single-end-pos/:carVin/:endPos",
+            path: "single-end-pos/:carNo/:endPos",
             name: "single-end-pos",
             component: () => import("@/views/mtr/single-end-pos.vue"),
             meta: { title: "端點狀態監控", affix: false, keepAlive: false, requiresAuth: false },

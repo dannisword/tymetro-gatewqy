@@ -90,7 +90,7 @@ export interface GatewayHealth {
 export interface TrainCarStatus {
   id: number;
   trainNo: number;
-  carVin: number;
+  carNo: number;
   name: string;
   endpoints: EndpointStatus[];
 }
@@ -137,7 +137,6 @@ export interface EquipmentConfig {
 }
 
 export interface CarVinConfig {
-  carVin?: number;
   carNo?: number;
   id: number;
   name: string;
@@ -186,4 +185,10 @@ export interface MqttPayload {
   events?: string;
   register?: Record<string, number | string>;
   [key: string]: any;
+}
+
+export interface MetroConfig {
+  trainNo: number | null;
+  carNo: number | null;
+  carVins: TrainCarStatus[];
 }

@@ -4,9 +4,8 @@ import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
 import { useMtrStore } from '@/store/useMtrStore';
 import { useMQTT } from '@/store/useMQTT';
-import httpOperations from '@/utils/http-operations';
-import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus} from '@/utils/enums';
-import { EndpointStatus, TrainCarStatus } from '@/utils/types';
+import { CompressorStatus } from '@/utils/enums';
+import { EndpointStatus, TrainCarStatus, MetroConfig } from '@/utils/types';
 import { 
   mdiTrain, 
   mdiAlertCircle, 
@@ -17,19 +16,22 @@ import {
 import PageHeader from '@/components/PageHeader.vue';
 import StatsCard from '@/components/StatsCard.vue';
 import EndpointCard from '@/components/EndpointCard.vue';
+import { logger, updateEndpointData } from '@/utils';
 
 // 麵包屑設定
 const breadcrumbItems = [
   { label: '首頁', to: '/dashboard' },
-  { label: '車廂狀態列表' }
+  { label: '列車狀態列表' }
 ];
 
 const mtrStore = useMtrStore();
 const { isConnected, connect, subscribe } = useMQTT();
 
-const trainNo = ref(101);
-const carVin = ref(1101);
-const carVins = ref<TrainCarStatus[]>([]);
+const metroConfig = ref<MetroConfig>({
+  trainNo: null,
+  carNo: null,
+  carVins: []
+});
 // 紀錄每個端點最後收到 MQTT 訊息的時間與檢測計時器
 const lastMsgTime = ref<Record<string, number>>({});
 const lastUpdated = ref(new Date().toLocaleTimeString());
@@ -48,102 +50,46 @@ const triggerLastUpdated = () => {
 
 // 統計資訊
 const stats = computed(() => {
-  let totalEndpoints = 0;
-  let onlineEndpoints = 0;
-  let abnormalEndpoints = 0;
-  let warningEndpoints = 0;
+  let _totalEndpoints = 0;
+  let _onlineEndpoints = 0;
+  let _abnormalEndpoints = 0;
+  let _warningEndpoints = 0;
   
-  carVins.value.forEach(car => {
+  metroConfig.value.carVins.forEach(car => {
     car.endpoints.forEach(ep => {
-      totalEndpoints++;
+      _totalEndpoints++;
       if (ep.isConnected) {
-        onlineEndpoints++;
-        if (ep.status === 'abnormal') abnormalEndpoints++;
-        else if (ep.status === 'warning') warningEndpoints++;
+        _onlineEndpoints++;
+        if (ep.status === 'abnormal') _abnormalEndpoints++;
+        else if (ep.status === 'warning') _warningEndpoints++;
       }
     });
   });
   return {
-    total: totalEndpoints,
-    online: onlineEndpoints,
-    offline: totalEndpoints - onlineEndpoints,
-    abnormal: abnormalEndpoints,
-    warning: warningEndpoints,
-    normal: onlineEndpoints - abnormalEndpoints - warningEndpoints
+    total: _totalEndpoints,
+    online: _onlineEndpoints,
+    offline: _totalEndpoints - _onlineEndpoints,
+    abnormal: _abnormalEndpoints,
+    warning: _warningEndpoints,
+    normal: _onlineEndpoints - _abnormalEndpoints - _warningEndpoints
   };
 });
 
-// 轉換壓縮機運行指標與狀態
-const updateCompressorStatus = (targetEp: EndpointStatus, reg: any) => {
-  const D40002 = reg.D40002 !== undefined ? Number(reg.D40002) : undefined;
-  if (D40002 !== undefined) {
-    if (targetEp.compressors[0]) {
-      targetEp.compressors[0].status = ((D40002 >> 4) & 1) === 1 ? CompressorStatus.ON : CompressorStatus.OFF;
-    }
-    if (targetEp.compressors[1]) {
-      targetEp.compressors[1].status = ((D40002 >> 5) & 1) === 1 ? CompressorStatus.ON : CompressorStatus.OFF;
-    }
-  }
-
-  // 轉換壓縮機 1 高低壓
-  const highP1 = reg.D40006 !== undefined ? reg.D40006 : undefined;
-  const lowP1 = reg.D40005 !== undefined ? reg.D40005 : undefined;
-  if (targetEp.compressors[0]) {
-    if (highP1 !== undefined) targetEp.compressors[0].highPress = Math.round(Number(highP1));
-    if (lowP1 !== undefined) targetEp.compressors[0].lowPress = Math.round(Number(lowP1));
-  }
-
-  // 轉換壓縮機 2 高低壓
-  const highP2 = reg.D40008 !== undefined ? reg.D40008 : undefined;
-  const lowP2 = reg.D40007 !== undefined ? reg.D40007 : undefined;
-  if (targetEp.compressors[1]) {
-    if (highP2 !== undefined) targetEp.compressors[1].highPress = Math.round(Number(highP2));
-    if (lowP2 !== undefined) targetEp.compressors[1].lowPress = Math.round(Number(lowP2));
-  }
-};
-
-// 統一更新端點數值邏輯
-const updateEndpointData = (targetEp: EndpointStatus, reg: any) => {
-  // 轉換模式
-  if (reg.D40001 !== undefined) {
-    const modeKey = reg.D40001.toString() as SystemModeKey;
-    targetEp.mode = SYSTEM_MODE_MAP[modeKey] || '未知';
-  }
-  // 轉換回風溫度 (可能為字串，需轉型為 Number)
-  if (reg.D40004 !== undefined) {
-    targetEp.returnTemp = parseFloat((Number(reg.D40004) / 10).toFixed(1));
-  }
-  // 轉換設定溫度 (可能為字串，需轉型為 Number)
-  if (reg.D40201 !== undefined) {
-    targetEp.setTemp = parseFloat((Number(reg.D40201) / 10).toFixed(1));
-  }
-  // 轉換壓縮機運行指標與狀態
-  updateCompressorStatus(targetEp, reg);
-};
-
 // 載入車廂設定
-const loadFromConfig = async (reg: Record<string, any>) => {
+const loadFromConfig = async () => {
   if (!mtrStore.carConfigs || mtrStore.carConfigs.length === 0) {
     await mtrStore.loadConfig();
   }
 
-  let _trainNo = 101;
-  if (reg.D40054 !== undefined) {
-    _trainNo = Number(reg.D40054);
-    trainNo.value = _trainNo;
-  }
-  if (reg.D40055 !== undefined) {
-    carVin.value = Number(reg.D40055);
-  }
-
-  const type = Math.floor(_trainNo / 100);
-  const num = _trainNo % 100;
+  const _trainNo = metroConfig.value.trainNo || 101;
+  const _type = Math.floor(_trainNo / 100);
+  const _num = _trainNo % 100;
 
   if (mtrStore.carConfigs && mtrStore.carConfigs.length > 0) {
-    carVins.value = mtrStore.carConfigs.map((car: any, index: number) => {
+    metroConfig.value.carVins = mtrStore.carConfigs.map((car: any, index: number) => {
       const carIndex = index + 1; // 1 ~ 4 車
-      const resolvedCarVin = type * 1000 + carIndex * 100 + num;
-      const name = car.name.includes('車廂') ? `第 ${car.id} 節車廂` : car.name;
+      const carNo = _type * 1000 + carIndex * 100 + _num;
+      const name = `${carNo} 車廂`;
       
       const endpoints = (car.equipment || []).map((eq: any) => ({
         id: eq.endPosId || eq.id || 1,
@@ -164,7 +110,7 @@ const loadFromConfig = async (reg: Record<string, any>) => {
       return {
         id: car.id,
         trainNo: _trainNo,
-        carVin: resolvedCarVin,
+        carNo: carNo,
         name: name,
         endpoints: endpoints
       };
@@ -172,35 +118,74 @@ const loadFromConfig = async (reg: Record<string, any>) => {
   }
 };
 
-// 處理初始資料套用
-const applyInitialData = (reg: Record<string, any>) => {
-  const endpointPos = 1;
-  const _trainNo = reg.D40054 !== undefined ? Number(reg.D40054) : undefined;
-  const _carVin = reg.D40055 !== undefined ? Number(reg.D40055) : undefined;
+// 解析 MQTT 訊息並更新狀態
+const handleMqttMessage = (topic: string, data: any) => {
+  if (!data) return;
+  const _topic_prefix = import.meta.env.VITE_MQTT_TOPIC_PREFIX || 'TYMC/AIR';
   
-  if (_trainNo) {
-    trainNo.value = _trainNo;
-    const type = Math.floor(_trainNo / 100);
-    const num = _trainNo % 100;
-    
-    carVins.value.forEach((car, index) => {
+  // 支援巢狀 data.register 或扁平的 data
+  const _reg = data.register || data || {};
+  
+  // 從 MQTT 訊息或主題路徑動態取得列車編號 (trainNo)
+  let parsedTrainNo = data.trainNo !== undefined ? Number(data.trainNo) : undefined;
+  if (!parsedTrainNo) {
+    const parts = topic.split('/');
+    const prefixPartsLength = _topic_prefix.split('/').length;
+    const trainNoPart = Number(parts[prefixPartsLength]);
+    if (!isNaN(trainNoPart)) {
+      parsedTrainNo = trainNoPart;
+    }
+  }
+  if (parsedTrainNo && metroConfig.value.trainNo !== parsedTrainNo) {
+    logger.info(`[MQTT] Detected trainNo changed from ${metroConfig.value.trainNo} to ${parsedTrainNo}. Re-mapping car VINS.`);
+    metroConfig.value.trainNo = parsedTrainNo;
+    const type = Math.floor(parsedTrainNo / 100);
+    const num = parsedTrainNo % 100;
+    metroConfig.value.carVins.forEach((car, index) => {
       const carIndex = index + 1; // 1 ~ 4 車
-      car.trainNo = _trainNo;
-      car.carVin = type * 1000 + carIndex * 100 + num;
+      car.trainNo = parsedTrainNo;
+      car.carNo = type * 1000 + carIndex * 100 + num;
+      car.name = `${car.carNo} 車廂`;
     });
   }
+
+  // 優先從 data.carNo, data.carVin 或主題路徑解析車廂號碼
+  let _carNo = data.carNo !== undefined 
+    ? Number(data.carNo) 
+    : (data.carVin !== undefined ? Number(data.carVin) : undefined);
   
-  if (_carVin) {
-    carVin.value = _carVin;
+  if (!_carNo) {
+    const parts = topic.split('/');
+    const prefixPartsLength = _topic_prefix.split('/').length;
+    const carNoPart = Number(parts[prefixPartsLength + 1]);
+    if (!isNaN(carNoPart)) {
+      _carNo = carNoPart;
+    }
   }
   
-  if (carVin.value) {
-    const targetCar = carVins.value.find(c => c.carVin === Number(carVin.value));
-    if (targetCar) {
-      const targetEp = targetCar.endpoints.find(e => e.id === endpointPos);
+  if (_carNo) {
+    metroConfig.value.carNo = _carNo;
+    // 比對 carNo 欄位
+    const targetCar = metroConfig.value.carVins.find(c => c.carNo === _carNo);
+    
+    // 獲取端點位置
+    let endPosNum = data.endPos !== undefined ? Number(data.endPos) : undefined;
+    if (!endPosNum) {
+      const parts = topic.split('/');
+      const lastPart = Number(parts[parts.length - 1]);
+      if (!isNaN(lastPart)) {
+        endPosNum = lastPart;
+      }
+    }
+    
+    if (targetCar && endPosNum) {
+      const targetEp = targetCar.endpoints.find(e => e.id === endPosNum);
       if (targetEp) {
-        targetEp.isConnected = false;
-        updateEndpointData(targetEp, reg);
+        targetEp.isConnected = true;
+        // 更新最後收到 MQTT 訊息的時間戳記
+        lastMsgTime.value[`${targetCar.id}_${targetEp.id}`] = Date.now();
+        triggerLastUpdated();
+        updateEndpointData(targetEp,  _reg);
       }
     }
   }
@@ -215,32 +200,13 @@ onMounted(async() => {
   // 連線 MQTT
   connect(`${brokerProtocol}://${brokerHost}:${brokerPort}`);
 
-  // 一次性讀取初始暫存器資料
-  let initialRegs: Record<string, any> = {};
-  try {
-    const res = await httpOperations.get('/api/v1/sensors/by-group', { registerGroup: 'initial' }, { meta: { loading: false } });
-    if (res && res.success) {
-      const list = res.data || [];
-      list.forEach((item: any) => {
-        if (item.sensorCode && item.sensorValue !== null && item.sensorValue !== undefined) {
-          initialRegs[item.sensorCode] = Number(item.sensorValue);
-        }
-      });
-    }
-  } catch (error) {
-    console.error("Fetch initial sensors error:", error);
-  }
-
   // 載入 config.json 車廂配置
-  await loadFromConfig(initialRegs);
-
-  // 讀取 sensors 初始值
-  applyInitialData(initialRegs);
+  await loadFromConfig();
 
   // 啟動心跳檢測：每 5 秒檢查一次是否超過 60 秒未收到訊息
   heartbeatInterval = setInterval(() => {
     const now = Date.now();
-    carVins.value.forEach(car => {
+    metroConfig.value.carVins.forEach(car => {
       car.endpoints.forEach(ep => {
         const key = `${car.id}_${ep.id}`;
         const lastTime = lastMsgTime.value[key];
@@ -251,43 +217,10 @@ onMounted(async() => {
       });
     });
   }, 5000);
-console.log(trainNo.value);
 
-  subscribe(`TYMC/AIR/${trainNo.value}/#`, (topic: string, data: any) => {
-    if (data) {
-      // 支援巢狀 data.register 或扁平的 data
-      const reg = data.register || data || {};
-      
-      // 從 data.carVin 或 reg.D40055 獲取車廂代號 (carVin)
-      const _carVin = data.carVin !== undefined ? Number(data.carVin) : (reg.D40055 !== undefined ? Number(reg.D40055) : undefined);
-      
-      if (_carVin) {
-        // 比對 carVin 欄位
-        const targetCar = carVins.value.find(c => c.carVin === _carVin);
-        
-        // 獲取端點位置
-        let endPosNum = data.endPos !== undefined ? Number(data.endPos) : undefined;
-        if (!endPosNum) {
-          const parts = topic.split('/');
-          const lastPart = Number(parts[parts.length - 1]);
-          if (!isNaN(lastPart)) {
-            endPosNum = lastPart;
-          }
-        }
-        
-        if (targetCar && endPosNum) {
-          const targetEp = targetCar.endpoints.find(e => e.id === endPosNum);
-          if (targetEp) {
-            targetEp.isConnected = true;
-            // 更新最後收到 MQTT 訊息的時間戳記
-            lastMsgTime.value[`${targetCar.id}_${targetEp.id}`] = Date.now();
-            triggerLastUpdated();
-            updateEndpointData(targetEp, reg);
-          }
-        }
-      }
-    }
-  });
+  const _topic_prefix = import.meta.env.VITE_MQTT_TOPIC_PREFIX || 'TYMC/AIR';
+  logger.info("Subscribing to MQTT topic: ", `${_topic_prefix}/#`);
+  subscribe(`${_topic_prefix}/#`, handleMqttMessage);
 });
 
 onUnmounted(() => {
@@ -312,7 +245,7 @@ onUnmounted(() => {
       <!-- 標題與工具列 -->
       <PageHeader
         title="車廂空調端點狀態總覽"
-        :count="carVins.reduce((acc, car) => acc + car.endpoints.length, 0)"
+        :count="metroConfig.carVins.reduce((acc, car) => acc + car.endpoints.length, 0)"
         count-unit="Endpoints"
         subtitle="系統即時數據監控"
         :last-updated="lastUpdated"
@@ -370,7 +303,7 @@ onUnmounted(() => {
       <!-- 車廂列表網格 (4 車廂卡片，每卡片包含 2 個端點資訊，共 8 個端點) -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div 
-          v-for="car in carVins" 
+          v-for="car in metroConfig.carVins" 
           :key="car.id" 
           class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col gap-5 hover:shadow-lg transition-all duration-300"
         >
@@ -381,7 +314,9 @@ onUnmounted(() => {
                 <BaseIcon :path="mdiTrain" size="20" />
               </div>
               <div>
-                <h2 class="text-lg font-black text-slate-800 leading-none">{{ car.name }}</h2>
+                <h2 class="text-lg font-black text-slate-800 leading-none">
+                  {{ car.name }}
+                </h2>
               </div>
             </div>
             <div class="flex gap-2">
@@ -397,7 +332,7 @@ onUnmounted(() => {
               v-for="ep in car.endpoints"
               :key="ep.id"
               :endpoint="ep"
-              :car-id="car.carVin"
+              :car-no="car.carNo"
             />
           </div>
         </div>

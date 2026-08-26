@@ -79,7 +79,7 @@ export const useMQTTStore = defineStore('useMQTT', () => {
     // 註冊全域單一的 message 接收點，分發訊息給各個註冊的 callback（支援通配符匹配）
     client.value.on('message', (t, message) => {
       const messageStr = message.toString();
-      console.log(`[useMQTT] Received message on topic: "${t}" | Payload:`, messageStr.substring(0, 150));
+      // console.log(`[useMQTT] Received message on topic: "${t}" | Payload:`, messageStr.substring(0, 150));
 
       let matchedAny = false;
       callbacks.forEach((topicCallbacks, pattern) => {

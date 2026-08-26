@@ -51,88 +51,72 @@
       "action": "logout"
     }
   ],
-  "carVins": [
-    {
-      "id": 1,
-      "trainNo": 101,
-      "carVin": 1101,
-      "name": "車廂1",
-      "equipment": [
-        {
-          "id": 1,
-          "endPosId": 1,
-          "name": "端點1",
-          "address": "192.168.16.91"
-        },
-        {
-          "id": 2,
-          "endPosId": 2,
-          "name": "端點2",
-          "address": "192.168.16.92"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "trainNo": 101,
-      "carVin": 1201,
-      "name": "車廂2",
-      "equipment": [
-        {
-          "id": 1,
-          "endPosId": 1,
-          "name": "端點1",
-          "address": "192.168.16.93"
-        },
-        {
-          "id": 2,
-          "endPosId": 2,
-          "name": "端點2",
-          "address": "192.168.16.94"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "trainNo": 101,
-      "carVin": 1301,
-      "name": "車廂3",
-      "equipment": [
-        {
-          "id": 1,
-          "endPosId": 1,
-          "name": "端點1",
-          "address": "192.168.16.96"
-        },
-        {
-          "id": 2,
-          "endPosId": 2,
-          "name": "端點2",
-          "address": "192.168.16.95"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "trainNo": 101,
-      "carVin": 1401,
-      "name": "車廂4",
-      "equipment": [
-        {
-          "id": 1,
-          "endPosId": 1,
-          "name": "端點1",
-          "address": "192.168.16.98"
-        },
-        {
-          "id": 2,
-          "endPosId": 2,
-          "name": "端點2",
-          "address": "192.168.16.97"
-        }
-      ]
-    }
-  ],
+  "metro_config": {
+    "trainNo": 101,
+    "carVins": [
+      {
+        "carNo": 1101,
+        "equipments": [
+          {
+            "endPosId": 1,
+            "name": "端點1",
+            "address": "192.168.16.91"
+          },
+          {
+            "endPosId": 2,
+            "name": "端點2",
+            "address": "192.168.16.92"
+          }
+        ]
+      },
+      {
+        "carNo": 1201,
+        "equipments": [
+          {
+            "endPosId": 1,
+            "name": "端點1",
+            "address": "192.168.16.93"
+          },
+          {
+            "endPosId": 2,
+            "name": "端點2",
+            "address": "192.168.16.94"
+          }
+        ]
+      },
+      {
+        "carNo": 1301,
+        "equipments": [
+          {
+            "endPosId": 1,
+            "name": "端點1",
+            "address": "192.168.16.96"
+          },
+          {
+            "endPosId": 2,
+            "name": "端點2",
+            "address": "192.168.16.95"
+          }
+        ]
+      },
+      {
+        "carNo": 1401,
+        "equipments": [
+          {
+            "endPosId": 1,
+            "name": "端點1",
+            "address": "192.168.16.98"
+          },
+          {
+            "endPosId": 2,
+            "name": "端點2",
+            "address": "192.168.16.97"
+          }
+        ]
+      }
+    ]
+  },
+
   "tools": [
     {
       "id": 1,
