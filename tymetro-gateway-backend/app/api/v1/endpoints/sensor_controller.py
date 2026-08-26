@@ -47,6 +47,31 @@ def get_sensors(
         pageSize=pageSize
     )
 
+@router.get("/by-group", response_model=ResponseList[SensorResponse], summary="根據暫存器群組獲取感測器清單")
+def get_sensors_by_group(
+    registerGroup: str,
+    service: SensorService = Depends(get_sensor_service),
+    current_user: User = Depends(get_current_user)
+):
+    group_map = {
+        "initial": "INITIAL",
+        "realtime": "REAL_TIME",
+        "setting": "SETTING",
+        "controller_status": "CONTROLLER_STATUS"
+    }
+    sensor_type = group_map.get(registerGroup.lower(), registerGroup.upper())
+    items, total = service.get_sensors(
+        sensorType=sensor_type,
+        isActive=True,
+        pageSize=1000
+    )
+    return ResponseUtil.list_success(
+        data=items,
+        total=total,
+        pageIndex=0,
+        pageSize=1000
+    )
+
 @router.get("/{sensor_id}", response_model=ResponseBase[SensorResponse], summary="獲取單一感測器詳細資訊")
 def get_sensor(
     sensor_id: int,

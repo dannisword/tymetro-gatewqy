@@ -251,6 +251,7 @@ onMounted(async() => {
       });
     });
   }, 5000);
+console.log(trainNo.value);
 
   subscribe(`TYMC/AIR/${trainNo.value}/#`, (topic: string, data: any) => {
     if (data) {
