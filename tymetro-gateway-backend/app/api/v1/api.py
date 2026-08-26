@@ -7,7 +7,8 @@ from app.api.v1.endpoints import (
     car_controller,
     sensor_controller,
     sensor_history_controller,
-    setting_log_controller
+    setting_log_controller,
+    sensor_map_controller
 )
 
 api_router = APIRouter()
@@ -21,6 +22,7 @@ api_router.include_router(car_controller.router, prefix="/cars", tags=["車廂�
 api_router.include_router(sensor_controller.router, prefix="/sensors", tags=["感測器管理 (Sensors)"])
 api_router.include_router(sensor_history_controller.router, prefix="/sensor-histories", tags=["感測器歷史紀錄 (Sensor Histories)"])
 api_router.include_router(setting_log_controller.router, prefix="/setting-logs", tags=["設定紀錄管理 (Setting Logs)"])
+api_router.include_router(sensor_map_controller.router, prefix="/sensor-maps", tags=["感測器圖配置 (Sensor Maps)"])
 
 
 
