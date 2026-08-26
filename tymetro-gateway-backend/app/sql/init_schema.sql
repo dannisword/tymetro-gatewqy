@@ -129,3 +129,18 @@ CREATE TABLE IF NOT EXISTS `sensors` (
   FOREIGN KEY (`equipment_id`) REFERENCES `equipments` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION
 );
 
+-- ------------------------------------------------------------
+-- 6. Table structure for setting_logs
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `setting_logs` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,                 -- 流水序
+  `setting_type` VARCHAR(50) NOT NULL,                    -- 設定類型 (如: 溫度, 新鮮空氣擋板開度, 開啟緊急供氣擋板, 重置2/3)
+  `value` VARCHAR(255) DEFAULT NULL,                      -- 設定數值或內容
+  `operator` VARCHAR(100) DEFAULT NULL,                   -- 操作人員
+  `is_notified` BOOLEAN NOT NULL DEFAULT 0,               -- 是否已通知
+  `topic` VARCHAR(255) DEFAULT NULL,                      -- MQTT Topic
+  `payload` TEXT DEFAULT NULL,                            -- MQTT Payload
+  `recorded_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP -- 操作時間
+);
+
+

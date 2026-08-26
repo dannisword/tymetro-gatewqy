@@ -7,6 +7,8 @@ from app.models.user_model import User
 from app.models.config_model import Config, SystemConfig
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
+from app.models.setting_log_model import SettingLog
+
 from app.core.logger import logger
 from datetime import datetime, timezone
 from app.core.security import get_password_hash

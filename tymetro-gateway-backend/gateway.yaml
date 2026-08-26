@@ -6,7 +6,7 @@ gateway:
 network:
   broker_mqtt:
     enabled: true
-    broker_host: 192.168.16.90
+    broker_host: 220.133.144.73
     broker_port: 1883
     topic_prefix: "TYMC/AIR/102/#"
     clean_session: true
