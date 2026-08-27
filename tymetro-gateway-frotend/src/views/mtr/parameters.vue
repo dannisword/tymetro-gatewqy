@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onBeforeMount, watch } from 'vue';
 import Breadcrumb from '@/components/Breadcrumb.vue';
-import { getConfigsByType, updateConfig } from '@/utils/api';
+import { getConfigsByType, updateConfig, downloadVehicleMetadata } from '@/utils/api';
 import { useAlert } from '@/composables/TLAlter';
 import BaseButton from '@/components/BaseButton.vue';
 import ParameterColumn from './components/ParameterColumn.vue';
@@ -95,6 +95,25 @@ const onSave = (name: string, data: any) => {
 const onRemoteUpdate = () => {
   saveCurrentConfig();
 };
+
+const onDownloadData = async () => {
+  try {
+    const trainCodeInput = prompt('請輸入要下載的車組編號 (例如: AC-101)，留空則下載全部：');
+    if (trainCodeInput === null) return; // 使用者取消
+    const trainCode = trainCodeInput.trim() || undefined;
+
+    const res = await downloadVehicleMetadata(trainCode);
+    if (res.success) {
+      TLSuccess(res.message || '車廂、設備與感測器資料下載同步成功！');
+      fetchConfig();
+    } else {
+      TLError('下載同步失敗：' + (res.message || '未知錯誤'));
+    }
+  } catch (err: any) {
+    console.error('Download error:', err);
+    TLError('下載發生錯誤：' + (err.message || err));
+  }
+};
 </script>
 
 <template>
@@ -119,6 +138,7 @@ const onRemoteUpdate = () => {
             PLC 設定
           </BaseButton>
           <BaseButton 
+            @click="onDownloadData"
             colorClass="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-[#2a7eb5] hover:border-[#2a7eb5] shadow-sm"
             icon="mdiDownload"
           >

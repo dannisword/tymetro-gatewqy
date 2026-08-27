@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.database.session import get_db
@@ -135,3 +135,163 @@ def upsert_config(
             return ResponseUtil.success(data=item, message="Config created successfully")
     except Exception as e:
         return ResponseUtil.error(message=str(e))
+
+
+from datetime import datetime, date
+from app.models.car_model import Car
+from app.models.equipment_model import Equipment
+from app.models.sensor_model import Sensor
+from app.core.config import settings
+from app.utils.http_util import HttpUtil
+
+@router.post("/download-metadata", response_model=ResponseBase, summary="從中心端下載並同步車廂、設備與感測器資料")
+def download_metadata(
+    trainCode: Optional[str] = Query(None, description="車組編號"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    自中心端 (tymetro-backend) 取得最新的車廂 (cars)、設備 (equipments) 與感測器 (sensors) 資料，
+    並同步更新本機 SQLite 資料庫，最後清空快取並重載預熱。
+    """
+    token = HttpUtil.get_central_backend_token()
+    if not token:
+        return ResponseUtil.error("無法登入中心後端取得 Token")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+
+    # 1. 取得車廂資料
+    cars_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/cars"
+    cars_params = {"pageSize": 1000, "trainCode": trainCode} if trainCode else {"pageSize": 1000}
+    cars_resp = HttpUtil.get(cars_url, params=cars_params, headers=headers)
+    if not cars_resp.get("success"):
+        return ResponseUtil.error(f"下載車廂資料失敗: {cars_resp.get('message')}")
+    cars_data = cars_resp.get("data") or {}
+    cars_list = cars_data.get("source", []) if isinstance(cars_data, dict) else (cars_data if isinstance(cars_data, list) else [])
+
+    if trainCode:
+        # 本地過濾，確保資料精確度
+        cars_list = [c for c in cars_list if c.get("trainCode") == trainCode]
+        if not cars_list:
+            return ResponseUtil.error(f"在中心端找不到車組編號為 '{trainCode}' 的車廂資料。")
+
+    # 2. 取得設備資料
+    eq_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/equipments"
+    eq_resp = HttpUtil.get(eq_url, params={"pageSize": 1000}, headers=headers)
+    if not eq_resp.get("success"):
+        return ResponseUtil.error(f"下載設備資料失敗: {eq_resp.get('message')}")
+    eq_data = eq_resp.get("data") or {}
+    eq_list = eq_data.get("source", []) if isinstance(eq_data, dict) else (eq_data if isinstance(eq_data, list) else [])
+
+    # 3. 取得感測器資料
+    sensors_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensors"
+    sensors_resp = HttpUtil.get(sensors_url, params={"pageSize": 10000}, headers=headers)
+    if not sensors_resp.get("success"):
+        return ResponseUtil.error(f"下載感測器資料失敗: {sensors_resp.get('message')}")
+    sensors_data = sensors_resp.get("data") or {}
+    sensors_list = sensors_data.get("source", []) if isinstance(sensors_data, dict) else (sensors_data if isinstance(sensors_data, list) else [])
+
+    if trainCode:
+        # 篩選屬於該車組的車廂 ID 集合，並僅保留相關設備與感測器
+        target_car_ids = {c.get("id") for c in cars_list if c.get("id") is not None}
+        eq_list = [eq for eq in eq_list if eq.get("carId") in target_car_ids]
+        sensors_list = [s for s in sensors_list if s.get("carId") in target_car_ids]
+
+    # Helper 解析函數
+    def parse_date(val: Optional[str]) -> Optional[date]:
+        if not val:
+            return None
+        try:
+            return date.fromisoformat(val[:10])
+        except Exception:
+            return None
+
+    def parse_datetime(val: Optional[str]) -> Optional[datetime]:
+        if not val:
+            return None
+        try:
+            return datetime.fromisoformat(val.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    try:
+        if trainCode:
+            # 找到資料庫中舊的該車組的所有車廂 ID，只刪除該車組之舊資料
+            old_car_ids = [car_id for (car_id,) in db.query(Car.id).filter(Car.trainCode == trainCode).all()]
+            if old_car_ids:
+                db.query(Sensor).filter(Sensor.carId.in_(old_car_ids)).delete(synchronize_session=False)
+                db.query(Equipment).filter(Equipment.carId.in_(old_car_ids)).delete(synchronize_session=False)
+            db.query(Car).filter(Car.trainCode == trainCode).delete(synchronize_session=False)
+        else:
+            # 清空所有舊資料 (依外鍵依賴反向刪除)
+            db.query(Sensor).delete()
+            db.query(Equipment).delete()
+            db.query(Car).delete()
+
+        # 插入車廂
+        for c in cars_list:
+            db.add(Car(
+                id=c.get("id"),
+                trainCode=c.get("trainCode"),
+                carNo=c.get("carNo"),
+                carVin=c.get("carVin"),
+                carType=c.get("carType"),
+                carTag=c.get("carTag"),
+                carStatus=c.get("carStatus"),
+                isActive=c.get("isActive") if c.get("isActive") is not None else True,
+                lastSeenAt=parse_datetime(c.get("lastSeenAt"))
+            ))
+        db.flush()
+
+        # 插入設備
+        for eq in eq_list:
+            db.add(Equipment(
+                id=eq.get("id"),
+                carId=eq.get("carId"),
+                endPos=eq.get("endPos"),
+                equipmentName=eq.get("equipmentName"),
+                equipmentStatus=eq.get("equipmentStatus") or "OPERATING",
+                ipAddress=eq.get("ipAddress"),
+                brandModel=eq.get("brandModel"),
+                installDate=parse_date(eq.get("installDate")),
+                accumulatedHours=eq.get("accumulatedHours") or 0,
+                isActive=eq.get("isActive") if eq.get("isActive") is not None else True,
+                lastSeenAt=parse_datetime(eq.get("lastSeenAt"))
+            ))
+        db.flush()
+
+        # 插入感測器
+        for s in sensors_list:
+            db.add(Sensor(
+                id=s.get("id"),
+                carId=s.get("carId"),
+                equipmentId=s.get("equipmentId"),
+                sensorType=s.get("sensorType"),
+                sensorCode=s.get("sensorCode"),
+                sensorName=s.get("sensorName"),
+                sensorValue=s.get("sensorValue") or 0.0,
+                sensorUnit=s.get("sensorUnit"),
+                sensorStatus=s.get("sensorStatus") or "OPERATING",
+                calibrationOffset=s.get("calibrationOffset") or 0.0,
+                lastCalibrationDate=parse_date(s.get("lastCalibrationDate")),
+                showOnDashboard=s.get("showOnDashboard") if s.get("showOnDashboard") is not None else True,
+                isActive=s.get("isActive") if s.get("isActive") is not None else True,
+                saveHistory=s.get("saveHistory") if s.get("saveHistory") is not None else True
+            ))
+        
+        db.commit()
+
+        # 清空快取並重新預熱設備點位資料
+        db_config_repo.clear_cache()
+        db_config_repo.get_all_equipments()
+
+        print("Metadata download and sync completed successfully.")
+        return ResponseUtil.success(message=f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備及 {len(sensors_list)} 筆感測器資料。")
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error saving downloaded metadata to DB: {e}")
+        return ResponseUtil.error(f"寫入本地資料庫失敗: {str(e)}")

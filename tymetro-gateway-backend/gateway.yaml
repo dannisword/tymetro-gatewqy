@@ -1,14 +1,14 @@
 gateway:
-  id: G-104
-  name: 桃園捷運 車組 104
+  id: G-102
+  name: 桃園捷運 車組 102
   location: 桃園捷運
   poll_interval_ms: 1000
 network:
   gateway_mqtt:
     enabled: true
-    broker_host: 192.168.16.90
+    broker_host: 220.133.144.73
     broker_port: 1883
-    topic_prefix: "TYMC/AIR/104/#"
+    topic_prefix: "TYMC/AIR/102/#"
     clean_session: true
   cloud_mqtt:
     enabled: true
@@ -16,8 +16,8 @@ network:
     broker_port: 1883
     username: ""
     password: ""
-    client_id: "GW-TAU-104-CLOUD-DEV"
-    cloud_topic_prefix: "MQT/TRA/OTR/TRC/104"
+    client_id: "GW-TAU-102-CLOUD-DEV"
+    cloud_topic_prefix: "MQT/TRA/OTR/TRC/102"
     qos: 1
     reconnect_delay_sec: 5
     keepalive: 20

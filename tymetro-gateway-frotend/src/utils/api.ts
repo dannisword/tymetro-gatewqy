@@ -93,3 +93,8 @@ export const downloadTimePeriodTemplate = async (code: string): Promise<any> => 
     const url = `/api/v1/time-period-templates/download/${code}`
     return await httpOperations.get(url)
 }
+
+export const downloadVehicleMetadata = async (trainCode?: string): Promise<any> => {
+    const url = `/api/v1/configs/download-metadata` + (trainCode ? `?trainCode=${encodeURIComponent(trainCode)}` : '')
+    return await httpOperations.post(url)
+}
