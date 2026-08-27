@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
+    # 外部中央後端連線設定
+    TYMETRO_BACKEND_URL: str = os.getenv("TYMETRO_BACKEND_URL", "http://220.133.144.73:8901")
+    TYMETRO_BACKEND_USERNAME: str = os.getenv("TYMETRO_BACKEND_USERNAME", "admin")
+    TYMETRO_BACKEND_PASSWORD: str = os.getenv("TYMETRO_BACKEND_PASSWORD", "admin123")
+
 settings = Settings()
 
 logger.info(f"App Mode: {settings.APP_MODE}")
