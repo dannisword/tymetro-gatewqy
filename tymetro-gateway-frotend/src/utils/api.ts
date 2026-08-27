@@ -83,3 +83,13 @@ export const writeInitialValuesToPlc = async (): Promise<any> => {
 export const writeSettingValuesToPlc = async (): Promise<any> => {
     return await httpOperations.post('/api/v1/write-setting-values')
 }
+
+export const getTimePeriodTemplateOptions = async (category?: string): Promise<any> => {
+    const url = `/api/v1/time-period-templates/options` + (category ? `?category=${category}` : '')
+    return await httpOperations.get(url)
+}
+
+export const downloadTimePeriodTemplate = async (code: string): Promise<any> => {
+    const url = `/api/v1/time-period-templates/download/${code}`
+    return await httpOperations.get(url)
+}

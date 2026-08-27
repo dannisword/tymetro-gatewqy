@@ -3,12 +3,19 @@ import { ref, onBeforeMount } from 'vue';
 import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
 import BaseButton from '@/components/BaseButton.vue';
-import { getConfigsByType, updateConfig } from '@/utils/api';
+import ElDialogCustom from '@/components/ElDialogCustom.vue';
+import { 
+  getConfigsByType, 
+  upsertConfig, 
+  getTimePeriodTemplateOptions, 
+  downloadTimePeriodTemplate 
+} from '@/utils/api';
 import { useAlert } from '@/composables/TLAlter';
 import { 
   mdiWeatherSunny, 
   mdiLightbulbOnOutline,
-  mdiCalendarSync
+  mdiCalendarSync,
+  mdiCloudDownloadOutline
 } from '@mdi/js';
 
 const { TLSuccess, TLError } = useAlert();
@@ -42,6 +49,12 @@ const activeMode = ref(modeOptions[0].code);
 const configId = ref<number | null>(null);
 const allSchedules = ref<Record<string, number[][]>>({});
 
+// 樣板下載彈窗狀態
+const isDialogVisible = ref(false);
+const templateOptions = ref<any[]>([]);
+const selectedTemplateCode = ref('');
+const currentVersion = ref('');
+
 // 預設產生單一模式的 24x7 矩陣
 const createDefaultMatrix = () => {
   return Array.from({ length: 24 }, (_, h) => 
@@ -70,6 +83,9 @@ onBeforeMount(() => {
       if (response.data && response.data.id) {
         configId.value = response.data.id;
       }
+      if (response.data && response.data.version) {
+        currentVersion.value = response.data.version;
+      }
       if (response.data && response.data.configContent) {
         try {
           const content = JSON.parse(response.data.configContent);
@@ -97,57 +113,71 @@ const selectMode = (code: string) => {
   scheduleData.value = allSchedules.value[code];
 };
 
-const onSave = () => {
-  console.log('Saved data:', allSchedules.value);
-  if (configId.value) {
-    const payload = {
-      configType: 'SCHEDULE',
-      configContent: JSON.stringify(allSchedules.value)
-    };
-    updateConfig(configId.value, payload)
-      .then(() => {
-        TLSuccess('所有時段設定儲存成功！');
-      })
-      .catch((err) => {
-        console.log('Update schedule error:', err);
-        TLError('時段設定儲存失敗');
-      });
-  } else {
-    TLError('尚未取得設定代碼，無法儲存');
-  }
-};
-
-const onClear = () => {
-  const currentOption = modeOptions.find(m => m.code === activeMode.value);
-  if (confirm(`確定要清除【${currentOption?.label}】的所有時段設定為 0 嗎？`)) {
-    const emptyMatrix = Array.from({ length: 24 }, () => Array.from({ length: 7 }, () => 0));
-    allSchedules.value[activeMode.value] = emptyMatrix;
-    scheduleData.value = emptyMatrix;
-  }
-};
-
-const onCopy = () => {
-  const currentOption = modeOptions.find(m => m.code === activeMode.value);
-  navigator.clipboard.writeText(JSON.stringify(scheduleData.value))
-    .then(() => TLSuccess(`已複製【${currentOption?.label}】的時段表資料`))
-    .catch(() => TLError('複製失敗'));
-};
-
-const onPaste = async () => {
+const openDownloadDialog = async () => {
+  selectedTemplateCode.value = '';
+  isDialogVisible.value = true;
   try {
-    const text = await navigator.clipboard.readText();
-    const parsed = JSON.parse(text);
-    if (Array.isArray(parsed) && parsed.length === 24 && Array.isArray(parsed[0]) && parsed[0].length === 7) {
-      const currentOption = modeOptions.find(m => m.code === activeMode.value);
-      allSchedules.value[activeMode.value] = parsed;
-      scheduleData.value = parsed;
-      TLSuccess(`已成功貼上至【${currentOption?.label}】`);
+    const res = await getTimePeriodTemplateOptions('SCHEDULE');
+    if (res.success && res.data && res.data.source) {
+      templateOptions.value = res.data.source;
     } else {
-      TLError('剪貼簿資料格式不符 (需為 24x7 溫度陣列)');
+      TLError('獲取時段樣板選項失敗');
     }
-  } catch (e) {
-    console.log('Paste error:', e);
-    TLError('無法讀取剪貼簿，請確認資料格式或瀏覽器權限');
+  } catch (err) {
+    console.error('Fetch template options error:', err);
+    TLError('獲取時段樣板選項時發生錯誤');
+  }
+};
+
+const handleDialogClose = async (dialogRef: any) => {
+  if (!dialogRef.success) {
+    isDialogVisible.value = false;
+    return;
+  }
+  if (!selectedTemplateCode.value) {
+    TLError('請選擇一個時段樣板');
+    return;
+  }
+  try {
+    const res = await downloadTimePeriodTemplate(selectedTemplateCode.value);
+    if (res.success && res.data && res.data.payload) {
+      const payload = res.data.payload;
+      const configPayload = {
+        configType: 'SCHEDULE',
+        configContent: JSON.stringify(payload),
+        version: res.data.version || '1.0.0'
+      };
+      const upsertRes = await upsertConfig(configPayload);
+      if (upsertRes.success) {
+        TLSuccess('樣板下載並儲存至本機成功！');
+        // 更新前端展示
+        modeOptions.forEach(m => {
+          if (payload[m.code]) {
+            allSchedules.value[m.code] = payload[m.code];
+          } else if (payload[m.label]) {
+            allSchedules.value[m.code] = payload[m.label];
+          }
+        });
+        scheduleData.value = allSchedules.value[activeMode.value];
+        if (upsertRes.data && upsertRes.data.id) {
+          configId.value = upsertRes.data.id;
+        }
+        if (upsertRes.data && upsertRes.data.version) {
+          currentVersion.value = upsertRes.data.version;
+        } else {
+          currentVersion.value = configPayload.version;
+        }
+      } else {
+        TLError('樣板儲存至設定資料表失敗');
+      }
+    } else {
+      TLError('下載樣板失敗：' + (res.message || '無效的資料格式'));
+    }
+  } catch (err: any) {
+    console.error('Download template error:', err);
+    TLError('下載樣板發生錯誤：' + (err.message || err));
+  } finally {
+    isDialogVisible.value = false;
   }
 };
 </script>
@@ -162,35 +192,19 @@ const onPaste = async () => {
       <!-- 頂部標題列 -->
       <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
         <div class="flex items-center gap-3">
-          <h1 class="text-2xl font-bold text-slate-800 tracking-wide font-sans">模式時段設定</h1>
+          <h1 class="text-2xl font-bold text-slate-800 tracking-wide font-sans">
+            模式時段設定
+            <span v-if="currentVersion" class="text-sm font-normal text-slate-500 ml-2">(版本: {{ currentVersion }})</span>
+          </h1>
         </div>
         <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+
           <BaseButton 
-            @click="onCopy"
-            colorClass="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm" 
-            icon="mdiContentCopy"
-          >
-            複製
-          </BaseButton>
-          <BaseButton 
-            @click="onPaste"
-            colorClass="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm" 
-            icon="mdiClipboardOutline"
-          >
-            貼上
-          </BaseButton>
-          <BaseButton 
-            @click="onClear"
-            colorClass="bg-white border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 shadow-sm" 
-            icon="mdiDeleteOutline"
-          >
-            清除
-          </BaseButton>
-          <BaseButton 
-            @click="onSave"
+            @click="openDownloadDialog"
             colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-sm px-8" 
+            :icon="mdiCloudDownloadOutline"
           >
-            儲存
+            下載後端時段樣板
           </BaseButton>
         </div>
       </div>
@@ -235,7 +249,7 @@ const onPaste = async () => {
                         class="text-amber-500" 
                       />
                       <span class="tracking-widest">{{ day }}</span>
-                      <button class="text-blue-400 hover:text-[#2a7eb5] hover:bg-blue-50 p-1 rounded transition-colors focus:outline-none">
+                      <button class="text-blue-400 hover:text-[#2a7eb5] hover:bg-blue-50 p-1 rounded transition-colors focus:outline-none" disabled>
                         <BaseIcon :path="mdiCalendarSync" size="16" />
                       </button>
                    </div>
@@ -261,7 +275,8 @@ const onPaste = async () => {
                        type="number" 
                        step="0.5"
                        v-model="scheduleData[hIdx][dIdx]" 
-                       class="w-[70px] px-2 py-1.5 text-center border border-slate-200 rounded-md text-md font-medium text-slate-700 focus:outline-none focus:border-[#2a7eb5] focus:ring-1 focus:ring-[#2a7eb5] transition-all hover:border-slate-300"
+                       disabled
+                       class="w-[70px] px-2 py-1.5 text-center border border-slate-200 rounded-md text-md font-medium text-slate-500 bg-slate-50 cursor-not-allowed"
                      />
                      <span class="text-[11px] text-slate-400 font-bold shrink-0">°C</span>
                    </div>
@@ -276,11 +291,38 @@ const onPaste = async () => {
       <div class="mt-6 flex items-start gap-3 p-4 bg-blue-50/50 border border-blue-100 rounded-lg w-full shadow-sm">
         <BaseIcon :path="mdiLightbulbOnOutline" size="24" class="text-[#2a7eb5] shrink-0" />
         <p class="text-sm text-[#206796] leading-relaxed font-medium pt-0.5 tracking-wide">
-          提示：設定每小時的目標溫度，控制器將依設定自動運行。
+          提示：已改為下載後端時段樣板，本頁面目前為唯讀狀態。
         </p>
       </div>
 
     </div>
+
+    <!-- 下載樣板選擇彈窗 -->
+    <ElDialogCustom
+      v-model:visible="isDialogVisible"
+      title="選擇下載時段樣板"
+      width="480px"
+      minHeight="120px"
+      action="確認下載"
+      @on-before-close="handleDialogClose"
+    >
+      <div class="py-4 px-2">
+        <label class="block text-sm font-semibold text-slate-700 mb-2">時段樣板：</label>
+        <el-select v-model="selectedTemplateCode" placeholder="請選擇時段樣板" class="w-full" size="large">
+          <el-option
+            v-for="item in templateOptions"
+            :key="item.code"
+            :label="`${item.name} (${item.code})`"
+            :value="item.code"
+          >
+            <div class="flex justify-between items-center w-full">
+              <span class="font-medium text-slate-700">{{ item.name }}</span>
+              <span class="text-xs text-slate-400">版本: {{ item.version }}</span>
+            </div>
+          </el-option>
+        </el-select>
+      </div>
+    </ElDialogCustom>
   </div>
 </template>
 

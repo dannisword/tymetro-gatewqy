@@ -128,7 +128,7 @@ def upsert_config(
     try:
         item = service.get_by_config_type(request.configType)
         if item:
-            item = service.update(item.id, ConfigUpdate(configContent=request.configContent))
+            item = service.update(item.id, ConfigUpdate(configContent=request.configContent, version=request.version))
             return ResponseUtil.success(data=item, message="Config updated successfully")
         else:
             item = service.create(request)

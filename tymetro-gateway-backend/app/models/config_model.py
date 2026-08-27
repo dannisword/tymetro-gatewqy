@@ -8,6 +8,8 @@ class Config(AuditModel):
     id = Column(IdType, primary_key=True, autoincrement=True, comment="流水序")
     configType = Column("config_type", String(50), nullable=False, index=True, comment="設定類型")
     configContent = Column("config_content", Text, nullable=True, comment="設定內容")
+    version = Column("version", String(50), nullable=True, default="1.0.0", comment="版本號")
+
 
 class SystemConfig(AuditModel):
     """系統層級設定 (Gateway ID, Central Server, IPC Socket Path...)"""

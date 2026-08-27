@@ -17,7 +17,19 @@ from app.database.session import engine, Base
 def create_tables():
     """初始化建立所有 SQLAlchemy ORM 資料表 (若尚不存在)"""
     Base.metadata.create_all(bind=engine)
+    
+    # 檢查並動態遷移 configs.version 欄位 (防止舊有 SQLite 資料庫因為缺少此欄位出錯)
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if "configs" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("configs")]
+        if "version" not in columns:
+            logger.info("Adding missing column 'version' to 'configs' table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE configs ADD COLUMN version VARCHAR(50) DEFAULT '1.0.0'"))
+                
     logger.info("Database tables verified/created successfully via ORM Metadata.")
+
 
 def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = False):
     """
