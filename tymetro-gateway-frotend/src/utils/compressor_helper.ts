@@ -4,7 +4,18 @@ import { EndpointStatus } from './types';
 /**
  * 轉換壓縮機運行指標與狀態
  */
-export const updateCompressorStatus = (targetEp: EndpointStatus, reg: Record<string, any>) => {
+export const updateCompressorStatus = (
+  targetEp: {
+    compressors: Array<{
+      id: number;
+      status: any;
+      health: any;
+      highPress: number;
+      lowPress: number;
+    }>;
+  },
+  reg: Record<string, any>
+) => {
   const D40002 = (reg.D40002 !== undefined && reg.D40002 !== null) ? Number(reg.D40002) : undefined;
   const D40003 = (reg.D40003 !== undefined && reg.D40003 !== null) ? Number(reg.D40003) : undefined;
 

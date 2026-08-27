@@ -17,7 +17,7 @@ declare module "axios" {
 
 const service = axios.create({
   baseURL: import.meta.env.VITE_BASE_API,
-  timeout: 5000,
+  timeout: 15000,
   withCredentials: true,
 });
 

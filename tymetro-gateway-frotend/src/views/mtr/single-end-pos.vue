@@ -24,7 +24,7 @@ import type {
 } from '@/utils/types';
 import CarSensorMap from '@/views/mtr/components/CarSensorMap.vue';
 import httpOperations from '@/utils/http-operations';
-import { logger } from '@/utils';
+import { logger, updateCompressorStatus } from '@/utils';
 import { 
   mdiWeatherWindy, 
   mdiSnowflake, 
@@ -61,19 +61,16 @@ const state = reactive({
 const { carNo, endPosId, carInfoMap } = toRefs(state);
 
 const carInfo = computed(() => carInfoMap.value[carNo.value] || carInfoMap.value[1101] || { id: 1101, name: '', ip: '', endpoints: [] });
-const epName = computed(() => `端點 ${endPosId.value}`);
 const endPos = computed(() => {
   const info = carInfo.value;
-  if (!info || !info.endpoints) return { name: '', address: '' };
-  return info.endpoints.find(e => e.id === endPosId.value) || { name: '', address: '' };
+  const defaultEp = { name: `端點 ${endPosId.value}`, address: '' };
+  if (!info || !info.endpoints) return defaultEp;
+  const ep = info.endpoints.find(e => e.id === endPosId.value);
+  return ep ? { ...ep, name: ep.name || `端點 ${endPosId.value}` } : defaultEp;
 });
 const normalizedCarNo = computed(() => carInfo.value ? carInfo.value.id : 1101);
-const trainNo = computed(() => {
-  const type = Math.floor(carNo.value / 1000);
-  const num = carNo.value % 100;
-  return type * 100 + num;
-});
 const carType = computed(() => Math.floor(carNo.value / 1000));
+const trainNo = computed(() => carType.value * 100 + (carNo.value % 100));
 // ==========================================
 // 3. MQTT Connection & Heartbeat Tracker State
 // ==========================================
@@ -90,11 +87,20 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 const activeTab = ref('dashboard');
 const breadcrumbItems = computed(() => [
   { label: '首頁', to: '/dashboard' },
-  { label: `${carNo.value}車廂-${epName.value} 狀態` }
+  { label: `${carNo.value}車廂-${endPos.value.name} 狀態` }
 ]);
 
 const rawCarOptions = ref<CarOption[]>([]);
-const carOptions = ref<CarOption[]>([]);
+const dynamicCarOptions = ref<CarOption[]>([]);
+const carOptions = computed(() => {
+  if (rawCarOptions.value.length > 0) {
+    return rawCarOptions.value.map((opt) => ({
+      ...opt,
+      value: carType.value * 1000 + opt.value * 100 + (trainNo.value % 100)
+    }));
+  }
+  return dynamicCarOptions.value;
+});
 const endpointsOptions = ref<EndpointOption[]>([]);
 const configCarVinsList = ref<CarVinConfig[]>([]);
 
@@ -249,7 +255,7 @@ const updateCarMap = (carVins: CarVinConfig[], hasPredefinedOptions = false) => 
     carInfoMap.value = map;
   }
   if (options.length > 0 && !hasPredefinedOptions) {
-    carOptions.value = options;
+    dynamicCarOptions.value = options;
   }
 };
 
@@ -315,7 +321,10 @@ const loadCarConfig = async () => {
 
 const carsList = ref<any[]>([]);
 const currentCarVin = computed(() => {
-  const matched = carsList.value.find(c => c.carNo === carNo.value);
+  const matched = carsList.value.find(c => 
+    String(c.carVin) === String(carNo.value) || 
+    Number(c.carNo) === Math.floor((carNo.value % 1000) / 100)
+  );
   return matched ? matched.carVin : '';
 });
 
@@ -464,27 +473,6 @@ const setTargetTemp = () => {
   }, TEMP_LOCK_DELAY);
 };
 
-// 變更設定溫度
-function publishSetTemp(temp: number) {
-  const payload = {
-    trainNo: trainNo.value,
-    carNo: carNo.value,
-    endPos: endPosId.value,
-    setTemp: temp
-  };
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
-}
-
-// 變更運作模式
-function publishMode(modeCode: number) {
-  const payload = {
-    trainNo: trainNo.value,
-    carNo: carNo.value,
-    endPos: endPosId.value,
-    mode: modeCode
-  };
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
-}
 
 const setFreshAirDamper = (val: number) => {
   freshAirDamperPos.value = val;
@@ -606,15 +594,14 @@ watch(isMqttConnected, (connected) => {
   }
 });
 
-// 監聽車廂選單來源變動，同步對應正確車型 vin
-watch([rawCarOptions, trainNo, carType], () => {
-  if (rawCarOptions.value.length > 0) {
-    carOptions.value = rawCarOptions.value.map((opt) => ({
-      ...opt,
-      value: carType.value * 1000 + opt.value * 100 + (trainNo.value % 100)
-    }));
+
+
+// 當 carVin 解析出來時，重新撈取暫存器設定
+watch(currentCarVin, (newVin) => {
+  if (newVin) {
+    fetchRegisters();
   }
-}, { immediate: true });
+});
 
 onMounted(async () => {
   await loadCarConfig();
@@ -674,39 +661,7 @@ onMounted(async () => {
         setTemp.value = parseFloat((Number(reg.D40201) / 10).toFixed(1));
       }
 
-      const D40002 = reg.D40002 !== undefined ? Number(reg.D40002) : undefined;
-      if (D40002 !== undefined) {
-        if (compressors.value[0]) {
-          compressors.value[0].status = ((D40002 >> 4) & 1) === 1 ? CompressorStatus.ON : CompressorStatus.OFF;
-        }
-        if (compressors.value[1]) {
-          compressors.value[1].status = ((D40002 >> 5) & 1) === 1 ? CompressorStatus.ON : CompressorStatus.OFF;
-        }
-      }
-
-      // 壓縮機 1
-      const highP1 = reg.D40006 !== undefined ? reg.D40006 : undefined;
-      const lowP1 = reg.D40005 !== undefined ? reg.D40005 : undefined;
-      if (compressors.value[0]) {
-        if (highP1 !== undefined) {
-          compressors.value[0].highPress = Math.round(Number(highP1));
-        }
-        if (lowP1 !== undefined) {
-          compressors.value[0].lowPress = Math.round(Number(lowP1));
-        }
-      }
-
-      // 壓縮機 2
-      const highP2 = reg.D40008 !== undefined ? reg.D40008 : undefined;
-      const lowP2 = reg.D40007 !== undefined ? reg.D40007 : undefined;
-      if (compressors.value[1]) {
-        if (highP2 !== undefined) {
-          compressors.value[1].highPress = Math.round(Number(highP2));
-        }
-        if (lowP2 !== undefined) {
-          compressors.value[1].lowPress = Math.round(Number(lowP2));
-        }
-      }
+      updateCompressorStatus({ compressors: compressors.value }, reg);
       if (reg.D40212 !== undefined) freshAirDamperPos.value = Number(reg.D40212);
       if (reg.D40213 !== undefined) emergAirDamper.value = Number(reg.D40213);
 
@@ -740,7 +695,7 @@ onUnmounted(() => {
   <div class="w-full pb-24 sm:pb-8 min-h-screen">
     <!-- 導航麵包屑 -->
     <div class="w-full mb-6">
-      <Breadcrumb :title="`${carInfo.name} - ${epName} 狀態`" :items="breadcrumbItems" />
+      <Breadcrumb :title="`${carInfo.name} - ${endPos.name} 狀態`" :items="breadcrumbItems" />
     </div>
 
     <div class="w-full px-4 max-w-[1600px] mx-auto space-y-6">
@@ -752,7 +707,7 @@ onUnmounted(() => {
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center gap-3">
                 <h1 class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight whitespace-nowrap m-0">
-                  {{ carNo }}車廂-{{ epName }}
+                  {{ carNo }}車廂-{{ endPos.name }}
                 </h1>
                 
                 <BaseButton 

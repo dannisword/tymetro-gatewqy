@@ -74,8 +74,8 @@ const colorMap = computed<Record<string, string>>(() => {
 
 // ─── 載入歷史資料 ─────────────────────────────────────────────────────────────
 const loadHistory = async () => {
-  if (!props.register || !props.register.id) {
-    console.warn('[RegisterTrendModal] register or register.id is null/undefined');
+  if (!props.register || !props.register.sensorCode) {
+    console.warn('[RegisterTrendModal] register or register.sensorCode is null/undefined');
     return;
   }
 
@@ -89,10 +89,13 @@ const loadHistory = async () => {
   const start = new Date(now.getTime() - opt.hours * 3600 * 1000);
 
   try {
-    const res = await getRegisterTrend(props.register.id, {
-      startTime: start.toISOString(),
-      endTime:   now.toISOString(),
-      limit:     2000,
+    const res = await getRegisterTrend({
+      sensorCode: props.register.sensorCode,
+      carVin:     String(props.carNo),
+      endPos:     props.endPos,
+      startTime:  start.toISOString(),
+      endTime:    now.toISOString(),
+      limit:      10000,
     });
 
     if (res && res.success && res.data && Array.isArray(res.data.points) && res.data.points.length > 0) {

@@ -77,8 +77,26 @@ export const getModbusRecords = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/sensor-histories', params)
 }
 
-export const getRegisterTrend = async (registerId: number, params?: any): Promise<any> => {
-    return await httpOperations.get(`/api/v1/sensors/trend/${registerId}`, params)
+export const getRegisterTrend = async (params: {
+    sensorCode: string;
+    carVin: string;
+    endPos?: number;
+    startTime?: string;
+    endTime?: string;
+    limit?: number;
+}): Promise<any> => {
+    const queryParams: any = {
+        sensorCode: params.sensorCode,
+        carVin: params.carVin,
+        endPos: params.endPos,
+        startTime: params.startTime,
+        endTime: params.endTime,
+        limit: params.limit,
+    }
+    if (params.endPos !== undefined) {
+        queryParams.end_pos = params.endPos
+    }
+    return await httpOperations.get('/api/v1/sensor-histories/trend', queryParams)
 }
 
 export const writeInitialValuesToPlc = async (): Promise<any> => {

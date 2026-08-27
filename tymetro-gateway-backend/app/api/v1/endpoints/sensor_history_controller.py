@@ -1,9 +1,59 @@
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, status, Depends
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+from sqlalchemy.orm import Session
+from app.database.session import get_db
+from app.api.deps import get_current_user
+from app.models.user_model import User
+from app.schemas.response_schema import ResponseBase
 from app.repositories.sensor_history_repository import sensor_history_repo
 from app.utils.response_util import ResponseUtil
 
 router = APIRouter()
+
+@router.get("/trend", response_model=ResponseBase, summary="查詢感測器歷史趨勢數據 (Trend)")
+def get_sensor_trend(
+    sensor_code: str = Query(..., alias="sensorCode", description="感測器代碼 (如 D40001)"),
+    carVin: str = Query(..., description="車廂唯一代碼 (如 1101)"),
+    endPos: Optional[int] = Query(None, description="端點位置 (1端或2端)"),
+    startTime: Optional[datetime] = Query(None, description="開始時間"),
+    endTime: Optional[datetime] = Query(None, description="結束時間"),
+    limit: int = Query(2000, description="限制筆數"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models.sensor_history_model import SensorHistory
+
+    # 1. 查詢歷史數據
+    query = db.query(SensorHistory).filter(
+        SensorHistory.sensorCode == sensor_code,
+        SensorHistory.carVin == carVin
+    )
+    if endPos is not None:
+        query = query.filter(SensorHistory.endPos == endPos)
+
+    if startTime:
+        query = query.filter(SensorHistory.recordedAt >= startTime)
+    if endTime:
+        query = query.filter(SensorHistory.recordedAt <= endTime)
+
+    # 取最新的 limit 筆，所以照 recordedAt.desc() 取，之後再反轉
+    records = query.order_by(SensorHistory.recordedAt.desc()).limit(limit).all()
+    records = list(reversed(records))
+
+    result = {
+        "sensor_code": sensor_code,
+        "car_vin": carVin,
+        "end_pos": endPos,
+        "points": [
+            {
+                "timestamp": r.recordedAt.isoformat() + "Z" if r.recordedAt else None,
+                "value": r.sensorValue
+            } for r in records
+        ]
+    }
+    return ResponseUtil.success(data=result)
+
 
 @router.get("", summary="查詢感測器歷史數據 (支援條件篩選與分頁)")
 def get_sensor_histories(

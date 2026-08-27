@@ -37,22 +37,11 @@ const handleError = (e: any): ErrorResponse | void => {
 const httpOperations = {
   async get<T = any>(url: string, params: any = undefined, config?: AxiosRequestConfig): Promise<T> {
     const finalUrl = encodeURI(url);
-    let finalParams = params;
-
-    if (!isEmptyOrNull(params)) {
-      finalParams = Object.fromEntries(
-        Object.entries(params).map(([key, value]) => [
-          key,
-          typeof value === "string" ? encodeURIComponent(value) : value,
-        ])
-      );
-    }
-
     try {
       const response = await request({
         url: finalUrl,
         method: "GET",
-        params: finalParams,
+        params,
         ...config,
       });
       return response as T;

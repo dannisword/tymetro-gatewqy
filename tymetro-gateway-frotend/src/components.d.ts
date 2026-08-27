@@ -63,7 +63,4 @@ declare module 'vue' {
     TreeItem: typeof import('./components/TreeItem.vue')['default']
     TreeList: typeof import('./components/TreeList.vue')['default']
   }
-  export interface GlobalDirectives {
-    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
-  }
 }
