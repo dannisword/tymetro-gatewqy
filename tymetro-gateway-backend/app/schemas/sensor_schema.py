@@ -42,6 +42,8 @@ class SensorUpdate(BaseModel):
 
 class SensorResponse(SensorBase, AuditBase):
     id: int
+    carVin: Optional[str] = Field(None, description="車廂唯一識別碼")
+    endPos: Optional[int] = Field(None, description="端點位置 (1端或2端)")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

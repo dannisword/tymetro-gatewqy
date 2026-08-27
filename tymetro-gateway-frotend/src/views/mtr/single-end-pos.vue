@@ -313,6 +313,23 @@ const loadCarConfig = async () => {
   }
 };
 
+const carsList = ref<any[]>([]);
+const currentCarVin = computed(() => {
+  const matched = carsList.value.find(c => c.carNo === carNo.value);
+  return matched ? matched.carVin : '';
+});
+
+const fetchCars = async () => {
+  try {
+    const res = await httpOperations.get('/api/v1/cars', { pageSize: 100 });
+    if (res && res.success) {
+      carsList.value = res.data?.source || [];
+    }
+  } catch (err) {
+    console.error('Failed to fetch cars:', err);
+  }
+};
+
 // API 載入數據
 const fetchInitialSensors = async () => {
   try {
@@ -356,10 +373,15 @@ const fetchInitialSensors = async () => {
 
 const fetchRegisters = async () => {
   try {
-    const params = {
-      registerGroup: 'realtime'
+    const params: Record<string, any> = {
+      sensorType: 'REAL_TIME',
+      endPos: String(endPosId.value),
+      pageSize: 1000
     };
-    const res = await httpOperations.get('/api/v1/sensors/by-group', params, { meta: { loading: false } });
+    if (currentCarVin.value) {
+      params.carVin = currentCarVin.value;
+    }
+    const res = await httpOperations.get('/api/v1/sensors', params, { meta: { loading: false } });
     if (res && res.success) {
       const list = (Array.isArray(res.data) ? res.data : (res.data?.source || [])) as SensorData[];
       list.sort((a, b) => (a.address || 0) - (b.address || 0));
@@ -596,6 +618,7 @@ watch([rawCarOptions, trainNo, carType], () => {
 
 onMounted(async () => {
   await loadCarConfig();
+  await fetchCars();
   await fetchInitialSensors();
   fetchMapConfig();
   fetchRegisters();

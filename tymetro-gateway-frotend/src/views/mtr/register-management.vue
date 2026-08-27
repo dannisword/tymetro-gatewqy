@@ -10,7 +10,8 @@ import {
   mdiViewGridOutline,
   mdiDownload,
   mdiUpload,
-  mdiCog
+  mdiCog,
+  mdiCloudDownload
 } from '@mdi/js';
 import * as XLSX from 'xlsx';
 
@@ -21,13 +22,7 @@ import { useMtrStore } from '@/store/useMtrStore';
 
 const mtrStore = useMtrStore();
 
-const registerGroupMap = computed(() => {
-  const map: Record<string, string> = {};
-  mtrStore.registerGroups.forEach(g => {
-    map[g.value] = g.label;
-  });
-  return map;
-});
+const sensorTypeMap = ref<Record<string, string>>({});
 
 import {
   getModbusRegisters,
@@ -36,7 +31,9 @@ import {
   deleteModbusRegister,
   getConfigsByType,
   writeInitialValuesToPlc,
-  writeSettingValuesToPlc
+  writeSettingValuesToPlc,
+  downloadVehicleMetadata,
+  getEnums
 } from '@/utils/api';
 
 const { TLSuccess, TLError } = useAlert();
@@ -63,33 +60,18 @@ const pagination = ref({
 
 const gridColumns = ref([
   { headerName: '暫存器名稱', field: 'name', flex: 1.2, minWidth: 150 },
+  { headerName: '車輛代碼', field: 'carVin', flex: 1.2, minWidth: 150 },
+  { headerName: '設備位置', field: 'endPos', flex: 1.2, minWidth: 150 },
   { headerName: '描述', field: 'description', flex: 1.5, minWidth: 200},
   {
     headerName: '暫存器分組',
-    field: 'registerGroup',
+    field: 'sensorType',
     flex: 1.0,
     cellRenderer: (p: any) => {
-      return registerGroupMap.value[p.value] || p.value || '';
+      return sensorTypeMap.value[p.value] || p.value || '';
     },
     minWidth: 120
   },
-  // { headerName: '暫存器位址', field: 'address', minWidth: 130, maxWidth: 130, },
-  // {
-  //   headerName: '暫存器類型',
-  //   field: 'registerType',
-  //   cellRenderer: (p: any) => {
-  //     const typeMap: Record<string, string> = {
-  //       holding_register: 'Holding',
-  //       input_register: 'Input',
-  //       coil: 'Coil',
-  //       discrete_input: 'Discrete',
-  //     };
-  //     return typeMap[p.value] || p.value || '';
-  //   },
-  //   minWidth: 130
-  // },
-  // { headerName: '資料型別', field: 'dataType', flex: 0.6, minWidth: 130 },
-  // { headerName: '縮放比例', field: 'scale', flex: 0.5, minWidth: 130 },
   { headerName: '最新讀取值', field: 'value', flex: 1.0, minWidth: 120 },
   { headerName: '單位', field: 'unit', flex: 0.8, minWidth: 100 },
   {
@@ -104,14 +86,13 @@ const gridColumns = ref([
     },
     minWidth: 110
   },
-
   {
     headerName: '操作',
+    maxWidth: 80,
     field: 'actions',
     cellRenderer: 'AGActionButtonRenderer',
     actionButtons: [
       { label: '編輯', event: 'edit', icon: 'mdiPencil', iconOnly: true },
-      { label: '刪除', event: 'delete', icon: 'mdiDelete', iconOnly: true }
     ]
   }
 ]);
@@ -150,7 +131,9 @@ const total = ref(0);
 const loading = ref(false);
 
 // Filters
-const filterRegisterGroup = ref('');
+const filterSensorType = ref('');
+const filterCarVin = ref('');
+const sensorTypeOptions = ref<{ value: string; label: string }[]>([]);
 
 const deviceOptions = ref<{ value: string; label: string }[]>([]);
 
@@ -205,8 +188,11 @@ const fetchRegisters = async () => {
       propertyName: 'sensorCode',
       order: 'ASC'
     };
-    if (filterRegisterGroup.value) {
-      params.registerGroup = filterRegisterGroup.value;
+    if (filterSensorType.value) {
+      params.sensorType = filterSensorType.value;
+    }
+    if (filterCarVin.value) {
+      params.carVin = filterCarVin.value;
     }
 
     const res = await getModbusRegisters(params);
@@ -235,6 +221,16 @@ onMounted(async () => {
   await mtrStore.loadConfig();
   await fetchDevices();
   await fetchRegisters();
+  // 從後端取得列舉選項
+  const enumsRes = await getEnums();
+  if (enumsRes?.success && enumsRes.data?.sensorType) {
+    sensorTypeOptions.value = enumsRes.data.sensorType;
+    const map: Record<string, string> = {};
+    enumsRes.data.sensorType.forEach((item: { value: string; label: string }) => {
+      map[item.value] = item.label;
+    });
+    sensorTypeMap.value = map;
+  }
 });
 
 const handleSearch = () => {
@@ -243,7 +239,8 @@ const handleSearch = () => {
 };
 
 const handleReset = () => {
-  filterRegisterGroup.value = '';
+  filterSensorType.value = '';
+  filterCarVin.value = '';
   pagination.value.number = 0;
   fetchRegisters();
 };
@@ -266,24 +263,6 @@ const formIsActive = ref(true);
 const formRegisterGroup = ref('realtime');
 const formValue = ref('');
 
-
-const openCreateModal = () => {
-  isEdit.value = false;
-  modalTitle.value = '新增暫存器設定';
-  formId.value = null;
-  formDeviceCode.value = allDeviceOptions.value.length > 0 ? allDeviceOptions.value[0].value : 'plc-data-1';
-  formAddress.value = 0;
-  formName.value = '';
-  formRegisterType.value = 'holding_register';
-  formDataType.value = 'int16';
-  formScale.value = 1.0;
-  formUnit.value = '';
-  formDescription.value = '';
-  formIsActive.value = true;
-  formRegisterGroup.value = 'realtime';
-  formValue.value = '';
-  showModal.value = true;
-};
 
 const openEditModal = (item: RegisterItem) => {
   isEdit.value = true;
@@ -399,8 +378,11 @@ const handleExport = async () => {
       propertyName: 'id',
       order: 'ASC'
     };
-    if (filterRegisterGroup.value) {
-      params.registerGroup = filterRegisterGroup.value;
+    if (filterSensorType.value) {
+      params.sensorType = filterSensorType.value;
+    }
+    if (filterCarVin.value) {
+      params.carVin = filterCarVin.value;
     }
 
     const res = await getModbusRegisters(params);
@@ -421,7 +403,7 @@ const handleExport = async () => {
     const dataRows = list.map((item: any) => ({
       '暫存器名稱 (sensorCode)': item.sensorCode,
       '描述 (sensorName)': item.sensorName || '',
-      '暫存器分組': registerGroupMap.value[item.registerGroup] || item.registerGroup || '',
+      '暫存器分組': sensorTypeMap.value[item.sensorType] || item.sensorType || '',
       '暫存器位址': item.address,
       '暫存器類型': typeMap[item.registerType] || item.registerType || '',
       '資料型別': dataTypeMap[item.dataType] || item.dataType || '',
@@ -492,6 +474,48 @@ const handleWriteSettingValues = async () => {
     loading.value = false;
   }
 };
+
+// ─── Download Metadata Dialog ─────────────────────────────────────────────────
+const showDownloadDialog = ref(false);
+const downloadTrainCode = ref('');
+
+const openDownloadDialog = () => {
+  downloadTrainCode.value = '';
+  showDownloadDialog.value = true;
+};
+
+const handleDownloadMetadata = async (dialogRef: any) => {
+  if (dialogRef.close == true || dialogRef.success == false) {
+    showDownloadDialog.value = false;
+    dialogRef.close = false;
+    dialogRef.success = false;
+    return;
+  }
+
+  const trainCode = downloadTrainCode.value.trim();
+  if (!trainCode) {
+    TLError('請輸入車組編號');
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const res = await downloadVehicleMetadata(trainCode);
+    if (res && res.success) {
+      TLSuccess(res.message || `成功下載車組 [${trainCode}] 的 Metadata`);
+      showDownloadDialog.value = false;
+      dialogRef.success = false;
+      fetchRegisters();
+    } else {
+      TLError(res?.message || '下載失敗，請稍後重試');
+    }
+  } catch (error: any) {
+    console.error('Download metadata error:', error);
+    TLError(error.response?.data?.message || '下載失敗，請稍後重試');
+  } finally {
+    loading.value = false;
+  }
+};
 </script>
 
 <template>
@@ -519,15 +543,29 @@ const handleWriteSettingValues = async () => {
           <!-- 搜尋與按鈕 -->
           <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-end">
             <div class="flex items-center gap-2">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">車輛代碼</label>
+              <div class="relative w-45">
+                <input 
+                  v-model="filterCarVin"
+                  type="text"
+                  placeholder="輸入車代碼 (如 AC-105-1)"
+                  class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all text-sm"
+                  @keyup.enter="handleSearch"
+                  @change="handleSearch"
+                />
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
               <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">暫存器分組</label>
               <div class="relative w-40">
                 <select 
-                  v-model="filterRegisterGroup"
+                  v-model="filterSensorType"
                   class="w-full px-3 py-1.5 pl-8 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none"
                   @change="handleSearch"
                 >
                   <option value="">全部群組</option>
-                  <option v-for="g in mtrStore.registerGroups" :key="g.value" :value="g.value">
+                  <option v-for="g in sensorTypeOptions" :key="g.value" :value="g.value">
                     {{ g.label }}
                   </option>
                 </select>
@@ -564,11 +602,11 @@ const handleWriteSettingValues = async () => {
               寫入 PLC 設定值
             </BaseButton> -->
             <BaseButton 
-              @click="openCreateModal"
-              colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-sm px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiPlus"
+              @click="openDownloadDialog"
+              colorClass="bg-teal-600 text-white hover:bg-teal-700 shadow-sm px-4 py-1.5 rounded-lg text-sm"
+              :icon="mdiCloudDownload"
             >
-              新增暫存器
+              下載 Metadata
             </BaseButton>
           </div>
         </div>
@@ -737,6 +775,34 @@ const handleWriteSettingValues = async () => {
               啟用此暫存器監控 (若不啟用，系統排程將不會讀取此暫存器值)
             </label>
           </div>
+        </div>
+      </div>
+    </ElDialogCustom>
+
+    <!-- 下載 Metadata 彈窗 -->
+    <ElDialogCustom
+      title="下載車組 Metadata"
+      :visible="showDownloadDialog"
+      width="420px"
+      cancel="取消"
+      action="確定下載"
+      @on-before-close="handleDownloadMetadata"
+    >
+      <div class="p-2 space-y-4">
+        <p class="text-sm text-slate-500">
+          請輸入車組編號，系統將從中心端下載並同步該車組的車廂、設備與感測器資料至本機。
+        </p>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-sm font-bold text-slate-600">
+            車組編號 <span class="text-red-500">*</span>
+          </label>
+          <input
+            v-model="downloadTrainCode"
+            type="text"
+            placeholder="例如: 101"
+            class="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-medium focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 outline-none transition-all"
+            @keyup.enter="() => {}"
+          />
         </div>
       </div>
     </ElDialogCustom>

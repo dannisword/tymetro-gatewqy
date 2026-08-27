@@ -5,6 +5,11 @@ export const getConfigsByType = async (type: string): Promise<any> => {
     return await httpOperations.get(url)
 }
 
+export const getEnums = async (): Promise<any> => {
+    const url = `/api/v1/configs/enums`
+    return await httpOperations.get(url)
+}
+
 export const updateConfig = async (configId: number, config: any): Promise<any> => {
     const url = `/api/v1/configs/${configId}`
     return await httpOperations.put(url, config)
