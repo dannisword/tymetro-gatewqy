@@ -127,7 +127,7 @@ class DbConfigRepository:
                     synchronize_session=False
                 )
             db.commit()
-            logger.info(f"[DbConfigRepository] Flushed {len(to_update)} sensor values to SQLite successfully.")
+            logger.debug(f"[DbConfigRepository] Flushed {len(to_update)} sensor values to SQLite successfully.")
         except Exception as e:
             db.rollback()
             logger.error(f"Error flushing sensor values to SQLite: {e}")

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from datetime import datetime, date
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.database.session import get_db
@@ -10,6 +11,12 @@ from app.models.user_model import User
 from app.api.deps import get_config_service, get_current_user
 from app.services.config_service import ConfigService
 from app.schemas.config_schema import ConfigCreate, ConfigUpdate, ConfigResponse
+
+from app.models.car_model import Car
+from app.models.equipment_model import Equipment
+from app.models.sensor_model import Sensor
+from app.core.config import settings
+from app.utils.http_util import HttpUtil
 
 from app.database.init_db import sync_yaml_to_db
 from app.core.config_yaml import reload_gateway_yaml_config
@@ -137,13 +144,6 @@ def upsert_config(
         return ResponseUtil.error(message=str(e))
 
 
-from datetime import datetime, date
-from app.models.car_model import Car
-from app.models.equipment_model import Equipment
-from app.models.sensor_model import Sensor
-from app.core.config import settings
-from app.utils.http_util import HttpUtil
-
 @router.post("/download-metadata", response_model=ResponseBase, summary="從中心端下載並同步車廂、設備與感測器資料")
 def download_metadata(
     trainCode: Optional[str] = Query(None, description="車組編號"),
@@ -180,7 +180,8 @@ def download_metadata(
 
     # 2. 取得設備資料
     eq_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/equipments"
-    eq_resp = HttpUtil.get(eq_url, params={"pageSize": 1000}, headers=headers)
+    eq_params = {"pageSize": 1000, "trainCode": trainCode} if trainCode else {"pageSize": 1000}
+    eq_resp = HttpUtil.get(eq_url, params=eq_params, headers=headers)
     if not eq_resp.get("success"):
         return ResponseUtil.error(f"下載設備資料失敗: {eq_resp.get('message')}")
     eq_data = eq_resp.get("data") or {}
@@ -188,7 +189,8 @@ def download_metadata(
 
     # 3. 取得感測器資料
     sensors_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensors"
-    sensors_resp = HttpUtil.get(sensors_url, params={"pageSize": 10000}, headers=headers)
+    sensors_params = {"pageSize": 10000, "trainCode": trainCode} if trainCode else {"pageSize": 10000}
+    sensors_resp = HttpUtil.get(sensors_url, params=sensors_params, headers=headers)
     if not sensors_resp.get("success"):
         return ResponseUtil.error(f"下載感測器資料失敗: {sensors_resp.get('message')}")
     sensors_data = sensors_resp.get("data") or {}
@@ -218,18 +220,13 @@ def download_metadata(
             return None
 
     try:
-        if trainCode:
-            # 找到資料庫中舊的該車組的所有車廂 ID，只刪除該車組之舊資料
-            old_car_ids = [car_id for (car_id,) in db.query(Car.id).filter(Car.trainCode == trainCode).all()]
-            if old_car_ids:
-                db.query(Sensor).filter(Sensor.carId.in_(old_car_ids)).delete(synchronize_session=False)
-                db.query(Equipment).filter(Equipment.carId.in_(old_car_ids)).delete(synchronize_session=False)
-            db.query(Car).filter(Car.trainCode == trainCode).delete(synchronize_session=False)
-        else:
-            # 清空所有舊資料 (依外鍵依賴反向刪除)
-            db.query(Sensor).delete()
-            db.query(Equipment).delete()
-            db.query(Car).delete()
+        # 永遠清空所有舊資料 (依外鍵依賴反向刪除)
+        db.query(Sensor).delete()
+        db.query(Equipment).delete()
+        db.query(Car).delete()
+        
+        # 先提交清除資料的變更，確保資料完全清空，避免 Unique 鍵衝突
+        db.commit()
 
         # 插入車廂
         for c in cars_list:

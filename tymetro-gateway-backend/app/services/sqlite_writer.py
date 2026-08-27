@@ -101,7 +101,7 @@ class SQLiteWriter:
 
             if items:
                 if h_success and o_success:
-                    logger.info(f"[SQLiteWriter] Executemany Success: Flushed {len(items)} telemetry records into SQLite.")
+                    logger.debug(f"[SQLiteWriter] Executemany Success: Flushed {len(items)} telemetry records into SQLite.")
                 else:
                     logger.error(f"[SQLiteWriter] Failed to write batch of {len(items)} items to SQLite.")
         except Exception as e:
