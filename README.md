@@ -46,8 +46,8 @@ sudo ./deploy.sh
 ## 🌐 服務存取位址
 
 部署完成後可透過瀏覽器與工具存取：
-- **前端 Web UI 監控網頁**：`http://<PFC200_IP>:8080`
-- **FastAPI Swagger API 文件**：`http://<PFC200_IP>:8080/docs`
+- **前端 Web UI 監控網頁**：`http://<PFC200_IP>:8000`
+- **FastAPI Swagger API 文件**：`http://<PFC200_IP>:8000/docs`
 - **MQTT Broker**：`tcp://<PFC200_IP>:1883`
 
 ---

@@ -44,7 +44,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # 3. HVAC Edge Gateway 前端靜態網頁與 Nginx 反向代理 (Port 8080)
+  # 3. HVAC Edge Gateway 前端靜態網頁與 Nginx 反向代理 (Port 8000)
   frontend:
     image: nginx:alpine
     container_name: tymetro-gateway-frontend
@@ -52,7 +52,7 @@ services:
     environment:
       - TZ=Asia/Taipei
     ports:
-      - "8080:8080"
+      - "8000:8080"
     volumes:
       - ./tymetro-gateway-frotend/dist:/usr/share/nginx/html
       - ./tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf

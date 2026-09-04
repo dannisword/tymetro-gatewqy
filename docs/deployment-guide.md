@@ -10,10 +10,10 @@
 - **Docker Data Root**：`/media/sd/docker-data` (將容器與 Image 移至 SD 卡，避免填滿 PFC200 內建 Flash)
 - **MQTT Broker**：`eclipse-mosquitto:2.0` 容器 (TCP Port `1883` & WebSocket Port `9001`)
 - **後端 API 與 Polling 服務**：FastAPI / Uvicorn 容器 (Port `5400`)
-- **前端 Web UI & Nginx 反向代理**：`nginx:alpine` 容器 (Port `8080`)
-  - `http://<PFC200_IP>:8080` ➔ Vue 3 SPA 網頁
-  - `http://<PFC200_IP>:8080/docs` ➔ Swagger API 文件
-  - `http://<PFC200_IP>:8080/api/...` ➔ RESTful API 轉發至 `backend:5400`
+- **前端 Web UI & Nginx 反向代理**：`nginx:alpine` 容器 (Port `8000`)
+  - `http://<PFC200_IP>:8000` ➔ Vue 3 SPA 網頁
+  - `http://<PFC200_IP>:8000/docs` ➔ Swagger API 文件
+  - `http://<PFC200_IP>:8000/api/...` ➔ RESTful API 轉發至 `backend:5400`
 - **前端免編譯機制**：電腦端執行 `npm run build` 後僅上傳 `dist/` 與 `nginx.conf`，無須在 PFC200 安裝 Node.js 或編譯。
 
 ---
@@ -130,8 +130,8 @@ network:
    # 方式 A: 直連後端 5400 Port (推薦本機指令)
    curl -X POST http://localhost:5400/api/v1/configs/reload
 
-   # 方式 B: 經由 Nginx 8080 Port (外部或網頁轉發)
-   curl -X POST http://localhost:8080/api/v1/config/reload
+   # 方式 B: 經由 Nginx 8000 Port (外部或網頁轉發)
+   curl -X POST http://localhost:8000/api/v1/config/reload
    ```
 
 ---
@@ -162,9 +162,9 @@ docker ps
 *應顯示 `tymetro-mosquitto`、`tymetro-gateway-backend` 與 `tymetro-gateway-frontend` 三個容器狀況為 `Up`。*
 
 ### 2. 測試網頁與 API 存取
-* **Web UI 介面**：`http://<PFC200_IP>:8080`
-* **Swagger API 文件**：`http://<PFC200_IP>:8080/docs`
-* **REST API 檢查**：`curl http://<PFC200_IP>:8080/api/v1/status`
+* **Web UI 介面**：`http://<PFC200_IP>:8000`
+* **Swagger API 文件**：`http://<PFC200_IP>:8000/docs`
+* **REST API 檢查**：`curl http://<PFC200_IP>:8000/api/v1/status`
 
 ### 3. 查看即時服務日誌
 ```bash

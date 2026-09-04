@@ -123,7 +123,7 @@ else
       --security-opt seccomp=unconfined \
       --network tymetro-net \
       --restart always \
-      -p 8080:8080 \
+      -p 8000:8080 \
       -v "${INSTALL_DIR}/tymetro-gateway-frotend/dist:/usr/share/nginx/html" \
       -v "${INSTALL_DIR}/tymetro-gateway-frotend/nginx.conf:/etc/nginx/conf.d/default.conf" \
       --log-driver local \
@@ -135,8 +135,8 @@ fi
 echo -e "${GREEN}=====================================================${NC}"
 echo -e "${GREEN} 🎉 HVAC Edge Gateway 服務部署啟動完成！${NC}"
 echo -e "${GREEN} 📁 部署路徑: ${INSTALL_DIR}${NC}"
-echo -e "${GREEN} 🌐 Web UI 主頁面: http://<PFC200_IP>:8080${NC}"
-echo -e "${GREEN} 🔌 REST API 文件: http://<PFC200_IP>:8080/docs${NC}"
+echo -e "${GREEN} 🌐 Web UI 主頁面: http://<PFC200_IP>:8000${NC}"
+echo -e "${GREEN} 🔌 REST API 文件: http://<PFC200_IP>:8000/docs${NC}"
 echo -e "${GREEN} 📡 MQTT Broker: tcp://<PFC200_IP>:1883 | ws://<PFC200_IP>:9001${NC}"
 echo -e "${GREEN} 🔍 容器狀態查詢: docker ps${NC}"
 echo -e "${GREEN} 📜 即時日誌監看: docker compose logs -f${NC}"
