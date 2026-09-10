@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =================================================================
 # HVAC Edge Gateway - 階段 3：Docker 一鍵部署與服務啟動腳本 (PFC200)
-# 說明: 於 FTP 上傳檔案後執行，負責構建並啟動所有 Docker 容器
+# 說明: 負責喚醒 Docker 守護程序、構建並啟動所有 Docker 容器
 # =================================================================
 set -e
 
@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 INSTALL_DIR="${INSTALL_DIR:-/media/sd/tymetro-gateway}"
 
 echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN} 🚀 [階段 3] 開始構建與啟動 Docker 服務容器${NC}"
+echo -e "${GREEN} 🚀 [階段 3] 開始檢查與啟動 Docker 服務容器${NC}"
 echo -e "${GREEN} 📁 專案目錄: ${INSTALL_DIR}${NC}"
 echo -e "${GREEN}=====================================================${NC}"
 
@@ -32,7 +32,42 @@ else
     exit 1
 fi
 
-# 3. 確保必備檔案與目錄結構存在並開放權限
+# 3. 確保 Docker Daemon (dockerd) 正常運行 (防護開機後或異常退出導致第一次執行失敗)
+echo -e "${YELLOW}檢查 Docker 守護進程 (dockerd) 運作狀態...${NC}"
+if ! docker info &> /dev/null; then
+    echo -e "${YELLOW}Docker 守護進程尚未運行，正在自動喚醒 dockerd...${NC}"
+    pkill -9 dockerd 2>/dev/null || true
+    rm -f /var/run/docker.pid /var/run/docker.sock 2>/dev/null || true
+    sleep 1
+    
+    if [ -f /etc/init.d/dockerd ]; then
+        /etc/init.d/dockerd restart 2>/dev/null || true
+    elif [ -f /etc/init.d/docker ]; then
+        /etc/init.d/docker restart 2>/dev/null || true
+    elif command -v systemctl &> /dev/null; then
+        systemctl restart docker 2>/dev/null || true
+    else
+        /usr/bin/dockerd > /dev/null 2>&1 &
+    fi
+
+    # 輪詢等待 socket 建立 (最多等待 30 秒)
+    WAIT_SEC=0
+    while [ ! -S /var/run/docker.sock ] && [ $WAIT_SEC -lt 30 ]; do
+        sleep 1
+        WAIT_SEC=$((WAIT_SEC + 1))
+    done
+
+    if ! docker info &> /dev/null; then
+        echo -e "${RED}錯誤: Docker 守護進程啟動超時或失敗！${NC}"
+        echo -e "${YELLOW}請確認 WBM 控制器介面中 Docker 是否勾選啟用，或手動執行 /usr/bin/dockerd 檢查錯誤。${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Docker 守護進程已成功啟動就緒！${NC}"
+else
+    echo -e "${GREEN}✓ Docker 守護進程運作正常${NC}"
+fi
+
+# 4. 確保必備檔案與目錄結構存在並開放權限
 mkdir -p "${INSTALL_DIR}/tymetro-gateway-backend/app/logs"
 mkdir -p "${INSTALL_DIR}/mosquitto-data"
 touch "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db" 2>/dev/null || true
@@ -46,7 +81,6 @@ if [ -f "${INSTALL_DIR}/mosquitto-data/mosquitto.db" ]; then
 fi
 
 # 處理異常斷電導致的 Docker JSON 日誌損毀 (Error grabbing logs: invalid character '\x00')
-# 自動尋找 Docker 資料目錄下的所有 json.log 檔案並清空，排除日誌讀取錯誤
 DOCKER_DATA_DIR="/media/sd/docker-data"
 if [ -d "${DOCKER_DATA_DIR}/containers" ]; then
     echo -e "${YELLOW}正在清理因斷電可能損毀的 Docker 容器日誌檔 (*-json.log)...${NC}"
@@ -69,7 +103,7 @@ fi
 
 chmod -R 777 "${INSTALL_DIR}" 2>/dev/null || true
 
-# 4. 檢測 Docker Compose 指令
+# 5. 檢測 Docker Compose 指令
 echo -e "${YELLOW}檢測 Docker Compose 命令...${NC}"
 DOCKER_COMPOSE_CMD=""
 
@@ -79,18 +113,35 @@ elif command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE_CMD="docker-compose"
 fi
 
-# 5. 構建並啟動 Docker 服務容器
-echo -e "${YELLOW}清除舊有重名容器衝突並構建啟動 Docker 容器 (Mosquitto + Backend API + Frontend Nginx)...${NC}"
+# 判斷是否需要進行映像檔構建 (--build)
+# 1. 使用者帶入 --build 或 -b 參數時強制構建
+# 2. 本地尚無 tymetro-gateway-backend 映像檔時自動構建（初次部署）
+# 3. 若映像檔已存在且未帶參數，則直接以已構建映像檔快速拉起（避免離線環境因連不上 Docker Hub 報錯閃退）
+BUILD_OPT=""
+if [ "$1" = "--build" ] || [ "$1" = "-b" ]; then
+    echo -e "${YELLOW}偵測到指定 --build 參數，將重新構建後端映像檔...${NC}"
+    BUILD_OPT="--build"
+elif ! docker image inspect tymetro-gateway-backend &> /dev/null; then
+    echo -e "${YELLOW}未檢測到本機後端映像檔，將進行初次構建...${NC}"
+    BUILD_OPT="--build"
+else
+    echo -e "${GREEN}✓ 檢測到已存在的後端映像檔，跳過重新構建以實現秒級啟動 (若需重新構建請執行 ./deploy.sh --build)${NC}"
+fi
+
+# 6. 清除舊容器衝突並啟動服務
+echo -e "${YELLOW}清除舊有重名容器衝突並啟動 Docker 服務 (Mosquitto + Backend API + Frontend Nginx)...${NC}"
 docker rm -f tymetro-mosquitto tymetro-gateway-backend tymetro-gateway-frontend 2>/dev/null || true
 
 if [ -n "${DOCKER_COMPOSE_CMD}" ]; then
-    ${DOCKER_COMPOSE_CMD} up -d --build
+    ${DOCKER_COMPOSE_CMD} up -d ${BUILD_OPT}
 else
     echo -e "${YELLOW}提示: 未找到 docker-compose，使用標準 docker 命令建置與啟動...${NC}"
-    docker build -t tymetro-gateway-backend ./tymetro-gateway-backend
+    if [ -n "${BUILD_OPT}" ]; then
+        docker build -t tymetro-gateway-backend ./tymetro-gateway-backend
+    fi
     docker network create tymetro-net 2>/dev/null || true
     
-    echo -e "${YELLOW}拉取並啟動 Mosquitto 容器...${NC}"
+    echo -e "${YELLOW}啟動 Mosquitto 容器...${NC}"
     docker rm -f tymetro-mosquitto 2>/dev/null || true
     docker run -d --name tymetro-mosquitto \
       --security-opt seccomp=unconfined \
@@ -117,7 +168,7 @@ else
       --log-opt max-file=3 \
       tymetro-gateway-backend
 
-    echo -e "${YELLOW}拉取並啟動 Frontend Nginx 容器...${NC}"
+    echo -e "${YELLOW}啟動 Frontend Nginx 容器...${NC}"
     docker rm -f tymetro-gateway-frontend 2>/dev/null || true
     docker run -d --name tymetro-gateway-frontend \
       --security-opt seccomp=unconfined \

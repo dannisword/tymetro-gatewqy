@@ -4,7 +4,8 @@
 # 說明: 
 # 1. 建立 SD 卡目標目錄結構與內部子目錄
 # 2. 將 Docker 儲存路徑 (data-root) 轉移至 SD 卡 (防止 Flash 爆滿)
-# 3. 檢查並下載 Docker Compose 至 SD 卡 / 系統路徑
+# 3. 檢查並下載 Docker Compose 至系統路徑
+# 4. 配置 PFC200 開機自動等待 SD 卡並啟動服務 (S99autostart-gateway)
 # =================================================================
 set -e
 
@@ -18,7 +19,7 @@ DOCKER_DATA_ROOT="${DOCKER_DATA_ROOT:-/media/sd/docker-data}"
 SD_BIN_DIR="/media/sd/bin"
 
 echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN} 🛠️ [階段 1] 建立部署目錄、搬移 Docker 至 SD 卡與環境預備${NC}"
+echo -e "${GREEN} 🛠️ [階段 1] 建立部署目錄、搬移 Docker 至 SD 卡與開機防護配置${NC}"
 echo -e "${GREEN} 📁 部署目標目錄: ${INSTALL_DIR}${NC}"
 echo -e "${GREEN} 💾 Docker 儲存路徑: ${DOCKER_DATA_ROOT}${NC}"
 echo -e "${GREEN}=====================================================${NC}"
@@ -89,22 +90,43 @@ fi
 if [ "${DOCKER_RESTART_NEEDED}" = "1" ]; then
     echo -e "${YELLOW}重新啟動 Docker 引擎套用 SD 卡儲存路徑...${NC}"
     if command -v systemctl &> /dev/null; then
-        systemctl restart docker 2>/dev/null || true
+        systemctl restart docker 2>/dev/null || systemctl restart dockerd 2>/dev/null || true
+    elif [ -f /etc/init.d/dockerd ]; then
+        /etc/init.d/dockerd restart 2>/dev/null || true
     elif [ -f /etc/init.d/docker ]; then
         /etc/init.d/docker restart 2>/dev/null || true
+    else
+        pkill -9 dockerd 2>/dev/null || true
+        rm -f /var/run/docker.pid /var/run/docker.sock 2>/dev/null || true
+        sleep 1
+        /usr/bin/dockerd > /dev/null 2>&1 &
     fi
 else
     if command -v systemctl &> /dev/null; then
         systemctl enable docker 2>/dev/null || true
         systemctl start docker 2>/dev/null || true
+    elif [ -f /etc/init.d/dockerd ]; then
+        /etc/init.d/dockerd start 2>/dev/null || true
     elif [ -f /etc/init.d/docker ]; then
         /etc/init.d/docker start 2>/dev/null || true
+    else
+        if ! pgrep dockerd &> /dev/null; then
+            /usr/bin/dockerd > /dev/null 2>&1 &
+        fi
     fi
 fi
+
+# 等待 Docker UNIX Socket 建立就緒
+WAIT_SEC=0
+while [ ! -S /var/run/docker.sock ] && [ $WAIT_SEC -lt 15 ]; do
+    sleep 1
+    WAIT_SEC=$((WAIT_SEC + 1))
+done
+
 echo -e "${GREEN}✓ Docker 引擎運作正常 (Storage Root: ${DOCKER_DATA_ROOT})${NC}"
 
 # 4. 檢查與自動下載 Docker Compose 至系統路徑
-echo -e "${YELLOW}[3/3] 檢測/安裝 Docker Compose...${NC}"
+echo -e "${YELLOW}[3/4] 檢測/安裝 Docker Compose...${NC}"
 if docker compose version &> /dev/null; then
     echo -e "${GREEN}✓ 檢測到 Docker Compose (Plugin 模式)${NC}"
 elif command -v docker-compose &> /dev/null; then
@@ -133,8 +155,70 @@ else
     fi
 fi
 
+# 5. 配置 PFC200 開機自動等待 SD 卡與啟動服務 (S99autostart-gateway，開機直接呼叫 deploy.sh)
+echo -e "${YELLOW}[4/4] 配置開機自動啟動守護服務 (等待 SD 卡掛載並呼叫 deploy.sh)...${NC}"
+
+cat << 'EOF' > /etc/init.d/autostart-gateway
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          autostart-gateway
+# Required-Start:    $all
+# Short-Description: Autostart Tymetro Gateway after SD mount
+### END INIT INFO
+
+case "$1" in
+    start)
+        echo "Starting Tymetro Gateway Autostart..."
+        (
+            INSTALL_DIR="/media/sd/tymetro-gateway"
+            LOG_FILE="${INSTALL_DIR}/autostart.log"
+            
+            # 1. 輪詢等待 SD 卡完全掛載 (最多等待 60 秒)
+            MAX_RETRY=60
+            RETRY=0
+            while [ ! -f "${INSTALL_DIR}/deploy.sh" ] && [ $RETRY -lt $MAX_RETRY ]; do
+                sleep 1
+                RETRY=$((RETRY + 1))
+            done
+
+            # 2. 等待 3 秒確保檔案系統穩定
+            sleep 3
+
+            # 3. 直接呼叫 deploy.sh 執行 Docker 喚醒與容器啟動
+            if [ -f "${INSTALL_DIR}/deploy.sh" ]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] 偵測到 SD 卡就緒，開機呼叫 deploy.sh 啟動服務..." >> "${LOG_FILE}"
+                chmod +x "${INSTALL_DIR}/deploy.sh" 2>/dev/null || true
+                "${INSTALL_DIR}/deploy.sh" >> "${LOG_FILE}" 2>&1
+            fi
+        ) &
+        ;;
+    stop)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac
+exit 0
+EOF
+
+chmod +x /etc/init.d/autostart-gateway
+mkdir -p /etc/rc.d /etc/rc3.d /etc/rc5.d 2>/dev/null || true
+ln -sf /etc/init.d/autostart-gateway /etc/rc.d/S99autostart-gateway 2>/dev/null || true
+ln -sf /etc/init.d/autostart-gateway /etc/rc3.d/S99autostart-gateway 2>/dev/null || true
+ln -sf /etc/init.d/autostart-gateway /etc/rc5.d/S99autostart-gateway 2>/dev/null || true
+
+# 備援寫入 /etc/rc.local (若系統支援 rc.local)
+if [ -f /etc/rc.local ]; then
+    if ! grep -q "tymetro-gateway/deploy.sh" /etc/rc.local; then
+        echo "(sleep 10 && /media/sd/tymetro-gateway/deploy.sh > /media/sd/tymetro-gateway/autostart.log 2>&1) &" >> /etc/rc.local
+    fi
+fi
+
+echo -e "${GREEN}✓ PFC200 開機自動等待 SD 卡與啟動服務配置完成 (/etc/init.d/autostart-gateway -> S99)${NC}"
+
 echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN} 🎉 [階段 1] 環境預備、Docker 搬移至 SD 卡完成！${NC}"
+echo -e "${GREEN} 🎉 [階段 1] 環境預備、Docker 搬移至 SD 卡與開機自啟配置完成！${NC}"
 echo -e "${GREEN} --------------------------------------------------- ${NC}"
 echo -e "${YELLOW} 📢 請進行 [階段 2]：使用 FTP / SFTP 將專案檔案傳送至：${NC}"
 echo -e "${YELLOW}    📂 ${INSTALL_DIR}${NC}"
