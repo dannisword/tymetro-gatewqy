@@ -107,9 +107,16 @@ chmod -R 777 "${INSTALL_DIR}" 2>/dev/null || true
 echo -e "${YELLOW}檢測 Docker Compose 命令...${NC}"
 DOCKER_COMPOSE_CMD=""
 
+# 確保系統中的 docker-compose 具備可執行權限 (若存在)
+for compose_path in /bin/docker-compose /usr/bin/docker-compose /usr/local/bin/docker-compose; do
+    if [ -f "${compose_path}" ] && [ ! -x "${compose_path}" ]; then
+        chmod +x "${compose_path}" 2>/dev/null || true
+    fi
+done
+
 if docker compose version &> /dev/null; then
     DOCKER_COMPOSE_CMD="docker compose"
-elif command -v docker-compose &> /dev/null; then
+elif command -v docker-compose &> /dev/null && docker-compose version &> /dev/null; then
     DOCKER_COMPOSE_CMD="docker-compose"
 fi
 

@@ -28,7 +28,7 @@ if [ -d "${INSTALL_DIR}" ]; then
     cd "${INSTALL_DIR}"
     if docker compose version &> /dev/null; then
         docker compose down 2>/dev/null || true
-    elif command -v docker-compose &> /dev/null; then
+    elif command -v docker-compose &> /dev/null && docker-compose version &> /dev/null; then
         docker-compose down 2>/dev/null || true
     fi
 fi
