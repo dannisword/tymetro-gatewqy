@@ -104,11 +104,15 @@ async function login() {
     </section>
     <section class="hidden lg:flex flex-col justify-between">
       <div class="flex-1 flex relative min-h-0 overflow-hidden justify-end items-center">
-        <img
-          class="absolute inset-0 w-full h-full object-cover object-left"
-          src="../assets/erp-2.png"
-          alt="illustration"
-        />
+        <picture class="absolute inset-0 w-full h-full">
+          <source srcset="../assets/erp-2.webp" type="image/webp" />
+          <img
+            class="w-full h-full object-cover object-left"
+            src="../assets/erp-2.png"
+            alt="illustration"
+            decoding="async"
+          />
+        </picture>
       </div>
     </section>
   </div>
