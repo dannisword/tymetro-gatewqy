@@ -154,6 +154,8 @@ export interface SensorData {
   address: number;
   dataType?: string;
   scale?: number;
+  carNo?: number | string;
+  carVin?: string;
 }
 
 export interface MapSensorMarker {

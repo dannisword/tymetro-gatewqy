@@ -60,9 +60,11 @@ const stats = computed(() => {
 // ─── 對話框標題 ───────────────────────────────────────────────────────────────
 const dialogTitle = computed(() => {
   if (!props.register) return '趨勢圖';
+  const car = props.register.carNo ?? props.carNo;
+  const carLabel = car ? `${car} 車廂 ` : '';
   const plcAddr = 40001 + props.register.address;
   const desc = props.register.sensorName || props.register.sensorCode;
-  return `趨勢圖 — ${plcAddr} ${desc}`;
+  return `趨勢圖 — ${carLabel}${plcAddr} ${desc}`;
 });
 
 // ─── ECLineChart 顏色 ────────────────────────────────────────────────────────

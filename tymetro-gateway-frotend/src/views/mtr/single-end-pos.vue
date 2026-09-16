@@ -404,7 +404,8 @@ const fetchRegisters = async () => {
         sensorUnit: reg.sensorUnit || null,
         sensorValue: String(reg.sensorValue || ''),
         rawValue: reg.sensorValue ? Math.round(Number(reg.sensorValue) / (reg.scale || 1.0)) : 0,
-        isChanging: false
+        isChanging: false,
+        carNo: reg.carNo || carNo.value
       }));
       syncStatusToRegisters();
     }
