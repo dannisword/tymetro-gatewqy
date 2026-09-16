@@ -182,6 +182,12 @@ const closeModal = () => {
 };
 
 const onDialogClose = (dialogRef: any) => {
+  if (dialogRef.close == true || dialogRef.success == false) {
+    dialogRef.close = false;
+    dialogRef.success = false;
+    closeModal();
+    return;
+  }
   if (dialogRef.success) {
     saveSchedule();
   } else {

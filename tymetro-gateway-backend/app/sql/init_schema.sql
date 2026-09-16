@@ -143,4 +143,33 @@ CREATE TABLE IF NOT EXISTS `setting_logs` (
   `recorded_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP -- 操作時間
 );
 
+-- ------------------------------------------------------------
+-- 7. Table structure for schedules
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `schedules` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` VARCHAR(100) NOT NULL,
+  `schedule_type` VARCHAR(50) NOT NULL,
+  `task_code` VARCHAR(50) DEFAULT NULL,
+  `cron_expression` VARCHAR(100) DEFAULT NULL,
+  `minute_of_hour` INTEGER DEFAULT NULL,
+  `second_of_minute` INTEGER DEFAULT NULL,
+  `fixed_time` VARCHAR(50) DEFAULT NULL,
+  `cycle_time` INTEGER DEFAULT NULL,
+  `is_active` BOOLEAN NOT NULL DEFAULT 1,
+  `description` VARCHAR(255) DEFAULT NULL,
+  `last_run_at` DATETIME DEFAULT NULL,
+  `next_run_at` DATETIME DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_by` INTEGER NOT NULL DEFAULT 0,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_by` INTEGER NOT NULL DEFAULT 0
+);
 
+INSERT INTO `schedules` (
+  `id`, `name`, `schedule_type`, `task_code`, `cron_expression`,
+  `minute_of_hour`, `second_of_minute`, `fixed_time`, `cycle_time`, `is_active`,
+  `description`, `created_at`, `created_by`, `updated_at`, `updated_by`
+) VALUES
+(1, '每秒同步資料', 'cycle_time', 'SYNC_DEVICE', NULL, 10, NULL, NULL, 1, 0, 'PLC 設備連線狀態與資料', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0),
+(2, '每小時同步資料', 'hourly', 'SYNC_SCHEDULE_CONFIG', NULL, 0, NULL, NULL, NULL, 0, '同步時段溫度設定', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0);

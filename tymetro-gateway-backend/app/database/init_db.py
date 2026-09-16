@@ -8,6 +8,7 @@ from app.models.config_model import Config, SystemConfig
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
+from app.models.schedule_model import Schedule
 
 from app.core.logger import logger
 from datetime import datetime, timezone
@@ -135,6 +136,32 @@ def init_mock_data(db: Session):
             db.add(admin_user)
             db.commit()
             logger.info("Default admin user created successfully.")
+
+        # 初始化預設排程 (Schedule)
+        if not db.query(Schedule).first():
+            logger.info("Creating default schedules in SQLite...")
+            default_schedules = [
+                Schedule(
+                    name="每秒同步資料",
+                    scheduleType="cycle_time",
+                    taskCode="SYNC_DEVICE",
+                    minuteOfHour=10,
+                    cycleTime=1,
+                    isActive=False,
+                    description="PLC 設備連線狀態與資料"
+                ),
+                Schedule(
+                    name="每小時同步資料",
+                    scheduleType="hourly",
+                    taskCode="SYNC_SCHEDULE_CONFIG",
+                    minuteOfHour=0,
+                    isActive=False,
+                    description="同步時段溫度設定"
+                )
+            ]
+            db.add_all(default_schedules)
+            db.commit()
+            logger.info("Default schedules created successfully.")
 
         # 自動進行 YAML -> DB 同步 (Option B)
         sync_yaml_to_db(db)
