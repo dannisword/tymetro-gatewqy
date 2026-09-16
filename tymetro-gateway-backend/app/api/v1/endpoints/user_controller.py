@@ -64,6 +64,11 @@ def login_access_token(
         "token_type": "bearer"
     }
 
+@router.post("/logout", response_model=ResponseBase, summary="用戶登出")
+def logout():
+    return ResponseUtil.success(message="Logout successful")
+
+
 @router.get("/me", response_model=ResponseBase[UserResponse], summary="獲取當前用戶資訊")
 def get_me(current_user: User = Depends(get_current_user)):
     return ResponseUtil.success(data=current_user)
