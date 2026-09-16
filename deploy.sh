@@ -70,7 +70,18 @@ fi
 # 4. 確保必備檔案與目錄結構存在並開放權限
 mkdir -p "${INSTALL_DIR}/tymetro-gateway-backend/app/logs"
 mkdir -p "${INSTALL_DIR}/mosquitto-data"
+mkdir -p /media/sd/docker-data
 touch "${INSTALL_DIR}/tymetro-gateway-backend/gateway.db" 2>/dev/null || true
+
+# 確保 /var/lib/docker 軟連結至 SD 卡，防止映像構建佔用內部 Flash
+if [ ! -L /var/lib/docker ]; then
+    echo -e "${YELLOW}建立 /var/lib/docker -> /media/sd/docker-data 軟連結以保護內部 Flash...${NC}"
+    if [ -d /var/lib/docker ]; then
+        cp -rn /var/lib/docker/* /media/sd/docker-data/ 2>/dev/null || true
+        rm -rf /var/lib/docker
+    fi
+    ln -sf /media/sd/docker-data /var/lib/docker
+fi
 
 # 處理異常斷電導致的 mosquitto.db 毀損防護 (若檔案為空，自動刪除防死鎖)
 if [ -f "${INSTALL_DIR}/mosquitto-data/mosquitto.db" ]; then

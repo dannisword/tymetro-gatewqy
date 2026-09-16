@@ -86,6 +86,20 @@ else
     echo -e "${GREEN}✓ /etc/docker/daemon.json 已設定為 SD 卡路徑 (${DOCKER_DATA_ROOT})${NC}"
 fi
 
+# 雙重防護：建立 /var/lib/docker 軟連結至 SD 卡
+# 避免 WAGO PFC200 韌體的 dockerd 啟動參數指定 /var/lib/docker 而忽略 daemon.json
+if [ ! -L /var/lib/docker ]; then
+    echo -e "${YELLOW}建立 /var/lib/docker -> ${DOCKER_DATA_ROOT} 軟連結，確保所有容器映像寫入 SD 卡...${NC}"
+    /etc/init.d/dockerd stop 2>/dev/null || pkill -9 dockerd 2>/dev/null || true
+    sleep 1
+    if [ -d /var/lib/docker ]; then
+        cp -rn /var/lib/docker/* "${DOCKER_DATA_ROOT}/" 2>/dev/null || true
+        rm -rf /var/lib/docker
+    fi
+    ln -sf "${DOCKER_DATA_ROOT}" /var/lib/docker
+    DOCKER_RESTART_NEEDED=1
+fi
+
 # 啟動或重啟 Docker 服務
 if [ "${DOCKER_RESTART_NEEDED}" = "1" ]; then
     echo -e "${YELLOW}重新啟動 Docker 引擎套用 SD 卡儲存路徑...${NC}"
