@@ -17,6 +17,7 @@ from app.services.sqlite_writer import sqlite_writer
 from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.services.cloud_mqtt_service import cloud_mqtt_service
 from app.services.scheduler_service import scheduler_service
+from app.scheduler.engine import scheduler_engine
 import app.models
 
 @asynccontextmanager
@@ -54,11 +55,16 @@ async def lifespan(app: FastAPI):
     # 4. 啟動 APScheduler 背景定期排程 (Heartbeat Check & Daily Backup)
     scheduler_service.start()
     
+    # 5. 啟動每小時排程引擎 (Hourly Scheduler Engine)
+    scheduler_engine.start()
+    
     yield
 
     # 【關閉階段】
     logger.info("Gateway Application shutting down...")
+    scheduler_engine.shutdown()
     scheduler_service.stop()
+
     if yaml_settings.network.cloud_mqtt.enabled:
         await cloud_mqtt_service.stop()
     if yaml_settings.network.gateway_mqtt.enabled:

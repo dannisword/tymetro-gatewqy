@@ -171,5 +171,4 @@ INSERT INTO `schedules` (
   `minute_of_hour`, `second_of_minute`, `fixed_time`, `cycle_time`, `is_active`,
   `description`, `created_at`, `created_by`, `updated_at`, `updated_by`
 ) VALUES
-(1, '每秒同步資料', 'cycle_time', 'SYNC_DEVICE', NULL, 10, NULL, NULL, 1, 0, 'PLC 設備連線狀態與資料', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0),
-(2, '每小時同步資料', 'hourly', 'SYNC_SCHEDULE_CONFIG', NULL, 0, NULL, NULL, NULL, 0, '同步時段溫度設定', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0);
+(1, '每小時同步資料', 'hourly', 'SYNC_SCHEDULE_CONFIG', NULL, 0, NULL, NULL, NULL, 0, '同步時段溫度設定', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0);

@@ -6,6 +6,7 @@ from app.schemas.schedule_schema import ScheduleCreate, ScheduleUpdate, Schedule
 from app.schemas.response_schema import ResponseBase, ResponseList
 from app.utils.response_util import ResponseUtil
 from app.models.user_model import User
+from app.scheduler.engine import scheduler_engine
 
 router = APIRouter()
 
@@ -17,9 +18,12 @@ def create_schedule(
 ):
     try:
         schedule = service.create(request)
+        scheduler_engine.reload_schedule(int(schedule.id))  # type: ignore
         return ResponseUtil.success(data=schedule, message="Schedule created successfully")
+
     except Exception as e:
         return ResponseUtil.error(message=str(e))
+
 
 @router.get("", response_model=ResponseList[ScheduleResponse], summary="獲取排程清單")
 def get_schedules(
@@ -64,6 +68,7 @@ def update_schedule(
     current_user: User = Depends(get_current_user)
 ):
     schedule = service.update(schedule_id, request)
+    scheduler_engine.reload_schedule(schedule_id)
     return ResponseUtil.success(data=schedule, message="Schedule updated successfully")
 
 @router.delete("/{schedule_id}", response_model=ResponseBase, summary="刪除排程")
@@ -73,4 +78,6 @@ def delete_schedule(
     current_user: User = Depends(get_current_user)
 ):
     service.delete(schedule_id)
+    scheduler_engine.reload_schedule(schedule_id)
     return ResponseUtil.success(message="Schedule deleted successfully")
+

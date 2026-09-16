@@ -463,8 +463,7 @@ const gridColumns = ref([
     flex: 0.8,
     cellRenderer: 'AGActionButtonRenderer',
     actionButtons: [
-      { label: '編輯', event: 'edit', icon: mdiPencilOutline, iconOnly: true },
-      { label: '刪除', event: 'delete', icon: mdiDeleteOutline, iconOnly: true }
+      { label: '編輯', event: 'edit', icon: mdiPencilOutline, iconOnly: true }
     ]
   }
 ]);

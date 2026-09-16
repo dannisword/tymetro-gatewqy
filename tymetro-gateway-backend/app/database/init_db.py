@@ -142,15 +142,6 @@ def init_mock_data(db: Session):
             logger.info("Creating default schedules in SQLite...")
             default_schedules = [
                 Schedule(
-                    name="每秒同步資料",
-                    scheduleType="cycle_time",
-                    taskCode="SYNC_DEVICE",
-                    minuteOfHour=10,
-                    cycleTime=1,
-                    isActive=False,
-                    description="PLC 設備連線狀態與資料"
-                ),
-                Schedule(
                     name="每小時同步資料",
                     scheduleType="hourly",
                     taskCode="SYNC_SCHEDULE_CONFIG",
