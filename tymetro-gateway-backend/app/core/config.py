@@ -27,12 +27,14 @@ class Settings(BaseSettings):
     LOG_PATH: str = os.getenv("LOG_PATH", "app/logs/gateway.log")
 
     # JWT 認證密鑰
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-for-jwt-tokens-09b25e02930c")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "2sXk8QvJ4mYwN7eLcP5gZh9RuTf3BaD1KiVx6EnWq0MoHy8CrSjL4UpGbNz7FdAeI")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
-    # 外部中央後端連線設定
+    # 外部中央後端連線設定 (支援帳密或固定 SECRET_KEY 兩種驗證方式)
     TYMETRO_BACKEND_URL: str = os.getenv("TYMETRO_BACKEND_URL", "http://220.133.144.73:8901")
+    TYMETRO_BACKEND_AUTH_TYPE: str = os.getenv("TYMETRO_BACKEND_AUTH_TYPE", "secret_key")  # "secret_key" 或 "password"
+    TYMETRO_BACKEND_SECRET_KEY: str = os.getenv("TYMETRO_BACKEND_SECRET_KEY", "")
     TYMETRO_BACKEND_USERNAME: str = os.getenv("TYMETRO_BACKEND_USERNAME", "admin")
     TYMETRO_BACKEND_PASSWORD: str = os.getenv("TYMETRO_BACKEND_PASSWORD", "admin123")
 

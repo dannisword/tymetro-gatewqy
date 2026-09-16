@@ -44,6 +44,15 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    user_service = UserService(db)
+
+    # 支援固定 SECRET_KEY 驗證 (Bearer Token 直接帶固定金鑰)
+    if token and token == settings.SECRET_KEY:
+        admin_user = user_service.get_by_account("admin") or user_service.get_by_id(1)
+        if admin_user:
+            return admin_user
+
     try:
         payload = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
