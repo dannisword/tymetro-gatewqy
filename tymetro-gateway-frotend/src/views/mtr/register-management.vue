@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseButton from '@/components/BaseButton.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
@@ -29,7 +29,6 @@ import {
   createModbusRegister,
   updateModbusRegister,
   deleteModbusRegister,
-  getConfigsByType,
   writeInitialValuesToPlc,
   writeSettingValuesToPlc,
   downloadVehicleMetadata,
@@ -135,49 +134,6 @@ const filterSensorType = ref('');
 const filterCarVin = ref('');
 const sensorTypeOptions = ref<{ value: string; label: string }[]>([]);
 
-const deviceOptions = ref<{ value: string; label: string }[]>([]);
-
-const allDeviceOptions = computed(() => {
-  const seen = new Set();
-  const res: { value: string; label: string }[] = [];
-  
-  deviceOptions.value.forEach(opt => {
-    if (!seen.has(opt.value)) {
-      seen.add(opt.value);
-      res.push(opt);
-    }
-  });
-  return res;
-});
-
-const fetchDevices = async () => {
-  try {
-    const res = await getConfigsByType('MTR_PARAMS');
-    if (res && res.data && res.data.configContent) {
-      const content = JSON.parse(res.data.configContent);
-      const options: { value: string; label: string }[] = [];
-      if (content.leftItems && Array.isArray(content.leftItems)) {
-        content.leftItems.forEach((item: any) => {
-          if (item.code && item.code.startsWith('plc-data')) {
-            const label = item.name ? `${item.name} (${item.code})` : item.code;
-            options.push({ value: item.code, label });
-          }
-        });
-      }
-      if (content.rightItems && Array.isArray(content.rightItems)) {
-        content.rightItems.forEach((item: any) => {
-          if (item.code && item.code.startsWith('plc-data')) {
-            const label = item.name ? `${item.name} (${item.code})` : item.code;
-            options.push({ value: item.code, label });
-          }
-        });
-      }
-      deviceOptions.value = options;
-    }
-  } catch (error) {
-    console.error('Failed to load MTR_PARAMS for devices:', error);
-  }
-};
 
 const fetchRegisters = async () => {
   loading.value = true;
@@ -219,7 +175,6 @@ const fetchRegisters = async () => {
 
 onMounted(async () => {
   await mtrStore.loadConfig();
-  await fetchDevices();
   await fetchRegisters();
   // 從後端取得列舉選項
   const enumsRes = await getEnums();
