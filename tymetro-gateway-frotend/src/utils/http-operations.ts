@@ -10,7 +10,13 @@ interface ErrorResponse {
   message: string;
 }
 
-const handleError = (e: any): ErrorResponse | void => {
+const handleError = (e: any, config?: AxiosRequestConfig): ErrorResponse | void => {
+  if (config?.meta?.silent) {
+    return {
+      success: false,
+      message: e.message || "error",
+    };
+  }
   let msg = "未知錯誤";
 
   if (e.code === "ECONNABORTED" && e.message?.includes("timeout")) {
@@ -46,49 +52,52 @@ const httpOperations = {
       });
       return response as T;
     } catch (e: any) {
-      handleError(e);
+      handleError(e, config);
       throw e;
     }
   },
 
-  async post<T = any>(url: string, data: any = undefined): Promise<T> {
+  async post<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig): Promise<T> {
     try {
       const response = await request({
         url,
         method: "POST",
         data,
+        ...config,
       });
       return response as T;
     } catch (e: any) {
-      handleError(e);
+      handleError(e, config);
       throw e;
     }
   },
 
-  async put<T = any>(url: string, data: any = undefined): Promise<T> {
+  async put<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig): Promise<T> {
     try {
       const response = await request({
         url,
         method: "PUT",
         data,
+        ...config,
       });
       return response as T;
     } catch (e: any) {
-      handleError(e);
+      handleError(e, config);
       throw e;
     }
   },
 
-  async delete<T = any>(url: string, data: any = undefined): Promise<T> {
+  async delete<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig): Promise<T> {
     try {
       const response = await request({
         url,
         method: "DELETE",
         data,
+        ...config,
       });
       return response as T;
     } catch (e: any) {
-      handleError(e);
+      handleError(e, config);
       throw e;
     }
   },

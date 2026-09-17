@@ -66,7 +66,7 @@ export const deleteModbusRegister = async (id: number): Promise<any> => {
 }
 
 export const getHealthStatus = async (): Promise<any> => {
-    return await httpOperations.get('/api/v1/health/status', undefined, { meta: { loading: false } })
+    return await httpOperations.get('/api/v1/health/status', undefined, { meta: { loading: false, silent: true } })
 }
 
 export const getAuditLogs = async (params?: any): Promise<any> => {

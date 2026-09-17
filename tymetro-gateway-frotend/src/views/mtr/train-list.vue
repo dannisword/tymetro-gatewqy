@@ -33,14 +33,16 @@ const metroConfig = ref<MetroConfig>({
   carNo: null,
   carVins: []
 });
-// 紀錄每個端點最後收到 MQTT 訊息的時間與檢測計時器
+// 計時器管理
 const lastMsgTime = ref<Record<string, number>>({});
 const lastUpdated = ref(new Date().toLocaleTimeString());
-let heartbeatInterval: any = null;
 let lastUpdatedTimer: any = null;
+let endpointTimeoutInterval: any = null; // MQTT 車廂端點 60 秒無資料之超時離線檢測
+let backendHealthInterval: any = null;   // 後端 API 健康度與 SDS Ready 輪詢
 
 // 後端系統版本狀態
 const backendVersion = ref<string>('');
+const backendStatus = ref<string>('');
 const backendGit = ref<{
   commit?: string;
   branch?: string;
@@ -55,15 +57,28 @@ const fetchBackendHealth = async () => {
     if (res && res.success && res.data) {
       backendVersion.value = res.data.version || '';
       backendGit.value = res.data.git_version || {};
+      backendStatus.value = res.data.status || 'online';
+    } else {
+      backendStatus.value = 'offline';
     }
   } catch (err) {
     logger.warn('[train-list] Failed to fetch backend health status:', err);
+    backendStatus.value = 'offline';
   }
 };
 
 const backendVersionDisplay = computed(() => {
-  if (!backendVersion.value) return '';
-  return backendVersion.value.startsWith('v') ? backendVersion.value : `v${backendVersion.value}`;
+  if (backendStatus.value === 'offline') {
+    return '未連線';
+  }
+  if (!backendVersion.value) return '-';
+  // 濾除 (SDS Ready) 備註文字，由獨立燈號顯示
+  const clean = backendVersion.value.replace(/\s*\(SDS Ready\)/i, '').trim();
+  return clean.startsWith('v') ? clean : `v${clean}`;
+});
+
+const isSdsReady = computed(() => {
+  return backendStatus.value === 'online';
 });
 
 const frontendTooltip = computed(() => {
@@ -76,6 +91,9 @@ const frontendTooltip = computed(() => {
 });
 
 const backendTooltip = computed(() => {
+  if (backendStatus.value === 'offline') {
+    return '後端閘道器服務目前離線或連線中斷';
+  }
   const parts: string[] = [];
   if (backendVersion.value) parts.push(`後端版本: ${backendVersion.value}`);
   if (backendGit.value.branch && backendGit.value.branch !== 'unknown') parts.push(`分支: ${backendGit.value.branch}`);
@@ -249,18 +267,21 @@ onMounted(async() => {
   // 載入 config.json 車廂配置
   await loadFromConfig();
 
-  // 取得後端健康狀態與版本資訊
+  // 取得後端健康狀態與版本資訊，每 60 秒輪詢確認一次
   fetchBackendHealth();
+  backendHealthInterval = setInterval(() => {
+    fetchBackendHealth();
+  }, 600000);
 
-  // 啟動心跳檢測：每 5 秒檢查一次是否超過 60 秒未收到訊息
-  heartbeatInterval = setInterval(() => {
+  // 啟動端點超時檢測：每 5 秒檢查各端點是否超過 60 秒未收到 MQTT 訊息
+  endpointTimeoutInterval = setInterval(() => {
     const now = Date.now();
     metroConfig.value.carVins.forEach(car => {
       car.endpoints.forEach(ep => {
         const key = `${car.id}_${ep.id}`;
         const lastTime = lastMsgTime.value[key];
         if (ep.isConnected && lastTime && (now - lastTime > 60000)) {
-          console.warn(`[Heartbeat Timeout] Car ${car.id} Endpoint ${ep.id} exceeded 60s without MQTT data. Setting offline.`);
+          console.warn(`[Endpoint Timeout] Car ${car.id} Endpoint ${ep.id} exceeded 60s without MQTT data. Setting offline.`);
           ep.isConnected = false;
         }
       });
@@ -273,11 +294,14 @@ onMounted(async() => {
 });
 
 onUnmounted(() => {
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval);
+  if (endpointTimeoutInterval) {
+    clearInterval(endpointTimeoutInterval);
   }
   if (lastUpdatedTimer) {
     clearTimeout(lastUpdatedTimer);
+  }
+  if (backendHealthInterval) {
+    clearInterval(backendHealthInterval);
   }
 });
 </script>
@@ -398,10 +422,23 @@ onUnmounted(() => {
           </span>
           <span class="text-slate-300">•</span>
           <span class="cursor-help transition-colors hover:text-slate-600" :title="backendTooltip">
-            後端 <span class="font-mono text-slate-500 font-semibold">{{ backendVersionDisplay || '-' }}</span>
-            <span v-if="backendGit?.commit && backendGit.commit !== 'unknown'" class="font-mono text-slate-400 ml-0.5 text-[11px]">
+            後端 <span class="font-mono font-semibold" :class="backendStatus === 'online' ? 'text-slate-500' : 'text-rose-500'">{{ backendVersionDisplay || '-' }}</span>
+            <span v-if="backendStatus === 'online' && backendGit?.commit && backendGit.commit !== 'unknown'" class="font-mono text-slate-400 ml-0.5 text-[11px]">
               ({{ backendGit.commit }})
             </span>
+          </span>
+          <span class="text-slate-300">•</span>
+          <!-- SDS Ready 狀態燈號 -->
+          <span 
+            class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all select-none"
+            :class="isSdsReady ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/70' : 'bg-slate-100 text-slate-400 border border-slate-200'"
+            :title="isSdsReady ? '軟體設計規格書 (SDS) 系統核心與通訊就緒' : '後端服務離線或未連線'"
+          >
+            <span 
+              class="w-1.5 h-1.5 rounded-full transition-colors"
+              :class="isSdsReady ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"
+            ></span>
+            <span>{{ isSdsReady ? 'SDS Ready' : 'SDS Offline' }}</span>
           </span>
         </div>
       </footer>
