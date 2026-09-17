@@ -3,10 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useSider } from "../../store/useSiderStore";
 import {
-  mdiMagnify,
   mdiMenu,
-  mdiPinOutline,
-  mdiPinOffOutline,
   mdiBellOutline,
 } from "@mdi/js";
 import BaseIcon from "../../components/BaseIcon.vue";

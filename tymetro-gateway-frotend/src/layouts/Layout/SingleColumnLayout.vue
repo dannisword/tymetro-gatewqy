@@ -33,7 +33,7 @@ const mobileMenuOpen = ref(false);
 // 導覽列選單資料 (JSON)
 const navLinks = [
   { name: '首頁', path: '/mtr/train-list' },
-  { name: '即時事件', path: '/mtr/events' },
+ // { name: '即時事件', path: '/mtr/events' },
   { name: '功能選單', path: '/mtr/tile-menus' }
 ];
 
@@ -101,7 +101,7 @@ const viewKey = ref(0);
         </div>
 
         <!-- Center: Navigation Links (Desktop) -->
-        <nav class="hidden md:flex items-center gap-1 lg:gap-2 bg-white/10 p-1.5 rounded-xl border border-white/10 shadow-inner">
+        <!-- <nav class="hidden md:flex items-center gap-1 lg:gap-2 bg-white/10 p-1.5 rounded-xl border border-white/10 shadow-inner">
           <router-link 
             v-for="link in navLinks" 
             :key="link.path + link.name"
@@ -110,7 +110,7 @@ const viewKey = ref(0);
           >
             {{ link.name }}
           </router-link>
-        </nav>
+        </nav> -->
 
         <!-- Right: Actions & Mobile Menu Toggle -->
         <div class="flex items-center gap-2 sm:gap-3">
