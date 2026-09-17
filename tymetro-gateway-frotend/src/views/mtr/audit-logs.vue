@@ -8,7 +8,8 @@ import {
   mdiRefresh,
   mdiShieldCheckOutline,
   mdiMagnify,
-  mdiClose
+  mdiClose,
+  mdiChevronDown
 } from '@mdi/js';
 
 import AgGridView2 from '@/components/AgGridView2.vue';
@@ -45,14 +46,14 @@ const gridColumns = ref([
     headerName: '時間',
     field: 'timestamp',
     flex: 1.2,
-    minWidth: 180,
+    minWidth: 160,
     format: 'datetime'
   },
   {
     headerName: '審計類別',
     field: 'auditCategory',
     flex: 0.9,
-    minWidth: 100,
+    minWidth: 90,
     cellRenderer: (p: any) => {
       const label = categoryMap.value[p.value] || p.value || '';
       return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">${label}</span>`;
@@ -62,13 +63,13 @@ const gridColumns = ref([
     headerName: '動作',
     field: 'action',
     flex: 1.2,
-    minWidth: 180
+    minWidth: 140
   },
   {
     headerName: '狀態',
     field: 'status',
-    flex: 0.8,
-    minWidth: 90,
+    flex: 0.7,
+    minWidth: 70,
     cellRenderer: (p: any) => {
       const isSuccess = p.value === 'success';
       return isSuccess
@@ -80,19 +81,19 @@ const gridColumns = ref([
     headerName: '操作人',
     field: 'operator',
     flex: 0.9,
-    minWidth: 180
+    minWidth: 120
   },
   {
     headerName: 'IP 位址',
     field: 'ipAddress',
     flex: 1.0,
-    minWidth: 120
+    minWidth: 110
   },
   {
     headerName: '詳細資訊',
     field: 'detail',
     flex: 2.2,
-    minWidth: 300
+    minWidth: 220
   }
 ]);
 
@@ -187,36 +188,36 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
 </script>
 
 <template>
-  <div class="w-full pb-24 sm:pb-8">
+  <div class="w-full pb-20 sm:pb-8">
     
     <!-- Breadcrumb -->
-    <div class="w-full mb-6">
+    <div class="w-full mb-4 sm:mb-6">
       <Breadcrumb :items="breadcrumbItems" />
     </div>
 
     <!-- 內容區 -->
-    <div class="w-full max-w-[1600px] mx-auto space-y-6">
+    <div class="w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
 
       <!-- 資料表與操作 -->
       <div class="space-y-4">
         
         <!-- 表格頂端標題與搜尋條件一排 -->
-        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white rounded-2xl p-4 shadow-xs">
+        <div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3 sm:gap-4 bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs">
           <!-- 表格頂端標題 -->
-          <h3 class="text-slate-800 font-extrabold text-lg flex items-center gap-2 mb-0 shrink-0">
+          <h3 class="text-slate-800 font-extrabold text-base sm:text-lg flex items-center gap-2 mb-0 shrink-0">
             <BaseIcon :path="mdiShieldCheckOutline" w="20" h="20" size="20" class="text-[#2a7eb5]" />
             審計日誌列表
           </h3>
 
           <!-- 搜尋與按鈕 -->
-          <div class="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-end">
+          <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 w-full xl:w-auto justify-end">
             <!-- 類別過濾 -->
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">類別</label>
-              <div class="relative w-36">
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">類別</label>
+              <div class="relative flex-1 sm:w-36 min-w-0">
                 <select 
                   v-model="filterCategory"
-                  class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
                   @change="handleSearch"
                 >
                   <option value="">全部</option>
@@ -224,34 +225,40 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
                     {{ cat.label }}
                   </option>
                 </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+                </div>
               </div>
             </div>
 
             <!-- 狀態過濾 -->
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">狀態</label>
-              <div class="relative w-28">
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">狀態</label>
+              <div class="relative flex-1 sm:w-28 min-w-0">
                 <select 
                   v-model="filterStatus"
-                  class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
                   @change="handleSearch"
                 >
                   <option value="">全部</option>
                   <option value="success">成功</option>
                   <option value="failure">失敗</option>
                 </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+                </div>
               </div>
             </div>
 
             <!-- 操作人過濾 -->
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">操作人</label>
-              <div class="relative w-44">
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">操作人</label>
+              <div class="relative flex-1 sm:w-44 min-w-0">
                 <input 
                   v-model="filterOperator"
                   type="text"
                   placeholder="輸入操作人關鍵字"
-                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none transition-all"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none transition-all text-sm"
                   @keyup.enter="handleSearch"
                 />
                 <button
@@ -266,26 +273,29 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
               </div>
             </div>
             
-            <BaseButton 
-              @click="handleSearch"
-              colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-xs px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiMagnify"
-            >
-              查詢
-            </BaseButton>
+            <!-- 按鈕群組 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <BaseButton 
+                @click="handleSearch"
+                colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+                :icon="mdiMagnify"
+              >
+                查詢
+              </BaseButton>
 
-            <BaseButton 
-              @click="handleReset"
-              colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiRefresh"
-            >
-              重置
-            </BaseButton>
+              <BaseButton 
+                @click="handleReset"
+                colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+                :icon="mdiRefresh"
+              >
+                重置
+              </BaseButton>
+            </div>
           </div>
         </div>
 
         <!-- 數據表格 -->
-        <div class="h-[calc(100vh-220px)] min-h-[280px]">
+        <div class="h-[calc(100vh-270px)] sm:h-[calc(100vh-220px)] min-h-[360px]">
           <AgGridView2
             :options="gridOptions"
             :columns="gridColumns"

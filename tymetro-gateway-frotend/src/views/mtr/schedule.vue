@@ -20,7 +20,8 @@ import {
   mdiPlus,
   mdiPencilOutline,
   mdiClose,
-  mdiRefresh
+  mdiRefresh,
+  mdiChevronDown
 } from '@mdi/js';
 
 const { TLSuccess, TLError } = useAlert();
@@ -333,12 +334,12 @@ const onGridActionClick = ({ action, data }: any) => {
 };
 
 const gridColumns = ref([
-  { headerName: 'ID', field: 'id', flex: 0.5, maxWidth: 80, fontClass: 'font-mono text-slate-400 font-bold' },
+  { headerName: 'ID', field: 'id', flex: 0.5, maxWidth: 80, minWidth: 60, fontClass: 'font-mono text-slate-400 font-bold' },
   { 
     headerName: '任務名稱', 
     field: 'name', 
     flex: 1.5,
-    minWidth: 200,
+    minWidth: 160,
     valueGetter: (p: any) => p.data ? `${p.data.name}|${p.data.description || ''}` : '',
     cellRenderer: (p: any) => {
       const name = p.data?.name;
@@ -355,7 +356,7 @@ const gridColumns = ref([
     headerName: '任務內容',
     field: 'taskCode',
     flex: 1.2,
-    minWidth: 300,
+    minWidth: 200,
     cellRenderer: (p: any) => {
       const code = p.value || '未指定';
       const match = taskOptions.find(t => t.value === code);
@@ -372,8 +373,8 @@ const gridColumns = ref([
   { 
     headerName: '排程類型', 
     field: 'scheduleType', 
-    flex: 1,
-     minWidth: 180,
+    flex: 0.9,
+    minWidth: 120,
     cellRenderer: (p: any) => {
       const type = p.value;
       const label = getTypeLabel(type);
@@ -391,7 +392,7 @@ const gridColumns = ref([
     headerName: '排程規則', 
     field: 'ruleDetail',
     flex: 1.2,
-    minWidth: 180,
+    minWidth: 160,
     valueGetter: (p: any) => p.data?.ruleDetail || (p.data ? getScheduleDetail(p.data) : ''),
     cellRenderer: (p: any) => {
       return `
@@ -404,7 +405,8 @@ const gridColumns = ref([
   { 
     headerName: '狀態', 
     field: 'isActive', 
-    flex: 0.8,
+    flex: 0.6,
+    minWidth: 80,
     cellRenderer: (p: any) => {
       const active = p.value;
       return `
@@ -426,7 +428,7 @@ const gridColumns = ref([
     headerName: '上次執行時間', 
     field: 'lastRunAt', 
     flex: 1,
-    minWidth: 180,
+    minWidth: 150,
     cellRenderer: (p: any) => {
       return `
         <div class="flex items-center h-full font-medium text-slate-500">
@@ -439,7 +441,7 @@ const gridColumns = ref([
     headerName: '下次預計執行', 
     field: 'nextRunAt', 
     flex: 1,
-    minWidth: 180,
+    minWidth: 150,
     cellRenderer: (p: any) => {
       return `
         <div class="flex items-center h-full font-medium text-slate-500">
@@ -451,7 +453,8 @@ const gridColumns = ref([
   {
     headerName: '操作',
     field: 'actions',
-    flex: 0.8,
+    flex: 0.6,
+    minWidth: 80,
     cellRenderer: 'AGActionButtonRenderer',
     actionButtons: [
       { label: '編輯', event: 'edit', icon: mdiPencilOutline, iconOnly: true }
@@ -461,29 +464,28 @@ const gridColumns = ref([
 </script>
 
 <template>
-  <div class="w-full pb-24 sm:pb-8">
+  <div class="w-full pb-20 sm:pb-8">
     <!-- Breadcrumb -->
-    <div class="w-full mb-6">
+    <div class="w-full mb-4 sm:mb-6">
       <Breadcrumb :items="breadcrumbItems" />
     </div>
 
-    <div class="w-full max-w-[1600px] mx-auto space-y-6 px-2">
-
+    <div class="w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
 
       <!-- 表格頂端標題與搜尋條件一排 -->
-      <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white rounded-2xl p-4 shadow-xs">
+      <div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3 sm:gap-4 bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs">
         <!-- 表格頂端標題 -->
-        <h3 class="text-slate-800 font-extrabold text-lg flex items-center gap-2 mb-0 shrink-0">
+        <h3 class="text-slate-800 font-extrabold text-base sm:text-lg flex items-center gap-2 mb-0 shrink-0">
           <BaseIcon :path="mdiCalendarSync" w="20" h="20" size="20" class="text-[#2a7eb5]" />
           排程設定列表
         </h3>
 
         <!-- 搜尋與按鈕 -->
-        <div class="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-end">
+        <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 w-full xl:w-auto justify-end">
           <!-- 關鍵字搜尋 -->
-          <div class="flex items-center gap-2">
-            <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">搜尋</label>
-            <div class="relative w-64">
+          <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+            <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">搜尋</label>
+            <div class="relative flex-1 sm:w-56 min-w-0">
               <input 
                 v-model="searchKeyword"
                 type="text" 
@@ -501,42 +503,48 @@ const gridColumns = ref([
           </div>
 
           <!-- 類型篩選 -->
-          <div class="flex items-center gap-2">
-            <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">類型</label>
-            <div class="relative w-44">
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">類型</label>
+            <div class="relative flex-1 sm:w-36 min-w-0">
               <select 
                 v-model="filterType"
                 @change="fetchSchedules"
-                class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm"
+                class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
               >
                 <option value="">全部</option>
                 <option v-for="t in scheduleTypes" :key="t.value" :value="t.value">
                   {{ t.label }}
                 </option>
               </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+              </div>
             </div>
           </div>
 
-          <BaseButton 
-            @click="handleReset"
-            colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold"
-            :icon="mdiRefresh"
-          >
-            重置
-          </BaseButton>
+          <!-- 按鈕群組 -->
+          <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <BaseButton 
+              @click="handleReset"
+              colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-3 sm:px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+              :icon="mdiRefresh"
+            >
+              重置
+            </BaseButton>
 
-          <BaseButton 
-            @click="openCreateModal"
-            colorClass="bg-[#2a7eb5] hover:bg-[#206796] text-white shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold"
-            :icon="mdiPlus"
-          >
-            新增排程設定
-          </BaseButton>
+            <BaseButton 
+              @click="openCreateModal"
+              colorClass="bg-[#2a7eb5] hover:bg-[#206796] text-white shadow-xs px-3 sm:px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center whitespace-nowrap"
+              :icon="mdiPlus"
+            >
+              新增排程設定
+            </BaseButton>
+          </div>
         </div>
       </div>
 
       <!-- 資料列表表格 (AG Grid) -->
-      <div class="h-[calc(100vh-220px)] min-h-[280px]">
+      <div class="h-[calc(100vh-270px)] sm:h-[calc(100vh-220px)] min-h-[360px]">
         <AgGridView2
           :options="gridOptions"
           :columns="gridColumns"
@@ -606,64 +614,64 @@ const gridColumns = ref([
         </div>
 
         <!-- hourly: 每小時的第幾分鐘 (0-59) -->
-        <div v-if="formScheduleType === 'hourly'" class="flex flex-col gap-1.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div v-if="formScheduleType === 'hourly'" class="flex flex-col gap-1.5 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100">
           <label class="text-sm font-bold text-slate-600">執行分 (0 - 59)</label>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <input 
               v-model="formMinuteOfHour" 
               type="number" min="0" max="59"
-              class="w-32 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none"
+              class="w-full sm:w-32 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none bg-white"
             />
             <span class="text-xs text-slate-400 font-bold">每小時的第幾分鐘觸發（例：設定 15 即代表每小時的 15 分執行一次）</span>
           </div>
         </div>
 
         <!-- minutely: 每分鐘的第幾秒 (0-59) -->
-        <div v-if="formScheduleType === 'minutely'" class="flex flex-col gap-1.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div v-if="formScheduleType === 'minutely'" class="flex flex-col gap-1.5 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100">
           <label class="text-sm font-bold text-slate-600">執行秒 (0 - 59)</label>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <input 
               v-model="formSecondOfMinute" 
               type="number" min="0" max="59"
-              class="w-32 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none"
+              class="w-full sm:w-32 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none bg-white"
             />
             <span class="text-xs text-slate-400 font-bold">每分鐘的第幾秒觸發</span>
           </div>
         </div>
 
         <!-- fixed_time: 每日固定時間 (HH:mm:ss) -->
-        <div v-if="formScheduleType === 'fixed_time'" class="flex flex-col gap-1.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div v-if="formScheduleType === 'fixed_time'" class="flex flex-col gap-1.5 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100">
           <label class="text-sm font-bold text-slate-600">固定時間 (HH:mm:ss)</label>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <input 
               v-model="formFixedTime" 
               type="text" placeholder="例如 03:30:00"
-              class="w-48 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none"
+              class="w-full sm:w-48 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none bg-white"
             />
             <span class="text-xs text-slate-400 font-bold">每天固定此時間執行</span>
           </div>
         </div>
 
         <!-- cycle_time: 固定週期 (秒數) -->
-        <div v-if="formScheduleType === 'cycle_time'" class="flex flex-col gap-1.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div v-if="formScheduleType === 'cycle_time'" class="flex flex-col gap-1.5 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100">
           <label class="text-sm font-bold text-slate-600">間隔秒數 (正整數)</label>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <input 
               v-model="formCycleTime" 
               type="number" min="1"
-              class="w-32 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none"
+              class="w-full sm:w-32 px-4 py-2 rounded-xl border border-slate-200 font-bold focus:border-[#2a7eb5] outline-none bg-white"
             />
             <span class="text-xs text-slate-400 font-bold">秒，系統將會每隔指定秒數循環執行一次任務</span>
           </div>
         </div>
 
         <!-- cron: Cron Expression -->
-        <div v-if="formScheduleType === 'cron'" class="flex flex-col gap-1.5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div v-if="formScheduleType === 'cron'" class="flex flex-col gap-1.5 bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-100">
           <label class="text-sm font-bold text-slate-600">Cron 表達式 (5 或 6 欄位格式)</label>
           <input 
             v-model="formCronExpression" 
             type="text" placeholder="例如 */5 * * * *"
-            class="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold focus:border-[#2a7eb5] outline-none mb-1"
+            class="w-full px-4 py-2.5 rounded-xl border border-slate-200 font-mono font-bold focus:border-[#2a7eb5] outline-none mb-1 bg-white"
           />
           <div class="text-[11px] text-[#206796] leading-relaxed font-semibold">
             常用格式對照表：<br/>

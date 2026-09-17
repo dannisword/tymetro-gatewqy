@@ -6,7 +6,9 @@ import BaseIcon from '@/components/BaseIcon.vue';
 import { useAlert } from '@/composables/TLAlter';
 import {
   mdiRefresh,
-  mdiHistory
+  mdiHistory,
+  mdiMagnify,
+  mdiChevronDown
 } from '@mdi/js';
 
 import AgGridView2 from '@/components/AgGridView2.vue';
@@ -40,20 +42,20 @@ const gridColumns = ref([
     headerName: '時間',
     field: 'timestamp',
     flex: 1.5,
-    minWidth: 180,
+    minWidth: 160,
     format: 'datetime'
   },
   {
     headerName: '暫存器名稱',
     field: 'name',
     flex: 1.5,
-    minWidth: 180
+    minWidth: 150
   },
   {
     headerName: '讀取值',
     field: 'value',
     flex: 1.2,
-    minWidth: 140,
+    minWidth: 110,
     cellRenderer: (p: any) => {
       return `<span class="font-mono font-bold text-slate-800">${p.value}</span>`;
     }
@@ -62,7 +64,7 @@ const gridColumns = ref([
     headerName: '暫存器 ID',
     field: 'registerId',
     flex: 1.0,
-    minWidth: 120
+    minWidth: 110
   }
 ]);
 
@@ -146,36 +148,36 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
 </script>
 
 <template>
-  <div class="w-full pb-24 sm:pb-8">
+  <div class="w-full pb-20 sm:pb-8">
     
     <!-- Breadcrumb -->
-    <div class="w-full mb-6">
+    <div class="w-full mb-4 sm:mb-6">
       <Breadcrumb :items="breadcrumbItems" />
     </div>
 
     <!-- 內容區 -->
-    <div class="w-full max-w-[1600px] mx-auto space-y-6">
+    <div class="w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
 
       <!-- 資料表與操作 -->
       <div class="space-y-4">
         
         <!-- 表格頂端標題與搜尋條件一排 -->
-        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white rounded-2xl p-4 shadow-xs">
+        <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 sm:gap-4 bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs">
           <!-- 表格頂端標題 -->
-          <h3 class="text-slate-800 font-extrabold text-lg flex items-center gap-2 mb-0 shrink-0">
+          <h3 class="text-slate-800 font-extrabold text-base sm:text-lg flex items-center gap-2 mb-0 shrink-0">
             <BaseIcon :path="mdiHistory" w="20" h="20" size="20" class="text-[#2a7eb5]" />
             歷史資料查詢
           </h3>
 
           <!-- 搜尋與按鈕 -->
-          <div class="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-end">
+          <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto justify-end">
             <!-- 暫存器過濾 -->
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">暫存器</label>
-              <div class="relative w-64">
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">暫存器</label>
+              <div class="relative flex-1 sm:w-64 min-w-0">
                 <select 
                   v-model="filterRegisterId"
-                  class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
                   @change="handleSearch"
                 >
                   <option value="">全部暫存器</option>
@@ -187,21 +189,35 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
                     {{ reg.name }} ({{ reg.description || '無描述' }})
                   </option>
                 </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+                </div>
               </div>
             </div>
             
-            <BaseButton 
-              @click="handleReset"
-              colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold"
-              :icon="mdiRefresh"
-            >
-              重置
-            </BaseButton>
+            <!-- 操作按鈕 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <BaseButton 
+                @click="handleSearch"
+                colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+                :icon="mdiMagnify"
+              >
+                查詢
+              </BaseButton>
+
+              <BaseButton 
+                @click="handleReset"
+                colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+                :icon="mdiRefresh"
+              >
+                重置
+              </BaseButton>
+            </div>
           </div>
         </div>
 
         <!-- 數據表格 -->
-        <div class="h-[calc(100vh-220px)] min-h-[280px]">
+        <div class="h-[calc(100vh-270px)] sm:h-[calc(100vh-220px)] min-h-[360px]">
           <AgGridView2
             :options="gridOptions"
             :columns="gridColumns"

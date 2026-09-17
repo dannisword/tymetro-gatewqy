@@ -11,7 +11,10 @@ import {
   mdiDownload,
   mdiUpload,
   mdiCog,
-  mdiCloudDownload
+  mdiCloudDownload,
+  mdiMagnify,
+  mdiChevronDown,
+  mdiClose
 } from '@mdi/js';
 import * as XLSX from 'xlsx';
 
@@ -58,10 +61,10 @@ const pagination = ref({
 });
 
 const gridColumns = ref([
-  { headerName: '暫存器名稱', field: 'name', flex: 1.2, minWidth: 150 },
-  { headerName: '車廂代碼', field: 'carVin', flex: 1.2, minWidth: 150 },
-  { headerName: '設備位置', field: 'endPos', flex: 1.2, minWidth: 150 },
-  { headerName: '描述', field: 'description', flex: 1.5, minWidth: 200},
+  { headerName: '暫存器名稱', field: 'name', flex: 1.2, minWidth: 140 },
+  { headerName: '車廂代碼', field: 'carVin', flex: 1.0, minWidth: 110 },
+  { headerName: '設備位置', field: 'endPos', flex: 1.0, minWidth: 110 },
+  { headerName: '描述', field: 'description', flex: 1.4, minWidth: 160 },
   {
     headerName: '暫存器分組',
     field: 'sensorType',
@@ -69,21 +72,21 @@ const gridColumns = ref([
     cellRenderer: (p: any) => {
       return sensorTypeMap.value[p.value] || p.value || '';
     },
-    minWidth: 120
+    minWidth: 110
   },
-  { headerName: '最新讀取值', field: 'value', flex: 1.0, minWidth: 120 },
-  { headerName: '單位', field: 'unit', flex: 0.8, minWidth: 100 },
+  { headerName: '最新讀取值', field: 'value', flex: 0.9, minWidth: 100 },
+  { headerName: '單位', field: 'unit', flex: 0.7, minWidth: 80 },
   {
     headerName: '啟用狀態',
     field: 'isActive',
-    flex: 0.9,
+    flex: 0.8,
     cellRenderer: (p: any) => {
       const active = p.value;
       return active 
         ? `<span class="px-2.5 py-1 rounded-full text-xs font-bold shadow-xs inline-block bg-emerald-50 text-emerald-700 border border-emerald-200/50">已啟用</span>`
         : `<span class="px-2.5 py-1 rounded-full text-xs font-bold shadow-xs inline-block bg-slate-100 text-slate-500 border border-slate-200/50">停用中</span>`;
     },
-    minWidth: 110
+    minWidth: 90
   }
 ]);
 
@@ -182,6 +185,11 @@ onMounted(async () => {
 const handleSearch = () => {
   pagination.value.number = 0;
   fetchRegisters();
+};
+
+const handleClearCarVin = () => {
+  filterCarVin.value = '';
+  handleSearch();
 };
 
 const handleReset = () => {
@@ -465,49 +473,59 @@ const handleDownloadMetadata = async (dialogRef: any) => {
 </script>
 
 <template>
-  <div class="w-full pb-24 sm:pb-8">
+  <div class="w-full pb-20 sm:pb-8">
     
     <!-- Breadcrumb -->
-    <div class="w-full mb-6">
+    <div class="w-full mb-4 sm:mb-6">
       <Breadcrumb :items="breadcrumbItems" />
     </div>
 
     <!-- 內容區 -->
-    <div class="w-full max-w-[1600px] mx-auto space-y-6">
+    <div class="w-full max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
 
       <!-- 資料表與操作 -->
       <div class="space-y-4">
         
         <!-- 表格頂端標題與搜尋條件一排 -->
-        <div class="flex flex-col md:flex-row justify-between items-center gap-4 bg-white rounded-2xl p-4 shadow-xs">
+        <div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3 sm:gap-4 bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs">
           <!-- 表格頂端標題 -->
-          <h3 class="text-slate-800 font-extrabold text-lg flex items-center gap-2 mb-0 shrink-0">
+          <h3 class="text-slate-800 font-extrabold text-base sm:text-lg flex items-center gap-2 mb-0 shrink-0">
             <BaseIcon :path="mdiViewGridOutline" w="20" h="20" size="20" class="text-[#2a7eb5]" />
             暫存器設定列表
           </h3>
 
           <!-- 搜尋與按鈕 -->
-          <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-end">
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">車廂代碼</label>
-              <div class="relative w-45">
+          <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 w-full xl:w-auto justify-end">
+            <!-- 車廂代碼 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">車廂代碼</label>
+              <div class="relative flex-1 sm:w-44 min-w-0">
                 <input 
                   v-model="filterCarVin"
                   type="text"
-                  placeholder="輸入車廂代碼 (如 1101)"
-                  class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all text-sm"
+                  placeholder="輸入代碼 (如 1101)"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all text-sm"
                   @keyup.enter="handleSearch"
-                  @change="handleSearch"
                 />
+                <button
+                  v-if="filterCarVin"
+                  @click="handleClearCarVin"
+                  type="button"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="清除"
+                >
+                  <BaseIcon :path="mdiClose" w="14" h="14" size="14" />
+                </button>
               </div>
             </div>
 
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">暫存器分組</label>
-              <div class="relative w-40">
+            <!-- 暫存器分組 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">暫存器分組</label>
+              <div class="relative flex-1 sm:w-44 min-w-0">
                 <select 
                   v-model="filterSensorType"
-                  class="w-full px-3 py-1.5 pl-8 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none"
+                  class="w-full pl-8 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
                   @change="handleSearch"
                 >
                   <option value="">全部群組</option>
@@ -515,29 +533,44 @@ const handleDownloadMetadata = async (dialogRef: any) => {
                     {{ g.label }}
                   </option>
                 </select>
-                <BaseIcon :path="mdiViewGridOutline" w="16" h="16" size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <BaseIcon :path="mdiViewGridOutline" w="16" h="16" size="16" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+                </div>
               </div>
             </div>
             
-            <BaseButton 
-              @click="handleReset"
-              colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiRefresh"
-            >
-              重置
-            </BaseButton>
-            <BaseButton 
-              @click="openDownloadDialog"
-              colorClass="bg-teal-600 text-white hover:bg-teal-700 shadow-sm px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiCloudDownload"
-            >
-              下載 Metadata
-            </BaseButton>
+            <!-- 按鈕群組 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+              <BaseButton 
+                @click="handleSearch"
+                colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-xs px-3 sm:px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+                :icon="mdiMagnify"
+              >
+                查詢
+              </BaseButton>
+
+              <BaseButton 
+                @click="handleReset"
+                colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-3 sm:px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center"
+                :icon="mdiRefresh"
+              >
+                重置
+              </BaseButton>
+
+              <BaseButton 
+                @click="openDownloadDialog"
+                colorClass="bg-teal-600 text-white hover:bg-teal-700 shadow-sm px-3 sm:px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center whitespace-nowrap"
+                :icon="mdiCloudDownload"
+              >
+                下載 Metadata
+              </BaseButton>
+            </div>
           </div>
         </div>
 
         <!-- 數據表格 -->
-        <div class="h-[calc(100vh-220px)] min-h-[220px]">
+        <div class="h-[calc(100vh-270px)] sm:h-[calc(100vh-220px)] min-h-[360px]">
           <AgGridView2
             :options="gridOptions"
             :columns="gridColumns"
@@ -560,8 +593,8 @@ const handleDownloadMetadata = async (dialogRef: any) => {
       action="確定儲存"
       @on-before-close="handleModalClose"
     >
-      <div class="p-2 space-y-4 max-h-[70vh] overflow-y-auto">
-        <div class="grid grid-cols-2 gap-4">
+      <div class="p-1 sm:p-2 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <!-- 暫存器名稱 -->
           <div class="flex flex-col gap-1.5">
             <label class="text-sm font-bold text-slate-600">
@@ -676,7 +709,7 @@ const handleDownloadMetadata = async (dialogRef: any) => {
           </div>
 
           <!-- 描述 -->
-          <div class="flex flex-col gap-1.5 col-span-2">
+          <div class="flex flex-col gap-1.5 col-span-1 sm:col-span-2">
             <label class="text-sm font-bold text-slate-600">
               描述說明 (選填)
             </label>
@@ -689,7 +722,7 @@ const handleDownloadMetadata = async (dialogRef: any) => {
           </div>
 
           <!-- 是否啟用 -->
-          <div class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2">
+          <div class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-1 sm:col-span-2">
             <input 
               id="formIsActive"
               v-model="formIsActive" 
