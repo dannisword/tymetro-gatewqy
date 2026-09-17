@@ -274,7 +274,7 @@ class SchedulerEngine:
             if not schedule_config or not schedule_config.configContent:
                 err_msg = "SCHEDULE 設定內容為空"
                 logger.warning(f"[SchedulerEngine Task] SYNC_SCHEDULE_CONFIG skipped: {err_msg}.")
-                self._record_audit_log(db, status="fail", detail=f"排程同步失敗: {err_msg}")
+                self._record_audit_log(db, status="failure", detail=f"排程同步失敗: {err_msg}")
                 return
 
             schedules_dict = json.loads(schedule_config.configContent)
@@ -282,7 +282,7 @@ class SchedulerEngine:
             if not matrix:
                 err_msg = f"找不到季節模式 '{active_mode}' 的排程矩陣"
                 logger.warning(f"[SchedulerEngine Task] {err_msg}.")
-                self._record_audit_log(db, status="fail", detail=f"排程同步失敗: {err_msg}")
+                self._record_audit_log(db, status="failure", detail=f"排程同步失敗: {err_msg}")
                 return
 
             # 3. 計算當前時間之 星期 (0-6) 與 小時 (0-23)
@@ -293,7 +293,7 @@ class SchedulerEngine:
             if hour < 0 or hour >= len(matrix) or js_weekday < 0 or js_weekday >= len(matrix[hour]):
                 err_msg = f"時段索引超出範圍: hour={hour}, weekday={js_weekday}"
                 logger.error(f"[SchedulerEngine Task] {err_msg}")
-                self._record_audit_log(db, status="fail", detail=f"排程同步失敗: {err_msg}")
+                self._record_audit_log(db, status="failure", detail=f"排程同步失敗: {err_msg}")
                 return
 
             # 4. 取得當前時段目標溫度設定值
@@ -360,7 +360,7 @@ class SchedulerEngine:
             db.rollback()
             err_msg = str(e)
             logger.error(f"[SchedulerEngine Task] SYNC_SCHEDULE_CONFIG error: {err_msg}")
-            self._record_audit_log(db, status="fail", detail=f"排程同步異常: {err_msg}")
+            self._record_audit_log(db, status="failure", detail=f"排程同步異常: {err_msg}")
         finally:
             db.close()
 

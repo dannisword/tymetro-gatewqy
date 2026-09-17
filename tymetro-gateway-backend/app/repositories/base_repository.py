@@ -103,7 +103,7 @@ class BaseRepository(Generic[ModelType]):
     
     def create(self, obj_in: dict) -> ModelType:
         """新增資料"""
-        if "createdAt" not in obj_in:
+        if hasattr(self.model, "createdAt") and "createdAt" not in obj_in:
             obj_in["createdAt"] = datetime.now(timezone.utc)
 
         db_obj = self.model(**obj_in)
