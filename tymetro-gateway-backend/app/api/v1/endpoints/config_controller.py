@@ -22,31 +22,14 @@ from app.database.init_db import sync_yaml_to_db
 from app.core.config_yaml import reload_gateway_yaml_config
 from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.services.cloud_mqtt_service import cloud_mqtt_service
+from app.core.enums import get_all_enums
 
 router = APIRouter()
 
 @router.get("/enums", response_model=ResponseBase, summary="取得系統列舉選項")
 def get_enums():
     """回傳前端所需的各類列舉選項 (label/value 列表)"""
-    return ResponseUtil.success(data={
-        "sensorType": [
-            {"value": "INITIAL",           "label": "初始值"},
-            {"value": "REAL_TIME",         "label": "即時值"},
-            {"value": "SETTING",           "label": "設定值"},
-            {"value": "CONTROLLER_STATUS", "label": "控制器狀態"},
-        ],
-        "sensorStatus": [
-            {"value": "OPERATING",    "label": "運作中"},
-            {"value": "MAINTENANCE",  "label": "維修中"},
-            {"value": "IDLE",         "label": "閒置"},
-            {"value": "OFFLINE",      "label": "離線"},
-            {"value": "ABNORMAL",     "label": "異常"},
-        ],
-        "endPos": [
-            {"value": 1, "label": "1端"},
-            {"value": 2, "label": "2端"},
-        ],
-    })
+    return ResponseUtil.success(data=get_all_enums())
 
 @router.post("/reload", response_model=ResponseBase, summary="觸發熱重載內存快取與 gateway.yaml 設定並同步資料庫與 MQTT 服務")
 async def reload_config(db: Session = Depends(get_db)):

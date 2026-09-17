@@ -11,7 +11,8 @@ from app.api.v1.endpoints import (
     sensor_map_controller,
     time_period_template_controller,
     schedule_controller,
-    audit_log_controller
+    audit_log_controller,
+    option_controller
 )
 
 api_router = APIRouter()
@@ -29,6 +30,7 @@ api_router.include_router(sensor_map_controller.router, prefix="/sensor-maps", t
 api_router.include_router(time_period_template_controller.router, prefix="/time-period-templates", tags=["時段樣板管理 (Time Period Templates)"])
 api_router.include_router(schedule_controller.router, prefix="/schedules", tags=["排程管理 (Schedules)"])
 api_router.include_router(audit_log_controller.router, prefix="/audit-logs", tags=["審計日誌 (Audit Logs)"])
+api_router.include_router(option_controller.router, prefix="/options", tags=["選項與列舉 (Options)"])
 
 
 
