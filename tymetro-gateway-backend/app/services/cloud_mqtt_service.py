@@ -18,6 +18,7 @@ class CloudMQTTService:
 
         self._queue: asyncio.Queue = asyncio.Queue()
         self._running = False
+        self.is_connected = False
         self._worker_task: Optional[asyncio.Task] = None
         self._sent_commands_cache: Dict[tuple, float] = {}
 
@@ -54,6 +55,7 @@ class CloudMQTTService:
     async def stop(self):
         """停止桃捷雲 MQTT 拋轉"""
         self._running = False
+        self.is_connected = False
         if self._worker_task:
             self._worker_task.cancel()
             try:
@@ -97,6 +99,7 @@ class CloudMQTTService:
                     client_kwargs["password"] = self.password
  
                 async with aiomqtt.Client(**client_kwargs) as client:
+                    self.is_connected = True
                     logger.info(f"[CloudMQTTService] Successfully connected to Cloud MQTT Broker ({self.cloud_host}:{self.cloud_port})!")
                     
                     sub_topic = f"{self.cloud_topic_prefix}/+/+"
@@ -140,6 +143,8 @@ class CloudMQTTService:
             except Exception as e:
                 logger.error(f"[CloudMQTTService] Unexpected error in Cloud MQTT loop: {e}. Reconnecting in {self.reconnect_delay_sec}s...")
                 await asyncio.sleep(self.reconnect_delay_sec)
+            finally:
+                self.is_connected = False
 
     async def _listen_cloud_messages(self, client: aiomqtt.Client):
         """監聽並處理從雲端 MQTT Broker 傳入的訊息"""

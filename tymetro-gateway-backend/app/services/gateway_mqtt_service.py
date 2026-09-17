@@ -23,6 +23,7 @@ class GatewayMQTTService:
         self.reload_config()
 
         self._running = False
+        self.is_connected = False
         self._listener_task: Optional[asyncio.Task] = None
         # 異動存記憶體快取 (Delta Saving Cache): "eq_id:sensor_code" -> last_value
         self._last_sensor_values: Dict[str, float] = {}
@@ -56,6 +57,7 @@ class GatewayMQTTService:
     async def stop(self):
         """停止 MQTT 監聽"""
         self._running = False
+        self.is_connected = False
         if self._listener_task:
             self._listener_task.cancel()
             try:
@@ -77,6 +79,7 @@ class GatewayMQTTService:
             try:
                 logger.info(f"[GatewayMQTTService] Connecting to MQTT Broker at {self.host}:{self.port}...")
                 async with aiomqtt.Client(self.host, port=self.port, clean_session=self.clean_session) as client:
+                    self.is_connected = True
                     logger.info(f"[GatewayMQTTService] Successfully connected to MQTT Broker! Subscribing to '{self.topic_prefix}'...")
                     await client.subscribe(self.topic_prefix)
  
@@ -93,6 +96,8 @@ class GatewayMQTTService:
             except Exception as e:
                 logger.error(f"[GatewayMQTTService] Unexpected error in MQTT loop: {e}. Reconnecting in {reconnect_interval}s...")
                 await asyncio.sleep(reconnect_interval)
+            finally:
+                self.is_connected = False
 
     async def _handle_message(self, message: aiomqtt.Message):
         """解析 MQTT 接收到的 WAGO 標準 JSON 封包並發送至 Queue 與 DeviceManager"""
