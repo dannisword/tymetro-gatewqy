@@ -7,6 +7,7 @@ from app.schemas.sensor_schema import SensorBase, SensorCreate, SensorUpdate, Se
 from app.schemas.outbox_schema import OutboxBase, OutboxCreate, OutboxUpdate, OutboxResponse
 from app.schemas.setting_log_schema import SettingLogCreate, SettingLogUpdate, SettingLogResponse
 from app.schemas.schedule_schema import ScheduleBase, ScheduleCreate, ScheduleUpdate, ScheduleResponse
+from app.schemas.audit_log_schema import AuditLogBase, AuditLogCreate, AuditLogUpdate, AuditLogResponse
 
 __all__ = [
     "AuditBase", "ResponseBase", "ResponseList",
@@ -16,7 +17,8 @@ __all__ = [
     "SensorBase", "SensorCreate", "SensorUpdate", "SensorResponse",
     "OutboxBase", "OutboxCreate", "OutboxUpdate", "OutboxResponse",
     "SettingLogCreate", "SettingLogUpdate", "SettingLogResponse",
-    "ScheduleBase", "ScheduleCreate", "ScheduleUpdate", "ScheduleResponse"
+    "ScheduleBase", "ScheduleCreate", "ScheduleUpdate", "ScheduleResponse",
+    "AuditLogBase", "AuditLogCreate", "AuditLogUpdate", "AuditLogResponse"
 ]
 
 

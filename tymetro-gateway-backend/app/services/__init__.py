@@ -6,8 +6,9 @@ from app.services.car_service import CarService
 from app.services.sensor_service import SensorService
 from app.services.setting_log_service import SettingLogService
 from app.services.schedule_service import ScheduleService
+from app.services.audit_log_service import AuditLogService
 
-__all__ = ["BaseService", "UserService", "ConfigService", "EquipmentService", "CarService", "SensorService", "SettingLogService", "ScheduleService"]
+__all__ = ["BaseService", "UserService", "ConfigService", "EquipmentService", "CarService", "SensorService", "SettingLogService", "ScheduleService", "AuditLogService"]
 
 
 

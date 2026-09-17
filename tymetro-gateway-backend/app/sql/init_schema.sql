@@ -172,3 +172,20 @@ INSERT INTO `schedules` (
   `description`, `created_at`, `created_by`, `updated_at`, `updated_by`
 ) VALUES
 (1, '每小時同步資料', 'hourly', 'SYNC_SCHEDULE_CONFIG', NULL, 0, NULL, NULL, NULL, 0, '同步時段溫度設定', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0);
+
+-- ------------------------------------------------------------
+-- 8. Table structure for audit_logs
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `audit_logs` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `audit_category` VARCHAR(50) NOT NULL,
+  `action` VARCHAR(100) NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'success',
+  `operator` VARCHAR(100) DEFAULT NULL,
+  `ip_address` VARCHAR(50) DEFAULT NULL,
+  `detail` VARCHAR(1000) DEFAULT NULL,
+  `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS `ix_audit_logs_timestamp` ON `audit_logs` (`timestamp`);
+CREATE INDEX IF NOT EXISTS `ix_audit_logs_audit_category` ON `audit_logs` (`audit_category`);

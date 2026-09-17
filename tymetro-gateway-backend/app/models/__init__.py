@@ -8,6 +8,7 @@ from app.models.sensor_history_model import SensorHistory
 from app.models.outbox_model import Outbox
 from app.models.setting_log_model import SettingLog
 from app.models.schedule_model import Schedule
+from app.models.audit_log_model import AuditLog
 
-__all__ = ["AuditModel", "IdType", "User", "SystemConfig", "Equipment", "Car", "Sensor", "SensorHistory", "Outbox", "SettingLog", "Schedule"]
+__all__ = ["AuditModel", "IdType", "User", "SystemConfig", "Equipment", "Car", "Sensor", "SensorHistory", "Outbox", "SettingLog", "Schedule", "AuditLog"]
 

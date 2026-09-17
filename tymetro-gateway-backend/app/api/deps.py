@@ -11,6 +11,7 @@ from app.services.car_service import CarService
 from app.services.sensor_service import SensorService
 from app.services.setting_log_service import SettingLogService
 from app.services.schedule_service import ScheduleService
+from app.services.audit_log_service import AuditLogService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/users/login/access-token")
 
@@ -34,6 +35,9 @@ def get_setting_log_service(db: Session = Depends(get_db)) -> SettingLogService:
 
 def get_schedule_service(db: Session = Depends(get_db)) -> ScheduleService:
     return ScheduleService(db)
+
+def get_audit_log_service(db: Session = Depends(get_db)) -> AuditLogService:
+    return AuditLogService(db)
 
 
 
