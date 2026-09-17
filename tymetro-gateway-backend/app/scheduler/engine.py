@@ -24,6 +24,7 @@ from app.models.schedule_model import Schedule
 from app.models.config_model import Config
 from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
+from app.services.audit_log_service import AuditLogService
 from app.utils.datetime_util import get_active_season_by_date, get_local_now, LOCAL_TZ
 
 
@@ -221,6 +222,34 @@ class SchedulerEngine:
             db.close()
 
     # ──────────────────────────────────────────────
+    # 審計日誌輔助方法
+    # ──────────────────────────────────────────────
+
+    def _record_audit_log(
+        self,
+        db,
+        status: str,
+        detail: str,
+        action: str = "sync_schedule_config",
+        audit_category: str = "schedule",
+        operator: str = "system_scheduler",
+        ip_address: str = "127.0.0.1"
+    ):
+        """記錄排程引擎審計日誌"""
+        try:
+            audit_service = AuditLogService(db)
+            audit_service.log(
+                auditCategory=audit_category,
+                action=action,
+                status=status,
+                operator=operator,
+                ipAddress=ip_address,
+                detail=detail[:1000] if detail else None
+            )
+        except Exception as err:
+            logger.error(f"[SchedulerEngine] Failed to write audit log: {err}")
+
+    # ──────────────────────────────────────────────
     # 每小時核心任務：SYNC_SCHEDULE_CONFIG
     # ──────────────────────────────────────────────
 
@@ -243,13 +272,17 @@ class SchedulerEngine:
             # 2. 取得時段排程矩陣 (SCHEDULE)
             schedule_config = db.query(Config).filter(Config.configType == "SCHEDULE").first()
             if not schedule_config or not schedule_config.configContent:
-                logger.warning("[SchedulerEngine Task] SYNC_SCHEDULE_CONFIG skipped: SCHEDULE config is empty.")
+                err_msg = "SCHEDULE 設定內容為空"
+                logger.warning(f"[SchedulerEngine Task] SYNC_SCHEDULE_CONFIG skipped: {err_msg}.")
+                self._record_audit_log(db, status="fail", detail=f"排程同步失敗: {err_msg}")
                 return
 
             schedules_dict = json.loads(schedule_config.configContent)
             matrix = schedules_dict.get(active_mode)
             if not matrix:
-                logger.warning(f"[SchedulerEngine Task] Mode '{active_mode}' matrix not found in SCHEDULE config.")
+                err_msg = f"找不到季節模式 '{active_mode}' 的排程矩陣"
+                logger.warning(f"[SchedulerEngine Task] {err_msg}.")
+                self._record_audit_log(db, status="fail", detail=f"排程同步失敗: {err_msg}")
                 return
 
             # 3. 計算當前時間之 星期 (0-6) 與 小時 (0-23)
@@ -258,7 +291,9 @@ class SchedulerEngine:
             js_weekday = (py_weekday + 1) % 7  # 0=Sun, 1=Mon, ..., 6=Sat
 
             if hour < 0 or hour >= len(matrix) or js_weekday < 0 or js_weekday >= len(matrix[hour]):
-                logger.error(f"[SchedulerEngine Task] Index out of range: hour={hour}, weekday={js_weekday}")
+                err_msg = f"時段索引超出範圍: hour={hour}, weekday={js_weekday}"
+                logger.error(f"[SchedulerEngine Task] {err_msg}")
+                self._record_audit_log(db, status="fail", detail=f"排程同步失敗: {err_msg}")
                 return
 
             # 4. 取得當前時段目標溫度設定值
@@ -279,8 +314,6 @@ class SchedulerEngine:
                 s.sensorValue = target_val  # type: ignore
                 updated_count += 1
 
-
-
             # 6. 寫入一筆設定歷程紀錄 (setting_logs)
             log_entry = SettingLog(
                 settingType="排程控制 (Hourly)",
@@ -299,9 +332,16 @@ class SchedulerEngine:
             db.add(log_entry)
             db.commit()
 
+            # 7. 寫入審計日誌 (audit_logs)
+            self._record_audit_log(
+                db,
+                status="success",
+                detail=f"排程同步成功: 季節模式={active_mode}, 星期={js_weekday}, 時={hour}, 目標溫度={target_val}°C, 更新感測器數量={updated_count}"
+            )
+
             logger.info(f"[SchedulerEngine Task] Successfully updated {updated_count} sensor(s) to target temp {target_val}°C.")
 
-            # 7. 若 Local MQTT 服務啟用，廣播排程設定異動通知
+            # 8. 若 Local MQTT 服務啟用，廣播排程設定異動通知
             try:
                 from app.services.gateway_mqtt_service import gateway_mqtt_service
                 notify_topic = "TYMC/AIR/SCHEDULE/ACTIVE"
@@ -318,7 +358,9 @@ class SchedulerEngine:
 
         except Exception as e:
             db.rollback()
-            logger.error(f"[SchedulerEngine Task] SYNC_SCHEDULE_CONFIG error: {e}")
+            err_msg = str(e)
+            logger.error(f"[SchedulerEngine Task] SYNC_SCHEDULE_CONFIG error: {err_msg}")
+            self._record_audit_log(db, status="fail", detail=f"排程同步異常: {err_msg}")
         finally:
             db.close()
 
