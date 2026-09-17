@@ -59,7 +59,7 @@ const pagination = ref({
 
 const gridColumns = ref([
   { headerName: '暫存器名稱', field: 'name', flex: 1.2, minWidth: 150 },
-  { headerName: '車輛代碼', field: 'carVin', flex: 1.2, minWidth: 150 },
+  { headerName: '車廂代碼', field: 'carVin', flex: 1.2, minWidth: 150 },
   { headerName: '設備位置', field: 'endPos', flex: 1.2, minWidth: 150 },
   { headerName: '描述', field: 'description', flex: 1.5, minWidth: 200},
   {
@@ -84,15 +84,6 @@ const gridColumns = ref([
         : `<span class="px-2.5 py-1 rounded-full text-xs font-bold shadow-xs inline-block bg-slate-100 text-slate-500 border border-slate-200/50">停用中</span>`;
     },
     minWidth: 110
-  },
-  {
-    headerName: '操作',
-    maxWidth: 80,
-    field: 'actions',
-    cellRenderer: 'AGActionButtonRenderer',
-    actionButtons: [
-      { label: '編輯', event: 'edit', icon: 'mdiPencil', iconOnly: true },
-    ]
   }
 ]);
 
@@ -498,12 +489,12 @@ const handleDownloadMetadata = async (dialogRef: any) => {
           <!-- 搜尋與按鈕 -->
           <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-end">
             <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">車輛代碼</label>
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">車廂代碼</label>
               <div class="relative w-45">
                 <input 
                   v-model="filterCarVin"
                   type="text"
-                  placeholder="輸入車代碼 (如 AC-105-1)"
+                  placeholder="輸入車廂代碼 (如 1101)"
                   class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all text-sm"
                   @keyup.enter="handleSearch"
                   @change="handleSearch"
@@ -535,27 +526,6 @@ const handleDownloadMetadata = async (dialogRef: any) => {
             >
               重置
             </BaseButton>
-            <!-- <BaseButton 
-              @click="handleExport"
-              colorClass="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiDownload"
-            >
-              匯出表格
-            </BaseButton> -->
-            <BaseButton 
-              @click="handleWriteInitialValues"
-              colorClass="bg-amber-600 text-white hover:bg-amber-700 shadow-sm px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiUpload"
-            >
-              寫入 PLC 初始值
-            </BaseButton>
-            <!-- <BaseButton 
-              @click="handleWriteSettingValues"
-              colorClass="bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm px-4 py-1.5 rounded-lg text-sm"
-              :icon="mdiCog"
-            >
-              寫入 PLC 設定值
-            </BaseButton> -->
             <BaseButton 
               @click="openDownloadDialog"
               colorClass="bg-teal-600 text-white hover:bg-teal-700 shadow-sm px-4 py-1.5 rounded-lg text-sm"
