@@ -69,7 +69,8 @@ def update_schedule(
 ):
     schedule = service.update(schedule_id, request)
     scheduler_engine.reload_schedule(schedule_id)
-    return ResponseUtil.success(data=schedule, message="Schedule updated successfully")
+    refreshed = service.get_by_id(schedule_id)
+    return ResponseUtil.success(data=refreshed, message="Schedule updated successfully")
 
 @router.delete("/{schedule_id}", response_model=ResponseBase, summary="刪除排程")
 def delete_schedule(

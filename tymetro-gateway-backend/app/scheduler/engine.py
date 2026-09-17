@@ -51,9 +51,9 @@ class SchedulerEngine:
             loop = asyncio.get_event_loop()
 
         self._scheduler = AsyncIOScheduler(event_loop=loop, timezone=LOCAL_TZ)
-        self.reload_all()
         self._scheduler.start()
         logger.info("[SchedulerEngine] APScheduler started successfully.")
+        self.reload_all()
 
     def shutdown(self):
         """在應用程式關閉時安全停止"""
@@ -83,7 +83,7 @@ class SchedulerEngine:
                 # 僅處理每小時排程 (hourly)
                 stype = (row.scheduleType or "").strip().lower()
                 if stype == "hourly":
-                    self._add_job(row)
+                    self._add_job(row, db)
                     logger.info(f"[SchedulerEngine] Reloaded hourly schedule [{row.id}] '{row.name}'.")
                 else:
                     logger.info(f"[SchedulerEngine] Schedule [{row.id}] type '{row.scheduleType}' is not hourly, skipped.")
@@ -113,7 +113,7 @@ class SchedulerEngine:
             ).all()
 
             for row in rows:
-                self._add_job(row)
+                self._add_job(row, db)
             logger.info(f"[SchedulerEngine] Loaded {len(rows)} active hourly schedule(s) from DB.")
         except Exception as e:
             logger.error(f"[SchedulerEngine] Failed to load hourly schedules from DB: {e}")
@@ -123,7 +123,7 @@ class SchedulerEngine:
     def _job_id(self, schedule_id: int) -> str:
         return f"{self._job_prefix}{schedule_id}"
 
-    def _add_job(self, row: Schedule):
+    def _add_job(self, row: Schedule, db: Optional[Any] = None):
         """依 hourly 設定建立 trigger 並加入排程器"""
         if not self._scheduler:
             return
@@ -135,7 +135,7 @@ class SchedulerEngine:
             logger.warning(f"[SchedulerEngine] Schedule [{schedule_id}] '{row.name}' trigger build failed — skipped.")
             return
 
-        self._scheduler.add_job(
+        job = self._scheduler.add_job(
             func=self._execute_schedule,
             trigger=trigger,
             args=[schedule_id],
@@ -144,6 +144,11 @@ class SchedulerEngine:
             replace_existing=True,
             misfire_grace_time=60,
         )
+        next_run_time = getattr(job, "next_run_time", None) if job else None
+        if next_run_time and db:
+            row.nextRunAt = next_run_time.replace(tzinfo=None)  # type: ignore
+            db.commit()
+
         logger.info(
             f"[SchedulerEngine] Scheduled [{schedule_id}] '{row.name}' | type={row.scheduleType} | trigger={trigger}"
         )
@@ -188,8 +193,9 @@ class SchedulerEngine:
 
             if self._scheduler:
                 job: Optional[Job] = self._scheduler.get_job(self._job_id(schedule_id))
-                if job and job.next_run_time:
-                    row.nextRunAt = job.next_run_time.replace(tzinfo=None)  # type: ignore
+                next_run_time = getattr(job, "next_run_time", None) if job else None
+                if next_run_time:
+                    row.nextRunAt = next_run_time.replace(tzinfo=None)  # type: ignore
 
 
             db.commit()

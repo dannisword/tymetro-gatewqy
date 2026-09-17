@@ -32,3 +32,12 @@ export enum CompressorHealth {
   Abnormal = "異常",
 }
 
+export enum AuditCategory {
+  Schedule = "schedule",
+  User = "user",
+  Auth = "auth",
+  System = "system",
+  Modbus = "modbus",
+  Enum = "enum",
+}
+

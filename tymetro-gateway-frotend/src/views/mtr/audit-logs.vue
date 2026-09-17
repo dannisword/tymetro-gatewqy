@@ -6,12 +6,14 @@ import BaseIcon from '@/components/BaseIcon.vue';
 import { useAlert } from '@/composables/TLAlter';
 import {
   mdiRefresh,
-  mdiShieldCheckOutline
+  mdiShieldCheckOutline,
+  mdiMagnify,
+  mdiClose
 } from '@mdi/js';
 
 import AgGridView2 from '@/components/AgGridView2.vue';
 import { GridOptions } from 'ag-grid-community';
-import { getAuditLogs } from '@/utils/api';
+import { getAuditLogs, getEnums } from '@/utils/api';
 
 const { TLError } = useAlert();
 
@@ -20,6 +22,9 @@ const breadcrumbItems = [
   { label: '功能選單', to: '/mtr/tile-menus' },
   { label: '審計日誌' }
 ];
+
+const categoryOptions = ref<{ value: string; label: string }[]>([]);
+const categoryMap = ref<Record<string, string>>({});
 
 const gridOptions: GridOptions = {
   rowSelection: 'single',
@@ -49,14 +54,7 @@ const gridColumns = ref([
     flex: 0.9,
     minWidth: 100,
     cellRenderer: (p: any) => {
-      const categoryMap: Record<string, string> = {
-        schedule: '系統排程',
-        user: '用戶管理',
-        auth: '身份驗證',
-        system: '系統日誌',
-        modbus: 'Modbus'
-      };
-      const label = categoryMap[p.value] || p.value || '';
+      const label = categoryMap.value[p.value] || p.value || '';
       return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">${label}</span>`;
     }
   },
@@ -142,13 +140,35 @@ const fetchLogs = async () => {
   }
 };
 
+const loadEnums = async () => {
+  try {
+    const enumsRes = await getEnums();
+    if (enumsRes?.success && enumsRes.data) {
+      if (enumsRes.data.auditCategory) {
+        categoryOptions.value = enumsRes.data.auditCategory;
+      }
+      if (enumsRes.data.categoryMap) {
+        categoryMap.value = enumsRes.data.categoryMap;
+      }
+    }
+  } catch (error) {
+    console.error('Fetch enums error:', error);
+  }
+};
+
 onMounted(async () => {
+  await loadEnums();
   await fetchLogs();
 });
 
 const handleSearch = () => {
   pagination.value.number = 0;
   fetchLogs();
+};
+
+const handleClearOperator = () => {
+  filterOperator.value = '';
+  handleSearch();
 };
 
 const handleReset = () => {
@@ -200,11 +220,9 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
                   @change="handleSearch"
                 >
                   <option value="">全部</option>
-                  <option value="schedule">系統排程</option>
-                  <option value="user">用戶管理</option>
-                  <option value="auth">身份驗證</option>
-                  <option value="system">系統日誌</option>
-                  <option value="modbus">Modbus</option>
+                  <option v-for="cat in categoryOptions" :key="cat.value" :value="cat.value">
+                    {{ cat.label }}
+                  </option>
                 </select>
               </div>
             </div>
@@ -228,15 +246,34 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
             <!-- 操作人過濾 -->
             <div class="flex items-center gap-2">
               <label class="text-xs font-bold text-slate-500 shrink-0 mb-0">操作人</label>
-              <input 
-                v-model="filterOperator"
-                type="text"
-                placeholder="輸入操作人關鍵字"
-                class="w-40 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none transition-all"
-                @input="handleSearch"
-              />
+              <div class="relative w-44">
+                <input 
+                  v-model="filterOperator"
+                  type="text"
+                  placeholder="輸入操作人關鍵字"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none transition-all"
+                  @keyup.enter="handleSearch"
+                />
+                <button
+                  v-if="filterOperator"
+                  @click="handleClearOperator"
+                  type="button"
+                  class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="清除"
+                >
+                  <BaseIcon :path="mdiClose" w="14" h="14" size="14" />
+                </button>
+              </div>
             </div>
             
+            <BaseButton 
+              @click="handleSearch"
+              colorClass="bg-[#2a7eb5] text-white hover:bg-[#206796] shadow-xs px-4 py-1.5 rounded-lg text-sm"
+              :icon="mdiMagnify"
+            >
+              查詢
+            </BaseButton>
+
             <BaseButton 
               @click="handleReset"
               colorClass="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 shadow-xs px-4 py-1.5 rounded-lg text-sm"

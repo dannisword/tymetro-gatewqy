@@ -29,6 +29,11 @@ class LabeledEnum(Enum):
         """轉換為前端通用選單格式 [{"value": ..., "label": ...}]"""
         return [{"value": item.value, "label": item.label} for item in cls]
 
+    @classmethod
+    def to_map(cls) -> Dict[str, str]:
+        """轉換為前端字典對應格式 {value: label}"""
+        return {str(item.value): item.label for item in cls}
+
 
 class SensorType(LabeledEnum):
     """感測器類型"""
@@ -53,10 +58,21 @@ class EndPos(LabeledEnum):
     TWO = (2, "2端")
 
 
-def get_all_enums() -> Dict[str, List[Dict[str, Any]]]:
-    """回傳系統所有列舉選項"""
+class AuditCategory(LabeledEnum):
+    """審計類別"""
+    SCHEDULE = ("schedule", "系統排程")
+    USER = ("user", "用戶管理")
+    AUTH = ("auth", "身份驗證")
+    SYSTEM = ("system", "系統日誌")
+
+def get_all_enums() -> Dict[str, Any]:
+    """回傳系統所有列舉選項與對應表"""
     return {
         "sensorType": SensorType.to_options(),
         "sensorStatus": SensorStatus.to_options(),
         "endPos": EndPos.to_options(),
+        "auditCategory": AuditCategory.to_options(),
+        "categoryMap": AuditCategory.to_map(),
+        "auditCategoryMap": AuditCategory.to_map(),
     }
+

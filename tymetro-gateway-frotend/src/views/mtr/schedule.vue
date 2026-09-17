@@ -19,17 +19,7 @@ import {
   mdiCalendarSync,
   mdiPlus,
   mdiPencilOutline,
-  mdiDeleteOutline,
-  mdiClockOutline,
-  mdiCheckCircleOutline,
-  mdiCloseCircleOutline,
-  mdiMagnify,
   mdiClose,
-  mdiAlertCircleOutline,
-  mdiInformationOutline,
-  mdiPlayCircleOutline,
-  mdiToggleSwitch,
-  mdiToggleSwitchOff,
   mdiRefresh
 } from '@mdi/js';
 
@@ -56,7 +46,26 @@ interface ScheduleItem {
   description?: string;
   lastRunAt?: string;
   nextRunAt?: string;
+  ruleDetail?: string;
 }
+
+// Helper to format scheduling detail string
+const getScheduleDetail = (item: ScheduleItem) => {
+  switch (item.scheduleType) {
+    case 'hourly':
+      return `每小時的第 ${item.minuteOfHour ?? 0} 分鐘`;
+    case 'minutely':
+      return `每分鐘的第 ${item.secondOfMinute ?? 0} 秒`;
+    case 'fixed_time':
+      return `每日固定於 ${item.fixedTime}`;
+    case 'cycle_time':
+      return `每隔 ${item.cycleTime ?? 60} 秒`;
+    case 'cron':
+      return `Cron: ${item.cronExpression}`;
+    default:
+      return '未設定';
+  }
+};
 
 const taskOptions = [
   { value: 'SYNC_DEVICE', label: '設備狀態同步 (SYNC_DEVICE)' },
@@ -82,7 +91,10 @@ const fetchSchedules = async () => {
     const res = await getSchedulesList(params);
     if (res && res.data) {
       const dataList = Array.isArray(res.data) ? res.data : (res.data.source || res.data.records || []);
-      schedules.value = dataList;
+      schedules.value = dataList.map((item: ScheduleItem) => ({
+        ...item,
+        ruleDetail: getScheduleDetail(item)
+      }));
     }
   } catch (error: any) {
     console.error('Fetch schedules error:', error);
@@ -107,7 +119,8 @@ const filteredSchedules = computed(() => {
   return schedules.value.filter(s => {
     const matchesKeyword = !searchKeyword.value.trim() || 
       s.name.toLowerCase().includes(searchKeyword.value.toLowerCase()) || 
-      (s.description && s.description.toLowerCase().includes(searchKeyword.value.toLowerCase()));
+      (s.description && s.description.toLowerCase().includes(searchKeyword.value.toLowerCase())) ||
+      (s.ruleDetail && s.ruleDetail.toLowerCase().includes(searchKeyword.value.toLowerCase()));
     return matchesKeyword;
   });
 });
@@ -223,28 +236,21 @@ const saveSchedule = async () => {
     scheduleType: formScheduleType.value,
     taskCode: formTaskCode.value || null,
     isActive: formIsActive.value,
-    description: formDescription.value.trim() || null
+    description: formDescription.value.trim() || null,
+    cronExpression: formScheduleType.value === 'cron' ? formCronExpression.value.trim() : null,
+    minuteOfHour: formScheduleType.value === 'hourly' ? Number(formMinuteOfHour.value) : null,
+    secondOfMinute: formScheduleType.value === 'minutely' ? Number(formSecondOfMinute.value) : null,
+    fixedTime: formScheduleType.value === 'fixed_time' ? formFixedTime.value.trim() : null,
+    cycleTime: formScheduleType.value === 'cycle_time' ? Number(formCycleTime.value) : null
   };
 
-  // Assign parameters based on type
-  if (formScheduleType.value === 'cron') {
-    if (!formCronExpression.value.trim()) {
-      TLError('請輸入 Cron 表達式');
-      return;
-    }
-    payload.cronExpression = formCronExpression.value.trim();
-  } else if (formScheduleType.value === 'hourly') {
-    payload.minuteOfHour = Number(formMinuteOfHour.value);
-  } else if (formScheduleType.value === 'minutely') {
-    payload.secondOfMinute = Number(formSecondOfMinute.value);
-  } else if (formScheduleType.value === 'fixed_time') {
-    if (!formFixedTime.value.trim()) {
-      TLError('請輸入固定執行時間');
-      return;
-    }
-    payload.fixedTime = formFixedTime.value.trim();
-  } else if (formScheduleType.value === 'cycle_time') {
-    payload.cycleTime = Number(formCycleTime.value);
+  if (formScheduleType.value === 'cron' && !payload.cronExpression) {
+    TLError('請輸入 Cron 表達式');
+    return;
+  }
+  if (formScheduleType.value === 'fixed_time' && !payload.fixedTime) {
+    TLError('請輸入固定執行時間');
+    return;
   }
 
   try {
@@ -277,23 +283,6 @@ const onDelete = async (item: ScheduleItem) => {
   }
 };
 
-// Helper to format scheduling detail string
-const getScheduleDetail = (item: ScheduleItem) => {
-  switch (item.scheduleType) {
-    case 'hourly':
-      return `每小時的第 ${item.minuteOfHour ?? 0} 分鐘`;
-    case 'minutely':
-      return `每分鐘的第 ${item.secondOfMinute ?? 0} 秒`;
-    case 'fixed_time':
-      return `每日固定於 ${item.fixedTime}`;
-    case 'cycle_time':
-      return `每隔 ${item.cycleTime ?? 60} 秒`;
-    case 'cron':
-      return `Cron: ${item.cronExpression}`;
-    default:
-      return '未設定';
-  }
-};
 
 const getTypeLabel = (type: string) => {
   const match = scheduleTypes.value.find(t => t.value === type);
@@ -350,9 +339,10 @@ const gridColumns = ref([
     field: 'name', 
     flex: 1.5,
     minWidth: 200,
+    valueGetter: (p: any) => p.data ? `${p.data.name}|${p.data.description || ''}` : '',
     cellRenderer: (p: any) => {
-      const name = p.data.name;
-      const desc = p.data.description || '無描述';
+      const name = p.data?.name;
+      const desc = p.data?.description || '無描述';
       return `
         <div class="flex flex-col justify-center h-full py-2">
           <div class="font-bold text-slate-800 leading-tight">${name}</div>
@@ -402,10 +392,11 @@ const gridColumns = ref([
     field: 'ruleDetail',
     flex: 1.2,
     minWidth: 180,
+    valueGetter: (p: any) => p.data?.ruleDetail || (p.data ? getScheduleDetail(p.data) : ''),
     cellRenderer: (p: any) => {
       return `
         <div class="flex items-center h-full font-semibold text-slate-600">
-          ${getScheduleDetail(p.data)}
+          ${p.value || (p.data ? getScheduleDetail(p.data) : '')}
         </div>
       `;
     }
