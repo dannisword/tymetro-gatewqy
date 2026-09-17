@@ -10,6 +10,7 @@ from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
 from app.models.schedule_model import Schedule
 from app.models.audit_log_model import AuditLog
+from app.models.sensor_history_model import SensorHistory
 
 from app.core.logger import logger
 from datetime import datetime, timezone
@@ -20,15 +21,24 @@ def create_tables():
     """初始化建立所有 SQLAlchemy ORM 資料表 (若尚不存在)"""
     Base.metadata.create_all(bind=engine)
     
-    # 檢查並動態遷移 configs.version 欄位 (防止舊有 SQLite 資料庫因為缺少此欄位出錯)
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
+
+    # 檢查並動態遷移 configs.version 欄位 (防止舊有 SQLite 資料庫因為缺少此欄位出錯)
     if "configs" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("configs")]
         if "version" not in columns:
             logger.info("Adding missing column 'version' to 'configs' table...")
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE configs ADD COLUMN version VARCHAR(50) DEFAULT '1.0.0'"))
+
+    # 建立/確保感測器歷史紀錄之複合降序索引存在 (顯著加速 PFC200 查詢)
+    if "sensor_histories" in inspector.get_table_names():
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_recorded_at_desc ON sensor_histories (recorded_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_time ON sensor_histories (sensor_code, recorded_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_car_time ON sensor_histories (car_vin, recorded_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_equip_time ON sensor_histories (equipment_name, recorded_at DESC)"))
                 
     logger.info("Database tables verified/created successfully via ORM Metadata.")
 

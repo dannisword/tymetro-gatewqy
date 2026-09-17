@@ -117,6 +117,24 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
             db.rollback()
             logger.error(f"Error clearing sensor history records: {e}")
             return 0
+    def delete_records_older_than(self, days: int) -> int:
+        """刪除超過指定天數的感測器歷史紀錄，防止 SQLite 檔案過度膨脹並執行資料庫優化"""
+        from datetime import timedelta
+        from sqlalchemy import text
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        db = self.db if self._external_db else SessionLocal()
+        try:
+            num_deleted = db.query(SensorHistory).filter(SensorHistory.recordedAt < cutoff_date).delete(synchronize_session=False)
+            db.commit()
+            if num_deleted > 0:
+                logger.info(f"[SensorHistoryRepository] Cleaned up {num_deleted} expired sensor history records older than {days} days.")
+                # 執行 SQLite 查詢優化器更新與釋放空間提示
+                db.execute(text("PRAGMA optimize;"))
+            return num_deleted
+        except Exception as e:
+            db.rollback()
+            logger.error(f"[SensorHistoryRepository] Error cleaning up expired sensor histories: {e}")
+            return 0
         finally:
             if not self._external_db:
                 db.close()

@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, func
+from sqlalchemy import Column, Integer, String, Float, DateTime, func, Index
 from app.models.base import IdType
 from app.database.session import Base
 
@@ -18,3 +18,10 @@ class SensorHistory(Base):
     sensorName = Column("sensor_name", String(100), nullable=True, comment="感測器名稱")
     sensorUnit = Column("sensor_unit", String(10), nullable=True, comment="感測器單位")
     equipmentName = Column("equipment_name", String(100), nullable=True, comment="設備名稱")
+
+    __table_args__ = (
+        Index("ix_sensor_histories_recorded_at_desc", recordedAt.desc()),
+        Index("ix_sensor_histories_code_time", sensorCode, recordedAt.desc()),
+        Index("ix_sensor_histories_car_time", carVin, recordedAt.desc()),
+        Index("ix_sensor_histories_equip_time", equipmentName, recordedAt.desc()),
+    )

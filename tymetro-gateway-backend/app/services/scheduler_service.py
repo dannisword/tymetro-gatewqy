@@ -3,7 +3,9 @@ import shutil
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.logger import logger
+from app.core.config import settings
 from app.services.equipment_manager import equipment_manager
+from app.repositories.sensor_history_repository import sensor_history_repo
 
 class SchedulerService:
     """
@@ -11,6 +13,7 @@ class SchedulerService:
     - 每 1 分鐘：檢查 8 台 PFC200 設備心跳與在線狀態
     - 每日 03:00：自動備份 SQLite gateway.db 資料庫
     - 每日 03:10：自動清理 10 天前的舊日誌檔案
+    - 每日 03:20：自動清理過期感測器歷史資料 (防止 SQLite 膨脹)
     """
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
@@ -46,8 +49,18 @@ class SchedulerService:
             replace_existing=True
         )
 
+        # Job 4: 每日 03:20 執行過期感測器歷史資料清理
+        self.scheduler.add_job(
+            self.job_cleanup_old_sensor_histories,
+            'cron',
+            hour=3,
+            minute=20,
+            id='cleanup_old_sensor_histories',
+            replace_existing=True
+        )
+
         self.scheduler.start()
-        logger.info("[SchedulerService] APScheduler started successfully with Heartbeat Check, Daily Backup & Log Cleanup Jobs.")
+        logger.info("[SchedulerService] APScheduler started successfully with Heartbeat Check, Daily Backup, Log Cleanup & Sensor History Retention Jobs.")
 
     def stop(self):
         """停止排程器"""
@@ -140,5 +153,21 @@ class SchedulerService:
                 logger.debug("[SchedulerService] Log cleanup: No expired log files found.")
         except Exception as e:
             logger.error(f"[SchedulerService] Error cleaning up logs: {e}")
+
+    async def job_cleanup_old_sensor_histories(self):
+        """每日自動清理過期的感測器歷史紀錄 (以 SENSOR_HISTORY_RETENTION_DAYS 為基準，預設 30 天)"""
+        try:
+            import asyncio
+            retention_days = settings.SENSOR_HISTORY_RETENTION_DAYS
+            loop = asyncio.get_running_loop()
+            deleted = await loop.run_in_executor(
+                None, 
+                sensor_history_repo.delete_records_older_than, 
+                retention_days
+            )
+            if deleted > 0:
+                logger.info(f"[SchedulerService] Expired sensor history cleanup completed: {deleted} records removed.")
+        except Exception as e:
+            logger.error(f"[SchedulerService] Error during expired sensor history cleanup: {e}")
 
 scheduler_service = SchedulerService()
