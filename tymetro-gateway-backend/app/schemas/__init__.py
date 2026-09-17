@@ -9,12 +9,15 @@ from app.schemas.setting_log_schema import SettingLogCreate, SettingLogUpdate, S
 from app.schemas.schedule_schema import ScheduleBase, ScheduleCreate, ScheduleUpdate, ScheduleResponse
 from app.schemas.audit_log_schema import AuditLogBase, AuditLogCreate, AuditLogUpdate, AuditLogResponse
 
+from app.schemas.sensor_history_schema import SensorHistoryResponse
+
 __all__ = [
     "AuditBase", "ResponseBase", "ResponseList",
     "UserBase", "UserCreate", "UserResponse",
     "EquipmentBase", "EquipmentCreate", "EquipmentUpdate", "EquipmentResponse",
     "CarBase", "CarCreate", "CarUpdate", "CarResponse",
     "SensorBase", "SensorCreate", "SensorUpdate", "SensorResponse",
+    "SensorHistoryResponse",
     "OutboxBase", "OutboxCreate", "OutboxUpdate", "OutboxResponse",
     "SettingLogCreate", "SettingLogUpdate", "SettingLogResponse",
     "ScheduleBase", "ScheduleCreate", "ScheduleUpdate", "ScheduleResponse",

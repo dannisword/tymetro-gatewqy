@@ -57,11 +57,16 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
         sensor_code: Optional[str] = None,
         car_vin: Optional[str] = None,
         equipment_name: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
-    ) -> List[SensorHistory]:
-        """查詢感測器歷史數據 (支援分頁與多條件篩選)"""
-        db = self.db if self._external_db else SessionLocal()
+        page_index: int = 0,
+        page_size: int = 50,
+        property_name: str = "recordedAt",
+        order: str = "DESC",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        db_session: Optional[Session] = None
+    ) -> tuple[List[SensorHistory], int]:
+        """查詢感測器歷史數據 (支援分頁、排序與多條件篩選，回傳 (records, total))"""
+        db = db_session or (self.db if self._external_db else SessionLocal())
         try:
             query = db.query(SensorHistory)
             if sensor_code:
@@ -71,12 +76,33 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
             if equipment_name:
                 query = query.filter(SensorHistory.equipmentName == equipment_name)
 
-            return query.order_by(SensorHistory.recordedAt.desc()).offset(offset).limit(limit).all()
+            total = query.count()
+
+            # 排序處理
+            if property_name and hasattr(SensorHistory, property_name):
+                col = getattr(SensorHistory, property_name)
+                if order.upper() == "ASC":
+                    query = query.order_by(col.asc())
+                else:
+                    query = query.order_by(col.desc())
+            else:
+                query = query.order_by(SensorHistory.recordedAt.desc())
+
+            # 分頁處理
+            if offset is not None or limit is not None:
+                calc_offset = offset or 0
+                calc_limit = limit or page_size
+            else:
+                calc_offset = page_index * page_size
+                calc_limit = page_size
+
+            records = query.offset(calc_offset).limit(calc_limit).all()
+            return records, total
         except Exception as e:
             logger.error(f"Error fetching sensor history: {e}")
-            return []
+            return [], 0
         finally:
-            if not self._external_db:
+            if not db_session and not self._external_db:
                 db.close()
 
     def clear_all(self) -> int:

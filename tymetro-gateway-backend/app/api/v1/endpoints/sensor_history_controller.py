@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.api.deps import get_current_user
 from app.models.user_model import User
-from app.schemas.response_schema import ResponseBase
+from app.schemas.response_schema import ResponseBase, ResponseList
+from app.schemas.sensor_history_schema import SensorHistoryResponse
 from app.repositories.sensor_history_repository import sensor_history_repo
 from app.utils.response_util import ResponseUtil
 
@@ -55,36 +56,49 @@ def get_sensor_trend(
     return ResponseUtil.success(data=result)
 
 
-@router.get("", summary="查詢感測器歷史數據 (支援條件篩選與分頁)")
+@router.get("", response_model=ResponseList[SensorHistoryResponse], summary="查詢感測器歷史數據 (支援條件篩選與分頁)")
 def get_sensor_histories(
-    sensor_code: Optional[str] = Query(None, description="感測器代碼 (如 D40001)"),
-    car_vin: Optional[str] = Query(None, description="車廂唯一代碼 (如 1101)"),
-    equipment_name: Optional[str] = Query(None, description="設備名稱 (如 PFC11011)"),
-    limit: int = Query(100, ge=1, le=1000, description="每頁筆數"),
-    offset: int = Query(0, ge=0, description="偏移量 (頁碼索引)")
+    pageIndex: int = Query(0, ge=0, description="頁碼索引 (0 開始)"),
+    pageSize: int = Query(50, ge=1, le=1000, description="每頁筆數"),
+    propertyName: str = Query("recordedAt", description="排序欄位"),
+    order: str = Query("DESC", description="排序順序 (ASC/DESC)"),
+    sensorCode: Optional[str] = Query(None, description="感測器代碼 (如 D40001)"),
+    sensor_code: Optional[str] = Query(None, description="感測器代碼 (相容舊參數)"),
+    carVin: Optional[str] = Query(None, description="車廂唯一代碼 (如 1101)"),
+    car_vin: Optional[str] = Query(None, description="車廂唯一代碼 (相容舊參數)"),
+    equipmentName: Optional[str] = Query(None, description="設備名稱 (如 PFC11011)"),
+    equipment_name: Optional[str] = Query(None, description="設備名稱 (相容舊參數)"),
+    limit: Optional[int] = Query(None, ge=1, le=1000, description="每頁筆數 (相容舊版參數)"),
+    offset: Optional[int] = Query(None, ge=0, description="偏移量 (相容舊版參數)"),
+    db: Session = Depends(get_db)
 ):
-    records = sensor_history_repo.get_history(
-        sensor_code=sensor_code,
-        car_vin=car_vin,
-        equipment_name=equipment_name,
+    target_sensor_code = sensorCode or sensor_code
+    target_car_vin = carVin or car_vin
+    target_equipment_name = equipmentName or equipment_name
+
+    actual_page_size = limit if limit is not None else pageSize
+    actual_page_index = (offset // actual_page_size) if offset is not None else pageIndex
+
+    records, total = sensor_history_repo.get_history(
+        sensor_code=target_sensor_code,
+        car_vin=target_car_vin,
+        equipment_name=target_equipment_name,
+        page_index=actual_page_index,
+        page_size=actual_page_size,
+        property_name=propertyName,
+        order=order,
         limit=limit,
-        offset=offset
+        offset=offset,
+        db_session=db
     )
-    result = []
-    for r in records:
-        result.append({
-            "id": r.id,
-            "car_vin": r.carVin,
-            "car_no": r.carNo,
-            "end_pos": r.endPos,
-            "sensor_code": r.sensorCode,
-            "sensor_value": r.sensorValue,
-            "recorded_at": r.recordedAt.isoformat() if r.recordedAt else None,
-            "sensor_name": r.sensorName,
-            "sensor_unit": r.sensorUnit,
-            "equipment_name": r.equipmentName
-        })
-    return ResponseUtil.success(data=result, message=f"Retrieved {len(result)} sensor history records.")
+
+    items = [SensorHistoryResponse.model_validate(r) for r in records]
+    return ResponseUtil.list_success(
+        data=items,
+        total=total,
+        pageIndex=actual_page_index,
+        pageSize=actual_page_size
+    )
 
 @router.delete("/clear-all", summary="清空所有感測器歷史紀錄 (Clear All Sensor Histories)")
 @router.delete("", summary="清空所有感測器歷史紀錄 (Clear All Sensor Histories)")
