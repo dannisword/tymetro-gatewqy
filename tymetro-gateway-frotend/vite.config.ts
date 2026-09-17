@@ -7,18 +7,58 @@ import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import EnvironmentPlugin from "vite-plugin-environment";
 import { fileURLToPath, URL } from "node:url";
+import { execSync } from "node:child_process";
+import fs from "node:fs";
 
+// 取得 Git 資訊 (若無 git 指令環境則嘗試讀取 backend git_version.json 回退)
+function getGitInfo() {
+  let commit = "unknown";
+  let branch = "unknown";
+  let date = "";
 
-let hash = "";
+  try {
+    commit = execSync("git rev-parse --short HEAD").toString().trim();
+    branch = execSync("git rev-parse --abbrev-ref HEAD").toString().trim();
+    date = execSync("git log -1 --format=%cd --date=iso").toString().trim();
+  } catch {
+    try {
+      const backendGitJson = path.resolve(__dirname, "../tymetro-gateway-backend/app/git_version.json");
+      if (fs.existsSync(backendGitJson)) {
+        const info = JSON.parse(fs.readFileSync(backendGitJson, "utf-8"));
+        commit = info.commit || "unknown";
+        branch = info.branch || "unknown";
+        date = info.date || "";
+      }
+    } catch {}
+  }
+  return { commit, branch, date };
+}
+
+const gitInfo = getGitInfo();
+const appVersion = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
+    return pkg.version || "1.0.0";
+  } catch {
+    return "1.0.0";
+  }
+})();
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd());
   console.log(env.VITE_PROXY_TARGET);
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+      __GIT_COMMIT__: JSON.stringify(gitInfo.commit),
+      __GIT_BRANCH__: JSON.stringify(gitInfo.branch),
+      __GIT_DATE__: JSON.stringify(gitInfo.date),
+    },
     plugins: [
       vue(),
       EnvironmentPlugin({
-        frontend: hash,
+        frontend: gitInfo.commit,
       }),
       AutoImport({
         include: [

@@ -5,7 +5,7 @@ import BaseIcon from '@/components/BaseIcon.vue';
 import { useMtrStore } from '@/store/useMtrStore';
 import { useMQTT } from '@/store/useMQTT';
 import { CompressorStatus } from '@/utils/enums';
-import { EndpointStatus, TrainCarStatus, MetroConfig } from '@/utils/types';
+import { MetroConfig } from '@/utils/types';
 import { 
   mdiTrain, 
   mdiAlertCircle, 
@@ -16,7 +16,8 @@ import {
 import PageHeader from '@/components/PageHeader.vue';
 import StatsCard from '@/components/StatsCard.vue';
 import EndpointCard from '@/components/EndpointCard.vue';
-import { logger, updateEndpointData } from '@/utils';
+import { logger, updateEndpointData, frontendVersionInfo } from '@/utils';
+import { getHealthStatus } from '@/utils/api';
 
 // 麵包屑設定
 const breadcrumbItems = [
@@ -37,6 +38,51 @@ const lastMsgTime = ref<Record<string, number>>({});
 const lastUpdated = ref(new Date().toLocaleTimeString());
 let heartbeatInterval: any = null;
 let lastUpdatedTimer: any = null;
+
+// 後端系統版本狀態
+const backendVersion = ref<string>('');
+const backendGit = ref<{
+  commit?: string;
+  branch?: string;
+  date?: string;
+  dirty?: boolean;
+  version?: string;
+}>({});
+
+const fetchBackendHealth = async () => {
+  try {
+    const res = await getHealthStatus();
+    if (res && res.success && res.data) {
+      backendVersion.value = res.data.version || '';
+      backendGit.value = res.data.git_version || {};
+    }
+  } catch (err) {
+    logger.warn('[train-list] Failed to fetch backend health status:', err);
+  }
+};
+
+const backendVersionDisplay = computed(() => {
+  if (!backendVersion.value) return '';
+  return backendVersion.value.startsWith('v') ? backendVersion.value : `v${backendVersion.value}`;
+});
+
+const frontendTooltip = computed(() => {
+  const parts: string[] = [];
+  parts.push(`前端版本: v${frontendVersionInfo.version}`);
+  if (frontendVersionInfo.branch && frontendVersionInfo.branch !== 'unknown') parts.push(`分支: ${frontendVersionInfo.branch}`);
+  if (frontendVersionInfo.commit && frontendVersionInfo.commit !== 'unknown') parts.push(`提交: ${frontendVersionInfo.commit}`);
+  if (frontendVersionInfo.date) parts.push(`更新時間: ${frontendVersionInfo.date}`);
+  return parts.join('\n');
+});
+
+const backendTooltip = computed(() => {
+  const parts: string[] = [];
+  if (backendVersion.value) parts.push(`後端版本: ${backendVersion.value}`);
+  if (backendGit.value.branch && backendGit.value.branch !== 'unknown') parts.push(`分支: ${backendGit.value.branch}`);
+  if (backendGit.value.commit && backendGit.value.commit !== 'unknown') parts.push(`提交: ${backendGit.value.commit}`);
+  if (backendGit.value.date) parts.push(`更新時間: ${backendGit.value.date}`);
+  return parts.join('\n');
+});
 
 const triggerLastUpdated = () => {
   if (lastUpdatedTimer) {
@@ -203,6 +249,9 @@ onMounted(async() => {
   // 載入 config.json 車廂配置
   await loadFromConfig();
 
+  // 取得後端健康狀態與版本資訊
+  fetchBackendHealth();
+
   // 啟動心跳檢測：每 5 秒檢查一次是否超過 60 秒未收到訊息
   heartbeatInterval = setInterval(() => {
     const now = Date.now();
@@ -337,6 +386,25 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+
+      <!-- 頁尾版本資訊 (低調靠右) -->
+      <footer class="pt-6 pb-2 border-t border-slate-200/60 flex items-center justify-end text-xs text-slate-400 select-none">
+        <div class="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          <span class="cursor-help transition-colors hover:text-slate-600" :title="frontendTooltip">
+            前端 <span class="font-mono text-slate-500 font-semibold">v{{ frontendVersionInfo.version }}</span>
+            <span v-if="frontendVersionInfo.commit && frontendVersionInfo.commit !== 'unknown'" class="font-mono text-slate-400 ml-0.5 text-[11px]">
+              ({{ frontendVersionInfo.commit }})
+            </span>
+          </span>
+          <span class="text-slate-300">•</span>
+          <span class="cursor-help transition-colors hover:text-slate-600" :title="backendTooltip">
+            後端 <span class="font-mono text-slate-500 font-semibold">{{ backendVersionDisplay || '-' }}</span>
+            <span v-if="backendGit?.commit && backendGit.commit !== 'unknown'" class="font-mono text-slate-400 ml-0.5 text-[11px]">
+              ({{ backendGit.commit }})
+            </span>
+          </span>
+        </div>
+      </footer>
 
     </div>
   </div>

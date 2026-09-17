@@ -8,5 +8,4 @@ export * from "./enums/command-status";
 export * from "./enums/order-type";
 export * from "./logger";
 export * from "./compressor_helper";
-
-
+export * from "./version";
