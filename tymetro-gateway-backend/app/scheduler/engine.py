@@ -24,8 +24,13 @@ from app.models.schedule_model import Schedule
 from app.models.config_model import Config
 from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
+from app.models.car_model import Car
+from app.models.equipment_model import Equipment
+from app.core.enums import PlcEvent, PlcRegister
 from app.services.audit_log_service import AuditLogService
+from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.utils.datetime_util import get_active_season_by_date, get_local_now, LOCAL_TZ
+
 
 
 class SchedulerEngine:
@@ -312,7 +317,7 @@ class SchedulerEngine:
             # 5. 更新 sensors 資料表中所有溫度設定點 (D40121)
             temp_sensors = db.query(Sensor).filter(
                 Sensor.sensorType == "SETTING",
-                Sensor.sensorCode == "D40121"
+                Sensor.sensorCode == PlcRegister.TEMP_SETTING_DISPLAY.value
             ).all()
 
             updated_count = 0
@@ -320,18 +325,22 @@ class SchedulerEngine:
                 s.sensorValue = target_val  # type: ignore
                 updated_count += 1
 
+            # 計算 PLC 放大倍率數值 (x10 整數，例: 24.0°C -> 240)
+            scaled_temp = int(round(target_val * 10))
+
             # 6. 寫入一筆設定歷程紀錄 (setting_logs)
             log_entry = SettingLog(
                 settingType="排程控制 (Hourly)",
                 value=str(target_val),
                 operator="system_scheduler",
-                isNotified=False,
-                topic="SCHEDULE/SYNC",
+                isNotified=True,
+                topic="MQT/TRA/OTR/TRC/+/+/+R",
                 payload=json.dumps({
                     "mode": active_mode,
                     "day": js_weekday,
                     "hour": hour,
                     "targetTemp": target_val,
+                    "scaledTemp": scaled_temp,
                     "updatedSensors": updated_count
                 }, ensure_ascii=False)
             )
@@ -347,20 +356,76 @@ class SchedulerEngine:
 
             logger.info(f"[SchedulerEngine Task] Successfully updated {updated_count} sensor(s) to target temp {target_val}°C.")
 
-            # 8. 若 Local MQTT 服務啟用，廣播排程設定異動通知
+            # 8. 丟給 8 台 PLC (透過 Local MQTT 逐台發送 write_temperature 指令)
             try:
-                from app.services.gateway_mqtt_service import gateway_mqtt_service
-                notify_topic = "TYMC/AIR/SCHEDULE/ACTIVE"
-                payload_str = json.dumps({
-                    "timestamp": now.isoformat(),
-                    "mode": active_mode,
-                    "dayIndex": js_weekday,
-                    "hour": hour,
-                    "targetTemp": target_val
-                })
-                await gateway_mqtt_service.publish_message(notify_topic, payload_str)
+                active_equipments = (
+                    db.query(Equipment, Car)
+                    .join(Car, Equipment.carId == Car.id)
+                    .filter(Equipment.isActive == True, Car.isActive == True)
+                    .order_by(Car.carNo, Equipment.endPos)
+                    .all()
+                )
+
+                mqtt_messages = []
+                for eq, car in active_equipments:
+                    train_code = car.trainCode or "101"
+                    car_vin = car.carVin or str(car.carNo)
+                    car_no_val = int(car.carVin) if car.carVin and car.carVin.isdigit() else (car.carNo or 0)
+                    end_pos = eq.endPos
+
+                    topic = f"MQT/TRA/OTR/TRC/{train_code}/{car_vin}/{end_pos}R"
+                    payload = {
+                        "events": PlcEvent.WRITE_TEMPERATURE.value,
+                        "trainCode": str(train_code),
+                        "carNo": car_no_val,
+                        "endPos": end_pos,
+                        "register": {
+                            PlcRegister.TEMP_SETTING_CMD.value: scaled_temp
+                        }
+                    }
+                    mqtt_messages.append({
+                        "topic": topic,
+                        "payload": json.dumps(payload, ensure_ascii=False),
+                        "qos": 1,
+                        "retain": True
+                    })
+
+                if mqtt_messages:
+                    await gateway_mqtt_service.publish_messages(mqtt_messages)
+                    logger.info(
+                        f"[SchedulerEngine Task] Successfully dispatched write_temperature (targetTemp={target_val}°C, "
+                        f"scaled={scaled_temp}) to {len(mqtt_messages)} PLC(s)."
+                    )
+                    first_train_code = active_equipments[0][1].trainCode if active_equipments else "101"
+                    self._record_audit_log(
+                        db,
+                        status="success",
+                        detail=(
+                            f"已成功派送排程溫度至 {len(mqtt_messages)} 台 PLC "
+                            f"(目標溫度: {target_val}°C, D40200={scaled_temp}, "
+                            f"主題範例: MQT/TRA/OTR/TRC/{first_train_code}/+/+R)"
+                        ),
+                        action="dispatch_plc_temperature"
+                    )
+                else:
+                    logger.warning("[SchedulerEngine Task] No active equipments found to dispatch schedule config.")
+                    self._record_audit_log(
+                        db,
+                        status="warning",
+                        detail="未找到啟用的車廂設備，未發送 PLC 溫度控制指令",
+                        action="dispatch_plc_temperature"
+                    )
+
             except Exception as mqtt_err:
-                logger.debug(f"[SchedulerEngine Task] Local MQTT notify omitted or error: {mqtt_err}")
+                logger.error(f"[SchedulerEngine Task] Local MQTT dispatch error: {mqtt_err}")
+                self._record_audit_log(
+                    db,
+                    status="failure",
+                    detail=f"PLC 溫度控制指令派送失敗: {mqtt_err}",
+                    action="dispatch_plc_temperature"
+                )
+
+
 
         except Exception as e:
             db.rollback()

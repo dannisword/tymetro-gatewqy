@@ -65,6 +65,21 @@ class AuditCategory(LabeledEnum):
     AUTH = ("auth", "身份驗證")
     SYSTEM = ("system", "系統日誌")
 
+
+class PlcEvent(LabeledEnum):
+    """PLC 控制事件類型"""
+    WRITE_TEMPERATURE = ("write_temperature", "設定溫度控制")
+    WRITE_REGISTER = ("write_register", "寫入暫存器")
+
+
+class PlcRegister(LabeledEnum):
+    """PLC 控制暫存器代碼"""
+    TEMP_SETTING_CMD = ("D40200", "溫度設定命令 (x10)")
+    TEMP_SETTING_DISPLAY = ("D40121", "溫度設定顯示點位")
+    FRESH_AIR_DAMPER_CMD = ("D40212", "新鮮空氣擋板設定")
+    EMERG_AIR_DAMPER_CMD = ("D40214", "緊急供氣擋板設定")
+
+
 def get_all_enums() -> Dict[str, Any]:
     """回傳系統所有列舉選項與對應表"""
     return {
@@ -72,7 +87,10 @@ def get_all_enums() -> Dict[str, Any]:
         "sensorStatus": SensorStatus.to_options(),
         "endPos": EndPos.to_options(),
         "auditCategory": AuditCategory.to_options(),
+        "plcEvent": PlcEvent.to_options(),
+        "plcRegister": PlcRegister.to_options(),
         "categoryMap": AuditCategory.to_map(),
         "auditCategoryMap": AuditCategory.to_map(),
     }
+
 
