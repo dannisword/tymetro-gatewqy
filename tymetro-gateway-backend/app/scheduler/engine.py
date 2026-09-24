@@ -334,7 +334,7 @@ class SchedulerEngine:
                 value=str(target_val),
                 operator="system_scheduler",
                 isNotified=True,
-                topic="MQT/TRA/OTR/TRC/+/+/+R",
+                topic="TYMC/AIR/SET/+/+/+",
                 payload=json.dumps({
                     "mode": active_mode,
                     "day": js_weekday,
@@ -373,9 +373,9 @@ class SchedulerEngine:
                     car_no_val = int(car.carVin) if car.carVin and car.carVin.isdigit() else (car.carNo or 0)
                     end_pos = eq.endPos
 
-                    topic = f"MQT/TRA/OTR/TRC/{train_code}/{car_vin}/{end_pos}R"
+                    topic = f"TYMC/AIR/SET/{train_code}/{car_vin}/{end_pos}"
                     payload = {
-                        "events": PlcEvent.WRITE_TEMPERATURE.value,
+                        "events": PlcEvent.SET_VALUE.value,
                         "trainCode": str(train_code),
                         "carNo": car_no_val,
                         "endPos": end_pos,
@@ -403,10 +403,11 @@ class SchedulerEngine:
                         detail=(
                             f"已成功派送排程溫度至 {len(mqtt_messages)} 台 PLC "
                             f"(目標溫度: {target_val}°C, D40200={scaled_temp}, "
-                            f"主題範例: MQT/TRA/OTR/TRC/{first_train_code}/+/+R)"
+                            f"主題範例: TYMC/AIR/SET/{first_train_code}/+/+)"
                         ),
                         action="dispatch_plc_temperature"
                     )
+
                 else:
                     logger.warning("[SchedulerEngine Task] No active equipments found to dispatch schedule config.")
                     self._record_audit_log(

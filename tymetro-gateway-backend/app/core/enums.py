@@ -70,7 +70,7 @@ class PlcEvent(LabeledEnum):
     """PLC 控制事件類型"""
     WRITE_TEMPERATURE = ("write_temperature", "設定溫度控制")
     WRITE_REGISTER = ("write_register", "寫入暫存器")
-
+    SET_VALUE=("set_value", "設定數值")
 
 class PlcRegister(LabeledEnum):
     """PLC 控制暫存器代碼"""
