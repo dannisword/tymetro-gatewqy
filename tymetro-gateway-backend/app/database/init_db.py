@@ -16,6 +16,7 @@ from app.core.logger import logger
 from datetime import datetime, timezone
 from app.core.security import get_password_hash
 from app.database.session import engine, Base
+from app.core.config_yaml import parse_yaml_with_env
 
 def create_tables():
     """初始化建立所有 SQLAlchemy ORM 資料表 (若尚不存在)"""
@@ -54,7 +55,7 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = 
     try:
         logger.info(f"Syncing system configs from {yaml_path} to DB...")
         with open(yaml_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            data = parse_yaml_with_env(f.read())
 
         def upsert_config(category: str, key: str, value: Any):
             val_str = str(value) if value is not None else ""

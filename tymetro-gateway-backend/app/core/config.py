@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "gateway.db")
     PLC_IP_SUBNET: Optional[str] = os.getenv("PLC_IP_SUBNET", None)  # 如: "192.168.68" (測試區) 或 "192.168.16" (正式區)
     SENSOR_HISTORY_RETENTION_DAYS: int = int(os.getenv("SENSOR_HISTORY_RETENTION_DAYS", "30"))  # 感測器歷史資料保留天數 (預設30天)
+    TRAIN_NO: str = os.getenv("TRAIN_NO", "199")  # 車組編號
 
     @property
     def SQLALCHEMY_DATABASE_URL(self) -> str:

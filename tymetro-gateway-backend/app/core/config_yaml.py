@@ -1,6 +1,7 @@
 import os
+import re
 import yaml
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from app.core.logger import logger
 
@@ -68,13 +69,31 @@ class AppYamlConfig(BaseModel):
     database: DatabaseConfig = DatabaseConfig()
     equipments: List[EquipmentConfig] = Field(default=[], alias="equipments")
 
+def parse_yaml_with_env(raw_text: str) -> Dict[str, Any]:
+    """
+    解析 YAML 檔案內容，並支援 ${VAR} 或 ${VAR:-default} 環境變數替換
+    """
+    pattern = re.compile(r'\$\{([^}:]+)(?::-([^}]*))?\}')
+
+    def _replacer(match):
+        var_name = match.group(1).strip()
+        default_val = match.group(2) if match.group(2) is not None else ""
+        val = os.getenv(var_name)
+        if val is not None and val != "":
+            return val
+        return default_val
+
+    substituted = pattern.sub(_replacer, raw_text)
+    return yaml.safe_load(substituted) or {}
+
+
 def load_gateway_config(config_path: str = "gateway.yaml") -> AppYamlConfig:
     if not os.path.exists(config_path):
         logger.warning(f"Config file {config_path} not found. Using default empty settings.")
         return AppYamlConfig()
     try:
         with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+            data = parse_yaml_with_env(f.read())
             return AppYamlConfig(**data)
     except Exception as e:
         logger.error(f"Error loading {config_path}: {e}")
