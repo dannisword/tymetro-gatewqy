@@ -115,9 +115,15 @@ const compressors = ref([
   { id: 2, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0 }
 ]);
 const freshAirDamperPos = ref<number>(0);
-const emergAirDamper = ref<number>(0);
+const emergAirDamper = ref<number>(1); // 1=否, 2=是
 
-const freshAirDamperOptions = ref<{ value: number; label: string }[]>([]);
+const freshAirDamperOptions = ref<{ value: number; label: string }[]>([
+  { value: 0, label: '關閉' },
+  { value: 25, label: '25%' },
+  { value: 50, label: '50%' },
+  { value: 75, label: '75%' },
+  { value: 100, label: '100%' }
+]);
 const operationModes = ref<{ value: string; label: string; icon: string; activeClass: string }[]>([]);
 
 // ==========================================
@@ -407,6 +413,14 @@ const fetchRegisters = async () => {
         isChanging: false,
         carNo: reg.carNo || carNo.value
       }));
+      const freshAirReg = list.find((s: any) => s.sensorCode === 'D40212');
+      if (freshAirReg && freshAirReg.sensorValue !== undefined && freshAirReg.sensorValue !== null) {
+        freshAirDamperPos.value = Number(freshAirReg.sensorValue);
+      }
+      const emergAirReg = list.find((s: any) => s.sensorCode === 'D40213');
+      if (emergAirReg && emergAirReg.sensorValue !== undefined && emergAirReg.sensorValue !== null) {
+        emergAirDamper.value = Number(emergAirReg.sensorValue);
+      }
       syncStatusToRegisters();
     }
   } catch (error) {
@@ -484,7 +498,7 @@ const setFreshAirDamper = (val: number) => {
     register: { D40212: val }
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
-  TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label}`);
+  TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`}`);
 };
 
 const setEmergAirDamper = (val: number) => {
@@ -496,7 +510,7 @@ const setEmergAirDamper = (val: number) => {
     register: { D40213: val }
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
-  TLSuccess(`緊急供氣擋板指令已發送：${val === 1 ? '開啟' : '關閉'}`);
+  TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
 };
 
 const syncStatusToRegisters = () => {
@@ -946,12 +960,10 @@ onUnmounted(() => {
                   v-model="freshAirDamperPos"
                   @change="setFreshAirDamper"
                   :min="0"
-                  :max="2"
-                  :step="1"
+                  :max="100"
+                  :step="25"
                   :disabled="!isDeviceConnected"
-                  minLabel="關閉"
-                  midLabel="50%"
-                  maxLabel="100%"
+                  :labels="['0', '25', '50', '75', '100']"
                 />
               </div>
 
@@ -962,12 +974,12 @@ onUnmounted(() => {
                   <span class="ml-auto text-[10px] font-bold text-slate-400">D40213</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span class="text-sm font-black" :class="emergAirDamper ? 'text-rose-600' : 'text-slate-400'">
-                    {{ emergAirDamper ? '開啟' : '關閉' }}
+                  <span class="text-sm font-black" :class="emergAirDamper === 2 ? 'text-rose-600' : 'text-slate-400'">
+                    {{ emergAirDamper === 2 ? '開啟' : '關閉' }}
                   </span>
                   <BaseSwitch
-                    :modelValue="Boolean(emergAirDamper)"
-                    @update:modelValue="setEmergAirDamper($event ? 1 : 0)"
+                    :modelValue="emergAirDamper === 2"
+                    @update:modelValue="setEmergAirDamper($event ? 2 : 1)"
                     :disabled="!isDeviceConnected"
                     activeColor="bg-rose-500"
                     inactiveColor="bg-slate-300"

@@ -9,6 +9,7 @@ const props = withDefaults(
     minLabel?: string;
     maxLabel?: string;
     midLabel?: string;
+    labels?: (string | number)[];
   }>(),
   {
     modelValue: 24,
@@ -27,6 +28,11 @@ const emit = defineEmits<{
   (e: 'change', value: number): void;
 }>();
 
+const onInput = (event: Event) => {
+  const val = parseFloat((event.target as HTMLInputElement).value);
+  emit('update:modelValue', val);
+};
+
 const onChange = (event: Event) => {
   const val = parseFloat((event.target as HTMLInputElement).value);
   emit('update:modelValue', val);
@@ -43,10 +49,14 @@ const onChange = (event: Event) => {
       :step="step"
       :value="modelValue ?? min"
       :disabled="disabled"
+      @input="onInput"
       @change="onChange"
       class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
     />
-    <div class="flex justify-between text-[10px] font-bold text-slate-400">
+    <div v-if="labels && labels.length" class="flex justify-between text-[10px] font-bold text-slate-400">
+      <span v-for="(lbl, idx) in labels" :key="idx">{{ lbl }}</span>
+    </div>
+    <div v-else class="flex justify-between text-[10px] font-bold text-slate-400">
       <span>{{ minLabel }}</span>
       <span>{{ midLabel }}</span>
       <span>{{ maxLabel }}</span>

@@ -314,6 +314,17 @@ class SchedulerEngine:
                 f"Mode: {active_mode} | Day: {js_weekday} | Hour: {hour} -> Target Temp: {target_val}°C"
             )
 
+            # 若溫度數值 <= 0，視為該時段不進行設定（略過感測器更新與 MQTT 派送）
+            if target_val <= 0:
+                skip_msg = f"排程目標溫度為 {target_val}°C (設定為0或未設定)，略過本次感測器同步與 MQTT 派送"
+                logger.info(f"[SchedulerEngine Task] {skip_msg}")
+                self._record_audit_log(
+                    db,
+                    status="info",
+                    detail=f"排程略過: 季節模式={active_mode}, 星期={js_weekday}, 時={hour}, {skip_msg}"
+                )
+                return
+
             # 5. 更新 sensors 資料表中所有溫度設定點 (D40121)
             temp_sensors = db.query(Sensor).filter(
                 Sensor.sensorType == "SETTING",
@@ -326,7 +337,7 @@ class SchedulerEngine:
                 updated_count += 1
 
             # 計算 PLC 放大倍率數值 (x10 整數，例: 24.0°C -> 240)
-            scaled_temp = int(round(target_val * 10))
+            scaled_temp = round(target_val * 10)
 
             # 6. 寫入一筆設定歷程紀錄 (setting_logs)
             log_entry = SettingLog(
