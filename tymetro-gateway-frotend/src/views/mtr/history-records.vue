@@ -46,8 +46,14 @@ const gridColumns = ref([
     format: 'datetime'
   },
   {
-    headerName: '暫存器名稱',
-    field: 'name',
+    headerName: '車廂編號',
+    field: 'carVin',
+    flex: 1.5,
+    minWidth: 150
+  },
+    {
+    headerName: '端點',
+    field: 'endPos',
     flex: 1.5,
     minWidth: 150
   },

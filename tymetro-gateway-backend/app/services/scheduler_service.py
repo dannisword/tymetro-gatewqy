@@ -80,9 +80,9 @@ class SchedulerService:
             logger.error(f"[SchedulerService] Error in job_check_device_heartbeats: {e}")
 
     async def job_backup_database(self):
-        """SQLite DB 每日 03:00 自動備份 Job (非同步複製 + 自動清理舊備份)"""
+        """SQLite DB 每日 03:00 自動備份 Job (非同步複製 + 依 BACKUP_RETENTION_DAYS 自動清理舊備份)"""
         try:
-            db_path = "gateway.db"
+            db_path = settings.SQLITE_DB_PATH
             backup_dir = "data/backups"
             os.makedirs(backup_dir, exist_ok=True)
 
@@ -96,7 +96,7 @@ class SchedulerService:
                 await loop.run_in_executor(None, shutil.copy2, db_path, backup_file)
                 logger.info(f"[SchedulerService] Database daily backup completed: {backup_file}")
 
-                # 2. 自動清除舊備份：僅保留最新的 7 個備份檔 (1周)
+                # 2. 自動清除舊備份：依 BACKUP_RETENTION_DAYS 僅保留最新的 N 個備份檔
                 backup_files = [
                     os.path.join(backup_dir, f)
                     for f in os.listdir(backup_dir)
@@ -105,8 +105,9 @@ class SchedulerService:
                 # 依檔名排序 (排序後舊的在前、新的在後)
                 backup_files.sort()
                 
-                if len(backup_files) > 7:
-                    files_to_delete = backup_files[:-7]
+                retention_days = max(1, settings.BACKUP_RETENTION_DAYS)
+                if len(backup_files) > retention_days:
+                    files_to_delete = backup_files[:-retention_days]
                     for f_path in files_to_delete:
                         try:
                             os.remove(f_path)

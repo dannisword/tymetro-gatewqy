@@ -98,6 +98,8 @@ SERVER_HOST=127.0.0.1
 SERVER_PORT=5400
 LOG_PATH=app/logs/gateway.log
 SQLITE_DB_PATH=gateway.db
+BACKUP_RETENTION_DAYS=7
+SENSOR_HISTORY_RETENTION_DAYS=60
 SECRET_KEY=your-production-secret-key-change-me
 EOF
 ```
