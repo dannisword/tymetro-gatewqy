@@ -14,6 +14,8 @@ class CloudMQTTService:
     - 接收內存 Queue 佇列中由 PFC200 送進來的 telemetry 數據，並拋轉 (Publish) 至桃捷雲 Topic
     """
     def __init__(self):
+        self._max_queue_size = 50
+        self._max_ttl_seconds = 30.0
         self.reload_config()
 
         self._queue: asyncio.Queue = asyncio.Queue()
@@ -34,13 +36,17 @@ class CloudMQTTService:
         self.reconnect_delay_sec = int(db_config_repo.get_system_config("cloud_mqtt.reconnect_delay_sec") or 5)
         self.keepalive = int(db_config_repo.get_system_config("cloud_mqtt.keepalive") or 20)
         
+        # 佇列大小與過期時間設定 (避免斷線或延遲造成舊封包大量積壓)
+        self._max_queue_size = int(db_config_repo.get_system_config("cloud_mqtt.max_queue_size") or 50)
+        self._max_ttl_seconds = float(db_config_repo.get_system_config("cloud_mqtt.max_ttl_seconds") or 30.0)
+
         db_clean = db_config_repo.get_system_config("cloud_mqtt.clean_session")
         if db_clean is not None:
             self.clean_session = str(db_clean).lower() in ("true", "1")
         else:
             self.clean_session = True
 
-        logger.info(f"[CloudMQTTService] Config reloaded: Host={self.cloud_host}:{self.cloud_port}, Topic='{self.cloud_topic_prefix}', ClientID='{self.client_id}', Keepalive={self.keepalive}, CleanSession={self.clean_session}")
+        logger.info(f"[CloudMQTTService] Config reloaded: Host={self.cloud_host}:{self.cloud_port}, Topic='{self.cloud_topic_prefix}', ClientID='{self.client_id}', MaxQueue={self._max_queue_size}, MaxTTL={self._max_ttl_seconds}s, Keepalive={self.keepalive}, CleanSession={self.clean_session}")
 
     async def start(self):
         """啟動桃捷雲 MQTT 拋轉任務"""
@@ -62,6 +68,14 @@ class CloudMQTTService:
                 await self._worker_task
             except asyncio.CancelledError:
                 pass
+        
+        # 停止時清空佇列殘留
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                self._queue.task_done()
+            except (asyncio.QueueEmpty, ValueError):
+                break
         logger.info("[CloudMQTTService] Cloud MQTT Forwarder stopped.")
 
     async def restart(self):
@@ -73,12 +87,26 @@ class CloudMQTTService:
     async def push_telemetry(self, payload: Dict[str, Any], topic_suffix: Optional[str] = None):
         """
         將 PFC200 點位資料寫入佇列準備拋轉至桃捷雲
+        - 佇列滿時自動丟棄最舊資料 (Drop Oldest)，確保永遠只轉發最新狀態
         :param payload: JSON 點位封包
         :param topic_suffix: 子 Topic 訊息，如 'MQT/TRA/OTR/TRC/102/1102'
         """
         if not self._running:
             return
-        await self._queue.put({"payload": payload, "topic_suffix": topic_suffix})
+
+        # 佇列已滿時丟棄最舊的資料 (Drop Oldest)，防止記憶體膨脹與歷史封包塞車
+        while self._queue.qsize() >= self._max_queue_size:
+            try:
+                self._queue.get_nowait()
+                self._queue.task_done()
+            except (asyncio.QueueEmpty, ValueError):
+                break
+
+        await self._queue.put({
+            "payload": payload,
+            "topic_suffix": topic_suffix,
+            "enqueued_at": time.time()
+        })
 
     async def _publish_loop(self):
         """Cloud MQTT 連線與批次拋轉 Loop (含自動重連)"""
@@ -111,6 +139,16 @@ class CloudMQTTService:
                         while self._running:
                             item = await self._queue.get()
                             try:
+                                now = time.time()
+                                enqueued_at = item.get("enqueued_at", now)
+
+                                # 檢查封包是否過期 (超過 max_ttl_seconds 則丟棄，優先發送最新即時數據)
+                                if (now - enqueued_at) > self._max_ttl_seconds:
+                                    logger.warning(
+                                        f"[CloudMQTTService] Dropping stale telemetry for cloud (queued {now - enqueued_at:.1f}s ago > TTL {self._max_ttl_seconds}s)"
+                                    )
+                                    continue
+
                                 payload = item["payload"]
                                 suffix = item.get("topic_suffix")
                                 if suffix:
@@ -122,7 +160,10 @@ class CloudMQTTService:
                                 await client.publish(topic, payload_str, qos=self.qos)
                             except aiomqtt.MqttError as mqtt_err:
                                 logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
-                                await self._queue.put(item)
+                                # 若尚未過期且佇列未滿，才放回佇列
+                                if (time.time() - item.get("enqueued_at", 0)) <= self._max_ttl_seconds:
+                                    if self._queue.qsize() < self._max_queue_size:
+                                        await self._queue.put(item)
                                 raise mqtt_err
                             except Exception as pub_err:
                                 logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
