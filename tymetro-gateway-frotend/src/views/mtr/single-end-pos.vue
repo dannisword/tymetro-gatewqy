@@ -25,6 +25,7 @@ import type {
 import CarSensorMap from '@/views/mtr/components/CarSensorMap.vue';
 import httpOperations from '@/utils/http-operations';
 import { logger, updateCompressorStatus } from '@/utils';
+import { useFullscreen } from '@vueuse/core';
 import { 
   mdiWeatherWindy, 
   mdiSnowflake, 
@@ -35,7 +36,9 @@ import {
   mdiGauge,
   mdiPlus,
   mdiMinus,
-  mdiMagnify
+  mdiMagnify,
+  mdiFullscreen,
+  mdiFullscreenExit
 } from '@mdi/js';
 // ==========================================
 // 0. Configuration Parameters
@@ -84,6 +87,9 @@ let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 // ==========================================
 // 4. UI Layout & Navigation States
 // ==========================================
+const pageContainerRef = ref<HTMLElement | null>(null);
+const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(pageContainerRef);
+
 const activeTab = ref('dashboard');
 const breadcrumbItems = computed(() => [
   { label: '首頁', to: '/dashboard' },
@@ -707,9 +713,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="w-full pb-24 sm:pb-8 min-h-screen">
+  <div 
+    ref="pageContainerRef"
+    :class="[
+      'w-full min-h-screen transition-colors',
+      isFullscreen ? 'bg-slate-100 p-4 sm:p-6 overflow-y-auto h-screen' : 'pb-24 sm:pb-8'
+    ]"
+  >
     <!-- 導航麵包屑 -->
-    <div class="w-full mb-6">
+    <div v-if="!isFullscreen" class="w-full mb-6">
       <Breadcrumb :title="`${carInfo.name} - ${endPos.name} 狀態`" :items="breadcrumbItems" />
     </div>
 
@@ -733,6 +745,17 @@ onUnmounted(() => {
                 >
                   <BaseIcon :path="mdiRefresh" :w="'w-6'" :h="'h-6'" size="18" />
                   <span class="hidden xs:inline ml-1 text-xs font-bold">重新整理</span>
+                </BaseButton>
+
+                <BaseButton 
+                  @click="toggleFullscreen"
+                  variant="default"
+                  mode="outline"
+                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 shadow-sm"
+                  :title="isFullscreen ? '結束全螢幕' : '全螢幕模式'"
+                >
+                  <BaseIcon :path="isFullscreen ? mdiFullscreenExit : mdiFullscreen" :w="'w-6'" :h="'h-6'" size="18" />
+                  <span class="hidden xs:inline ml-1 text-xs font-bold">{{ isFullscreen ? '結束全螢幕' : '全螢幕' }}</span>
                 </BaseButton>
               </div>
               
@@ -1063,6 +1086,7 @@ onUnmounted(() => {
         v-else-if="activeTab === 'map'"
         :planUrl="planUrl"
         :markers="mappedSensors"
+        :heightClass="isFullscreen ? 'h-[calc(100vh-280px)]' : 'h-[500px]'"
       />
 
       <!-- Modbus 暫存器監測表格 -->

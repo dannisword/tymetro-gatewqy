@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, watch } from "vue";
 import SvgViewer from "@/components/SvgViewer.vue";
 import httpOperations from "@/utils/http-operations";
 import { useMtrStore } from "@/store/useMtrStore";
 import { getBitLabel } from "@/utils/mtrHelper";
 import { 
-  mdiFormatListBulleted, 
   mdiRefresh, 
   mdiClose, 
-  mdiCursorMove, 
-  mdiCheck 
+  mdiCloudDownload,
+  mdiPlus,
+  mdiMinus,
+  mdiRestore
 } from "@mdi/js";
 import BaseIcon from "@/components/BaseIcon.vue";
 import BaseButton from "@/components/BaseButton.vue";
 import Breadcrumb from '@/components/Breadcrumb.vue';
-import { getConfigsByType, upsertConfig } from "@/utils/api";
+import { downloadSensorMaps } from "@/utils/api";
+import { useAlert } from "@/composables/TLAlter";
 
 const mtrStore = useMtrStore();
+const { TLSuccess, TLError } = useAlert();
 
 const breadcrumbItems = [
   { label: '首頁', to: '/dashboard' },
@@ -24,45 +27,44 @@ const breadcrumbItems = [
   { label: '感測器圖面配置' }
 ];
 
-const isEdit = ref(false);
-const sidebarOpen = ref(false);
 const planUrl = "/images/layout.svg";
 const svgViewerRef = ref<any>(null);
+const sensors = ref<any[]>([]); 
+const allSensors = ref<any[]>([]); 
+const loading = ref(false);
 
-const bitLabelsMap = ref<Record<string, Record<number, string>>>({});
+const isDownloadModalOpen = ref(false);
+const downloadTemplateCode = ref('HVAC_STANDARD');
+const downloadLoading = ref(false);
 
-const fetchBitLabels = async () => {
-  try {
-    const res = await httpOperations.get('/api/v1/sensor-bit-labels');
-    if (res && res.success) {
-      const list = res.data || [];
-      const mapping: Record<string, Record<number, string>> = {};
-      list.forEach((item: any) => {
-        const code = item.sensorCode.toUpperCase();
-        if (!mapping[code]) {
-          mapping[code] = {};
-        }
-        mapping[code][item.bitIndex] = item.label;
-      });
-      bitLabelsMap.value = mapping;
-    }
-  } catch (err) {
-    console.error("Fetch bit labels error:", err);
-  }
+const openDownloadDialog = () => {
+  downloadTemplateCode.value = 'HVAC_STANDARD';
+  isDownloadModalOpen.value = true;
 };
 
-const getBitLabelLocal = (sensorCode: string, bitIndex: number) => {
-  const code = sensorCode.toUpperCase();
-  if (bitLabelsMap.value[code] && bitLabelsMap.value[code][bitIndex] !== undefined) {
-    return bitLabelsMap.value[code][bitIndex];
+const handleDownload = async () => {
+  const code = (downloadTemplateCode.value || '').trim() || 'HVAC_STANDARD';
+  downloadLoading.value = true;
+  try {
+    const res = await downloadSensorMaps(code);
+    if (res && res.success) {
+      TLSuccess(res.message || `成功自中心端下載樣板 [${code}] 圖面配置！`);
+      isDownloadModalOpen.value = false;
+      await fetchData();
+    } else {
+      TLError(res?.message || '下載感測器圖面配置失敗');
+    }
+  } catch (error: any) {
+    console.error("Download failed:", error);
+    TLError("下載失敗: " + (error?.message || error));
+  } finally {
+    downloadLoading.value = false;
   }
-  return getBitLabel(sensorCode, bitIndex);
 };
 
 const fetchData = async () => {
   try {
     loading.value = true;
-    await fetchBitLabels();
     
     // 獲取 Modbus 即時值暫存器清單作為感測器來源
     const registerRes = await httpOperations.get('/api/v1/sensors', { registerGroup: 'realtime', pageSize: 100 });
@@ -101,7 +103,7 @@ const fetchData = async () => {
           id: isBitmap ? `${m.sensorCode}_bit${m.bitIndex}` : m.sensorCode,
           x: m.x,
           y: m.y,
-          label: m.label || (isBitmap ? getBitLabelLocal(m.sensorCode, m.bitIndex) : m.sensorCode),
+          label: m.label || (isBitmap ? getBitLabel(m.sensorCode, m.bitIndex) : m.sensorCode),
           value: resolvedVal,
           code: m.sensorCode,
           bitIndex: m.bitIndex,
@@ -117,85 +119,9 @@ const fetchData = async () => {
   }
 };
 
-const handleSaveConfig = async () => {
-  try {
-    const markers = sensors.value.map(s => ({
-      templateCode: "HVAC_STANDARD",
-      sensorCode: s.code,
-      bitIndex: s.bitIndex !== undefined ? s.bitIndex : null,
-      x: s.x,
-      y: s.y,
-      markerType: s.type || 'rect',
-      color: s.color,
-      label: s.label,
-      isActive: true
-    }));
-
-    const res = await httpOperations.post('/api/v1/sensor-maps/batch/HVAC_STANDARD', markers);
-    if (res.success) {
-      isEdit.value = false;
-      // @ts-ignore
-      window.TLSuccess?.("配置儲存成功");
-    }
-  } catch (error) {
-    console.error("Save failed:", error);
-  }
-};
-
-const handleDragStart = (sensor: any, bitIndex: number | null, e: DragEvent) => {
-  if (!e.dataTransfer) return;
-  const isBitmap = bitIndex !== null;
-  const dragData = {
-    id: isBitmap ? `${sensor.sensorCode}_bit${bitIndex}` : sensor.sensorCode,
-    code: sensor.sensorCode,
-    bitIndex: bitIndex,
-    label: isBitmap ? getBitLabelLocal(sensor.sensorCode, bitIndex) : sensor.sensorName,
-    value: isBitmap ? '0' : sensor.sensorValue,
-    color: sensor.sensorTypeName === '溫度' ? '#10b981' : '#3b82f6',
-    type: sensor.sensorTypeName === '溫度' ? 'circle' : 'rect'
-  };
-  e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
-  e.dataTransfer.dropEffect = 'copy';
-};
-
-const onMarkerAdd = (data: any) => {
-  const exists = sensors.value.some(s => s.id === data.id);
-  if (exists) {
-    sensors.value = sensors.value.map(s => s.id === data.id ? { ...s, x: data.x, y: data.y } : s);
-  } else {
-    sensors.value = [...sensors.value, data];
-  }
-};
-
-const onMarkerDelete = (id: any) => {
-  sensors.value = sensors.value.filter(s => s.id !== id);
-  if (selectedMarker.value && selectedMarker.value.id === id) {
-    selectedMarker.value = null;
-  }
-};
-
-const selectedMarker = ref<any>(null);
-
-const handleMarkerClick = (marker: any) => {
-  if (!isEdit.value) return;
-  selectedMarker.value = { ...marker };
-};
-
-const handleSaveMarkerEdit = () => {
-  if (!selectedMarker.value) return;
-  sensors.value = sensors.value.map(s => s.id === selectedMarker.value.id ? { ...selectedMarker.value } : s);
-  selectedMarker.value = null;
-  // @ts-ignore
-  window.TLSuccess?.("標記屬性套用成功（請記得儲存配置以永久存檔）");
-};
-
 onMounted(() => {
   fetchData();
 });
-
-const sensors = ref<any[]>([]); 
-const allSensors = ref<any[]>([]); 
-const loading = ref(false);
 
 watch(() => allSensors.value, (newAll) => {
   sensors.value = sensors.value.map(s => {
@@ -225,237 +151,123 @@ watch(() => allSensors.value, (newAll) => {
         <div class="w-1 h-4 bg-[#2a7eb5] rounded-full"></div>
         感測器圖面配置
       </h3>
+      <div class="flex items-center gap-2">
+        <BaseButton
+          @click="openDownloadDialog"
+          color-class="bg-[#2a7eb5] hover:bg-[#206796] text-white shadow-sm text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-95"
+          :icon="mdiCloudDownload"
+        >
+          下載 tymetro 設定
+        </BaseButton>
+      </div>
     </div>
 
     <!-- Map Container -->
     <div class="flex-1 min-h-0 relative rounded-2xl overflow-hidden border border-slate-200 shadow-lg bg-white group">
+      <div v-if="loading" class="absolute inset-0 z-10 bg-white/60 backdrop-blur-[1px] flex items-center justify-center">
+        <div class="flex flex-col items-center gap-2 text-slate-500">
+          <BaseIcon :path="mdiRefresh" size="28" class="animate-spin text-[#2a7eb5]" />
+          <span class="text-xs font-bold tracking-wider">載入圖面配置中...</span>
+        </div>
+      </div>
+
       <SvgViewer
         ref="svgViewerRef"
         :src="planUrl"
         v-model:markers="sensors"
-        :editable="isEdit"
-        :zoomable="false"
+        :editable="false"
+        :zoomable="true"
         :initial-scale="0.8"
-        @add-marker="onMarkerAdd"
-        @delete-marker="onMarkerDelete"
-        @click-marker="handleMarkerClick"
       />
 
-      <!-- 右下角整合工具欄 (純圖示) -->
+      <!-- 右下角縮放控制工具欄 -->
       <div class="absolute bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-auto">
-        <!-- 功能控制組 -->
         <div class="flex flex-col bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-1 shadow-2xl">
-          <!-- 開啟清單 -->
-          <BaseButton 
-            @click="sidebarOpen = true" 
-            icon-only
-            :icon="mdiFormatListBulleted"
-            color-class="w-10 h-10 flex items-center justify-center hover:bg-white/10 text-emerald-400 rounded-xl transition-all active:scale-90"
-            title="開啟感測器清單"
-          />
-          
+          <button 
+            @click="svgViewerRef?.zoomIn()" 
+            class="w-10 h-10 flex items-center justify-center hover:bg-white/10 text-white rounded-xl transition-all active:scale-90" 
+            title="放大 (Zoom In)"
+          >
+            <BaseIcon :path="mdiPlus" size="20" />
+          </button>
+          <button 
+            @click="svgViewerRef?.zoomOut()" 
+            class="w-10 h-10 flex items-center justify-center hover:bg-white/10 text-white rounded-xl transition-all active:scale-90" 
+            title="縮小 (Zoom Out)"
+          >
+            <BaseIcon :path="mdiMinus" size="20" />
+          </button>
           <div class="h-[1px] bg-white/10 mx-2 my-0.5"></div>
-
-          <!-- 位置調整開關 -->
-          <BaseButton
-            @click="isEdit ? handleSaveConfig() : (isEdit = true)"
-            icon-only
-            :icon="isEdit ? mdiCheck : mdiCursorMove"
-            :color-class="[
-              'w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90',
-              isEdit ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'hover:bg-white/10 text-white'
-            ].join(' ')"
-            :title="isEdit ? '儲存配置' : '調整標記位置'"
-          />
-            
+          <button 
+            @click="svgViewerRef?.reset()" 
+            class="w-10 h-10 flex items-center justify-center hover:bg-white/10 text-white rounded-xl transition-all active:scale-90" 
+            title="重設視角 (Reset)"
+          >
+            <BaseIcon :path="mdiRestore" size="18" />
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Custom Drawer -->
-    <transition name="drawer">
-      <div v-if="sidebarOpen" class="fixed top-0 right-0 h-full w-[350px] bg-white shadow-2xl z-[2000] flex flex-col border-l border-slate-100">
-        <!-- Drawer Header -->
-        <div class="flex items-center justify-between p-5 bg-slate-50/50 border-b border-slate-100">
-          <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Equipment Registers</div>
-            <div class="text-base font-black text-slate-800">即時暫存器清單</div>
-          </div>
-          <BaseButton 
-            @click="sidebarOpen = false" 
-            mode="ghost"
-            variant="default"
-            circle
-            icon-only
-            :icon="mdiClose"
-            color-class="p-1.5 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
-          />
-        </div>
-
-        <!-- Sensor List -->
-        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
-          <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-slate-300">
-            <div class="animate-spin mb-4"><BaseIcon :path="mdiRefresh" size="28" /></div>
-            <span class="text-[10px] font-black uppercase tracking-widest">Loading Sensors...</span>
-          </div>
-          
-          <div 
-            v-for="sensor in allSensors" 
-            :key="sensor.id"
-          >
-            <!-- 1. 當非 bitmap 型別時，整張卡片都可以拖曳 -->
-            <div 
-              v-if="sensor.dataType !== 'bitmap'"
-              draggable="true"
-              @dragstart="handleDragStart(sensor, null, $event)"
-              class="bg-white border border-slate-100 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all cursor-grab active:cursor-grabbing group border-l-4 mb-3"
-              :style="{ borderLeftColor: sensor.sensorTypeName === '溫度' ? '#10b981' : '#3b82f6' }"
-            >
-              <div class="flex items-center justify-between mb-1.5">
-                <span class="text-xs font-black text-slate-700 truncate pr-2">{{ sensor.sensorName }}</span>
-                <div class="px-1.5 py-0.5 bg-slate-100 rounded text-[8px] font-black text-slate-400 uppercase">{{ sensor.sensorTypeName }}</div>
+    <!-- 下載樣板彈窗 Modal -->
+    <transition name="fade">
+      <div v-if="isDownloadModalOpen" class="fixed inset-0 z-[2500] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <!-- Modal Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-[#2a7eb5]/10 text-[#2a7eb5] flex items-center justify-center">
+                <BaseIcon :path="mdiCloudDownload" size="20" />
               </div>
-              <div class="flex items-baseline gap-0.5 font-mono font-black text-slate-800">
-                <span class="text-xl">{{ sensor.sensorValue }}</span>
-                <span class="text-[10px] text-slate-400 uppercase">{{ sensor.sensorUnit }}</span>
+              <div>
+                <h4 class="text-sm font-black text-slate-800 mb-0">下載感測器圖面配置</h4>
+                <p class="text-[11px] text-slate-400 mb-0">自 tymetro 中心端同步樣板標記點位</p>
               </div>
             </div>
-
-            <!-- 2. 當為 bitmap 型別時，卡片不可直接拖曳，而是展示內部 16 個 Bit 可供各別拖曳 -->
-            <div 
-              v-else
-              class="bg-white border border-slate-100 rounded-xl p-4 shadow-sm border-l-4 border-l-purple-500 mb-3"
+            <button 
+              @click="isDownloadModalOpen = false" 
+              class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
             >
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-black text-slate-700 truncate pr-2">{{ sensor.sensorName }} (Bitmap)</span>
-                <div class="px-1.5 py-0.5 bg-purple-100 text-purple-600 rounded text-[8px] font-black uppercase">位元遮罩</div>
-              </div>
-              
-              <div class="flex flex-col gap-1.5 mt-2 max-h-[220px] overflow-y-auto pr-1">
-                <div 
-                  v-for="bit in 16" 
-                  :key="bit - 1"
-                  draggable="true"
-                  @dragstart="handleDragStart(sensor, bit - 1, $event)"
-                  class="bg-slate-50 hover:bg-purple-50/50 border border-slate-100 rounded-lg p-2 flex items-center justify-between text-xs cursor-grab active:cursor-grabbing hover:border-purple-200 transition-all select-none"
-                  :title="`拖曳此位元 (${getBitLabelLocal(sensor.sensorCode, bit - 1)}) 至地圖`"
-                >
-                  <div class="flex items-center gap-2 min-w-0">
-                    <span class="font-mono font-black text-[8px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">B{{ bit - 1 }}</span>
-                    <span class="font-bold text-slate-700 truncate text-[11px]">{{ getBitLabelLocal(sensor.sensorCode, bit - 1) }}</span>
-                  </div>
-                  <span class="font-mono font-black text-[11px]" :class="[sensor.sensorValue.charAt(16 - bit) === '1' ? 'text-emerald-500' : 'text-slate-400']">
-                    {{ sensor.sensorValue.charAt(16 - bit) || '0' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Footer Info -->
-        <div class="p-4 bg-slate-50 border-t border-slate-100">
-          <p class="text-[10px] text-slate-400 font-bold text-center uppercase tracking-tighter">
-            請將感測器卡片直接拖拽至左側地圖區域
-          </p>
-        </div>
-      </div>
-    </transition>
-
-    <!-- 編輯標記側邊欄抽屜 (當處於編輯狀態且有選中標記時) -->
-    <transition name="drawer">
-      <div v-if="isEdit && selectedMarker" class="fixed top-0 right-0 h-full w-[350px] bg-white shadow-2xl z-[2001] flex flex-col border-l border-slate-100">
-        <!-- Drawer Header -->
-        <div class="flex items-center justify-between p-5 bg-slate-50/50 border-b border-slate-100">
-          <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Edit Marker</div>
-            <div class="text-base font-black text-slate-800">編輯標記屬性</div>
-          </div>
-          <BaseButton 
-            @click="selectedMarker = null" 
-            mode="ghost"
-            variant="default"
-            circle
-            icon-only
-            :icon="mdiClose"
-            color-class="p-1.5 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
-          />
-        </div>
-
-        <!-- Form Content -->
-        <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-          <div class="flex flex-col gap-1.5">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">點位代碼</label>
-            <input 
-              type="text" 
-              :value="selectedMarker.code + (selectedMarker.bitIndex !== null && selectedMarker.bitIndex !== undefined ? ` (Bit ${selectedMarker.bitIndex})` : '')" 
-              disabled 
-              class="w-full px-3 py-2 rounded-xl border border-slate-100 bg-slate-50 text-slate-500 font-mono text-sm outline-none"
-            />
+              <BaseIcon :path="mdiClose" size="18" />
+            </button>
           </div>
 
-          <div class="flex flex-col gap-1.5">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">顯示標籤名稱</label>
-            <input 
-              type="text" 
-              v-model="selectedMarker.label" 
-              placeholder="請輸入顯示標籤"
-              class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none text-sm font-semibold transition-all"
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">標記顏色 (Hex)</label>
-            <div class="flex gap-2 items-center">
-              <input 
-                type="color" 
-                v-model="selectedMarker.color" 
-                class="w-8 h-8 rounded-lg border-0 cursor-pointer overflow-hidden bg-transparent"
-              />
+          <!-- Modal Body -->
+          <div class="p-6 flex flex-col gap-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-black text-slate-700">樣板代碼 (Template Code)</label>
               <input 
                 type="text" 
-                v-model="selectedMarker.color" 
-                placeholder="#3b82f6"
-                class="flex-1 px-3 py-2 rounded-xl border border-slate-200 focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none text-sm font-mono transition-all"
+                v-model="downloadTemplateCode" 
+                placeholder="例如: HVAC_STANDARD"
+                @keyup.enter="handleDownload"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none text-sm font-semibold transition-all"
               />
+              <span class="text-[11px] text-slate-400 font-medium">預設下載：<code class="text-[#2a7eb5] bg-sky-50 px-1.5 py-0.5 rounded font-mono font-bold">HVAC_STANDARD</code></span>
             </div>
-          </div>
-          
-          <div class="flex flex-col gap-1.5">
-            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">標記類型</label>
-            <div class="grid grid-cols-2 gap-2">
-              <button 
-                @click="selectedMarker.type = 'circle'" 
-                class="py-2 text-xs font-black rounded-xl border transition-all"
-                :class="[selectedMarker.type === 'circle' ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-200 hover:bg-slate-50 text-slate-600']"
-              >
-                圓形 (Circle)
-              </button>
-              <button 
-                @click="selectedMarker.type = 'rect'" 
-                class="py-2 text-xs font-black rounded-xl border transition-all"
-                :class="[selectedMarker.type === 'rect' ? 'bg-slate-900 border-slate-900 text-white' : 'border-slate-200 hover:bg-slate-50 text-slate-600']"
-              >
-                矩形 (Rect)
-              </button>
-            </div>
-          </div>
-        </div>
 
-        <!-- Footer Actions -->
-        <div class="p-4 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-2">
-          <button 
-            @click="selectedMarker = null"
-            class="py-2.5 rounded-xl border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-100 transition-all active:scale-95"
-          >
-            取消
-          </button>
-          <button 
-            @click="handleSaveMarkerEdit"
-            class="py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black transition-all active:scale-95 shadow-[0_4px_12px_rgba(16,185,129,0.2)]"
-          >
-            確定套用
-          </button>
+            <div class="p-3 bg-amber-50/70 border border-amber-200/60 rounded-xl text-xs text-amber-800 leading-relaxed">
+              下載後將自動覆蓋本機 SQLite 的配置資料，並立即重新套用載入標記點位座標與屬性。
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-2.5">
+            <button 
+              @click="isDownloadModalOpen = false" 
+              class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-100 transition-all active:scale-95"
+            >
+              取消
+            </button>
+            <button 
+              @click="handleDownload" 
+              :disabled="downloadLoading"
+              class="px-5 py-2 rounded-xl bg-[#2a7eb5] hover:bg-[#206796] text-white text-xs font-black transition-all active:scale-95 shadow-md flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <BaseIcon v-if="downloadLoading" :path="mdiRefresh" size="16" class="animate-spin" />
+              <span>{{ downloadLoading ? '下載中...' : '確認下載' }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </transition>
@@ -463,18 +275,10 @@ watch(() => allSensors.value, (newAll) => {
 </template>
 
 <style scoped>
-.drawer-enter-active, .drawer-leave-active {
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
 }
-.drawer-enter-from, .drawer-leave-to {
-  transform: translateX(100%);
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #e2e8f0;
-  border-radius: 9999px;
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>

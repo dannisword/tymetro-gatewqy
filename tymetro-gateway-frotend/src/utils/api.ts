@@ -121,3 +121,9 @@ export const downloadVehicleMetadata = async (trainCode?: string): Promise<any> 
     const url = `/api/v1/configs/download-metadata` + (trainCode ? `?trainCode=${encodeURIComponent(trainCode)}` : '')
     return await httpOperations.post(url)
 }
+
+export const downloadSensorMaps = async (templateCode: string = 'HVAC_STANDARD'): Promise<any> => {
+    const url = `/api/v1/sensor-maps/download/${encodeURIComponent(templateCode)}`
+    return await httpOperations.post(url)
+}
+

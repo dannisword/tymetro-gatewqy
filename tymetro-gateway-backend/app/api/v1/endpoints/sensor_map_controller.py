@@ -10,6 +10,9 @@ from app.schemas.response_schema import ResponseBase
 from app.utils.response_util import ResponseUtil
 from app.models.user_model import User
 from app.schemas.config_schema import ConfigCreate, ConfigUpdate
+from app.core.config import settings
+from app.core.logger import logger
+from app.utils.http_util import HttpUtil
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -64,3 +67,62 @@ def save_sensor_map_batch(
         return ResponseUtil.success(message="Sensor map configurations saved successfully")
     except Exception as e:
         return ResponseUtil.error(message=f"Failed to save sensor map template: {str(e)}")
+
+@router.post("/download/{template_code}", response_model=ResponseBase, summary="自中心端下載感測器圖配置並儲存至本機")
+@router.get("/download/{template_code}", response_model=ResponseBase, summary="自中心端下載感測器圖配置並儲存至本機 (GET)")
+def download_sensor_map_template(
+    template_code: str,
+    service: ConfigService = Depends(get_config_service),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    從中央後端 (tymetro-backend) 下載特定 template_code 的感測器地圖配置，
+    並直接儲存至本機 SQLite 的 config 資料表中。
+    """
+    try:
+        token = HttpUtil.get_central_backend_token()
+        headers = {"Accept": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        target_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensor-maps/template/{template_code}"
+        logger.info(f"Proxying sensor-maps download request to central backend: {target_url}")
+
+        resp_data = HttpUtil.get(target_url, headers=headers, timeout=10)
+        if not resp_data or not resp_data.get("success"):
+            error_msg = resp_data.get("message") if resp_data else "無法連線至中心端後端"
+            return ResponseUtil.error(message=f"自中心端下載感測器地圖失敗: {error_msg}")
+
+        raw_list = resp_data.get("data") or []
+        markers = []
+        for item in raw_list:
+            if isinstance(item, dict):
+                markers.append({
+                    "templateCode": template_code,
+                    "sensorCode": item.get("sensorCode", ""),
+                    "bitIndex": item.get("bitIndex"),
+                    "x": float(item.get("x", 0.0)),
+                    "y": float(item.get("y", 0.0)),
+                    "markerType": item.get("markerType", "rect"),
+                    "color": item.get("color", "#3b82f6"),
+                    "label": item.get("label"),
+                    "isActive": bool(item.get("isActive", True))
+                })
+
+        config_type = f"SENSOR_MAP_{template_code}"
+        content_str = json.dumps(markers, ensure_ascii=False)
+
+        config_item = service.get_by_config_type(config_type)
+        if config_item:
+            service.update(config_item.id, ConfigUpdate(configContent=content_str))
+        else:
+            service.create(ConfigCreate(configType=config_type, configContent=content_str))
+
+        return ResponseUtil.success(
+            data=markers,
+            message=f"成功自中心端下載並套用樣板 [{template_code}] 共 {len(markers)} 筆感測器圖面配置"
+        )
+    except Exception as e:
+        logger.error(f"Failed to download sensor map template {template_code}: {e}", exc_info=True)
+        return ResponseUtil.error(message=f"下載感測器圖配置發生例外: {str(e)}")
+
