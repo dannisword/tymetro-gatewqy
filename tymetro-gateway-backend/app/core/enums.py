@@ -77,7 +77,9 @@ class PlcRegister(LabeledEnum):
     TEMP_SETTING_CMD = ("D40200", "溫度設定命令 (x10)")
     TEMP_SETTING_DISPLAY = ("D40121", "溫度設定顯示點位")
     FRESH_AIR_DAMPER_CMD = ("D40212", "新鮮空氣擋板設定")
+    FRESH_AIR_DAMPER_DISPLAY = ("D40213", "新鮮空氣擋板顯示")
     EMERG_AIR_DAMPER_CMD = ("D40214", "緊急供氣擋板設定")
+    EMERG_AIR_DAMPER_DISPLAY = ("D40215", "緊急供氣擋板顯示")
 
 
 def get_all_enums() -> Dict[str, Any]:

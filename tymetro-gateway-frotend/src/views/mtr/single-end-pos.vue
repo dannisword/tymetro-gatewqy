@@ -120,8 +120,10 @@ const compressors = ref([
   { id: 1, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0 },
   { id: 2, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0 }
 ]);
+// 新鮮空氣擋板開度 (設定觸發: D40212, 顯示完成: D40213): 0=關閉, 25=25%, 50=50%, 75=75%, 100=100%
 const freshAirDamperPos = ref<number>(0);
-const emergAirDamper = ref<number>(1); // 1=否, 2=是
+// 緊急供氣擋板 (設定觸發: D40214, 顯示完成: D40215): 1=否, 2=是
+const emergAirDamper = ref<number>(1);
 
 const freshAirDamperOptions = ref<{ value: number; label: string }[]>([
   { value: 0, label: '關閉' },
@@ -419,11 +421,13 @@ const fetchRegisters = async () => {
         isChanging: false,
         carNo: reg.carNo || carNo.value
       }));
-      const freshAirReg = list.find((s: any) => s.sensorCode === 'D40212');
+      // 載入時初始化新鮮空氣擋板開度 (完成狀態 D40213)
+      const freshAirReg = list.find((s: any) => s.sensorCode === 'D40213');
       if (freshAirReg && freshAirReg.sensorValue !== undefined && freshAirReg.sensorValue !== null) {
         freshAirDamperPos.value = Number(freshAirReg.sensorValue);
       }
-      const emergAirReg = list.find((s: any) => s.sensorCode === 'D40213');
+      // 載入時初始化緊急供氣擋板 (完成狀態 D40215)
+      const emergAirReg = list.find((s: any) => s.sensorCode === 'D40215');
       if (emergAirReg && emergAirReg.sensorValue !== undefined && emergAirReg.sensorValue !== null) {
         emergAirDamper.value = Number(emergAirReg.sensorValue);
       }
@@ -513,7 +517,7 @@ const setEmergAirDamper = (val: number) => {
     events: 'set_value',
     carNo: carNo.value,
     endPos: endPosId.value,
-    register: { D40213: val }
+    register: { D40214: val }
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
@@ -608,6 +612,20 @@ watch([returnTemp, setTemp, mode], () => {
   syncStatusToRegisters();
 });
 
+// 監聽新鮮空氣擋板控制完成 (D40213 顯示)
+watch(() => modbusRegisters.value.find(s => s.sensorCode === 'D40213')?.sensorValue, (val) => {
+  if (val !== undefined && val !== null && val !== '') {
+    freshAirDamperPos.value = Number(val);
+  }
+});
+
+// 監聽緊急通風擋板完成 (D40215 顯示)
+watch(() => modbusRegisters.value.find(s => s.sensorCode === 'D40215')?.sensorValue, (val) => {
+  if (val !== undefined && val !== null && val !== '') {
+    emergAirDamper.value = Number(val);
+  }
+});
+
 // 當 MQTT 連線成功時，自動發送讀取設備初始狀態請求
 watch(isMqttConnected, (connected) => {
   if (connected) {
@@ -683,8 +701,10 @@ onMounted(async () => {
       }
 
       updateCompressorStatus({ compressors: compressors.value }, reg);
-      if (reg.D40212 !== undefined) freshAirDamperPos.value = Number(reg.D40212);
-      if (reg.D40213 !== undefined) emergAirDamper.value = Number(reg.D40213);
+      // 新鮮空氣檔版位置 (顯示完成: D40213)
+      if (reg.D40213 !== undefined && reg.D40213 !== null) freshAirDamperPos.value = Number(reg.D40213);
+      // 緊急供氣檔版位置 (顯示完成: D40215)
+      if (reg.D40215 !== undefined && reg.D40215 !== null) emergAirDamper.value = Number(reg.D40215);
 
       modbusRegisters.value.forEach(r => {
         const plcAddress = 40001 + r.address;
@@ -977,7 +997,7 @@ onUnmounted(() => {
               <div class="p-3.5 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2">
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-black text-slate-500 uppercase tracking-wide">新鮮空氣擋板開度</span>
-                  <span class="ml-auto text-[10px] font-bold text-slate-400">D40212</span>
+                  <!-- <span class="ml-auto text-[10px] font-bold text-slate-400" title="設定觸發: D40212 / 顯示完成: D40213">觸發 D40212 / 完成 D40213</span> -->
                 </div>
                 <BaseRangeSlider
                   v-model="freshAirDamperPos"
@@ -994,7 +1014,7 @@ onUnmounted(() => {
               <div class="p-3.5 bg-slate-50/50 rounded-xl border border-slate-100 flex flex-col justify-between gap-3 h-full">
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-black text-slate-500 uppercase tracking-wide">開啟緊急供氣擋板</span>
-                  <span class="ml-auto text-[10px] font-bold text-slate-400">D40213</span>
+                  <!-- <span class="ml-auto text-[10px] font-bold text-slate-400" title="設定觸發: D40214 / 顯示完成: D40215">觸發 D40214 / 完成 D40215</span> -->
                 </div>
                 <div class="flex items-center justify-between">
                   <span class="text-sm font-black" :class="emergAirDamper === 2 ? 'text-rose-600' : 'text-slate-400'">
