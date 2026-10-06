@@ -23,6 +23,7 @@ logs/
 # Databases
 *.db
 *.sqlite3
+data/
 
 # OS generated files
 .DS_Store
