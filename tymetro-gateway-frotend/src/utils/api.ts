@@ -100,7 +100,11 @@ export const getRegisterTrend = async (params: {
 }
 
 export const writeInitialValuesToPlc = async (): Promise<any> => {
-    return await httpOperations.post('/api/v1/write-initial-values')
+    return await httpOperations.post('/api/v1/configs/publish-initial-values')
+}
+
+export const publishInitialValuesToPlc = async (): Promise<any> => {
+    return await httpOperations.post('/api/v1/configs/publish-initial-values')
 }
 
 export const writeSettingValuesToPlc = async (): Promise<any> => {

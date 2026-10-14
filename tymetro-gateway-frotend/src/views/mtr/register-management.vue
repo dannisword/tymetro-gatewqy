@@ -14,12 +14,14 @@ import {
   mdiCloudDownload,
   mdiMagnify,
   mdiChevronDown,
-  mdiClose
+  mdiClose,
+  mdiSend
 } from '@mdi/js';
 import * as XLSX from 'xlsx';
 
 import AgGridView2 from '@/components/AgGridView2.vue';
 import ElDialogCustom from '@/components/ElDialogCustom.vue';
+import { ElMessageBox } from 'element-plus';
 import { GridOptions } from 'ag-grid-community';
 import { useMtrStore } from '@/store/useMtrStore';
 
@@ -33,6 +35,7 @@ import {
   updateModbusRegister,
   deleteModbusRegister,
   writeInitialValuesToPlc,
+  publishInitialValuesToPlc,
   writeSettingValuesToPlc,
   downloadVehicleMetadata,
   getEnums
@@ -301,12 +304,21 @@ const handleModalClose = async (dialogRef: any) => {
 };
 
 const deleteRegister = async (item: RegisterItem) => {
-  if (confirm(`確定要刪除暫存器 [${item.name}] (位址: ${item.address}) 嗎？`)) {
-    try {
-      await deleteModbusRegister(item.id);
-      TLSuccess('刪除暫存器設定成功');
-      fetchRegisters();
-    } catch (error: any) {
+  try {
+    await ElMessageBox.confirm(
+      `確定要刪除暫存器 [${item.name}] (位址: ${item.address}) 嗎？`,
+      '刪除確認',
+      {
+        confirmButtonText: '確定刪除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+    await deleteModbusRegister(item.id);
+    TLSuccess('刪除暫存器設定成功');
+    fetchRegisters();
+  } catch (error: any) {
+    if (error !== 'cancel') {
       console.error('Delete register error:', error);
       TLError(error.response?.data?.message || '刪除失敗');
     }
@@ -393,26 +405,52 @@ const handleExport = async () => {
   }
 };
 
-const handleWriteInitialValues = async () => {
-  if (!confirm('確定要將資料庫中的「初始值」寫入 PLC 嗎？')) return;
+const handlePublishInitialValues = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '確定要將資料庫中的「初始值暫存器」透過 MQTT 發布至 8 台 PLC 嗎？\n(Topic: TYMC/AIR/INI/{trainNo}/{carVin}/{endPos})',
+      '發布初始值確認',
+      {
+        confirmButtonText: '確定發布',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+  } catch {
+    return;
+  }
+
   loading.value = true;
   try {
-    const res = await writeInitialValuesToPlc();
+    const res = await publishInitialValuesToPlc();
     if (res && res.success) {
-      TLSuccess(res.message || '寫入 PLC 初始值成功');
+      TLSuccess(res.message || '發布初始值至 PLC 成功');
     } else {
-      TLError(res?.message || '寫入 PLC 初始值失敗');
+      TLError(res?.message || '發布初始值至 PLC 失敗');
     }
   } catch (error: any) {
-    console.error('Write initial values error:', error);
-    TLError(error.response?.data?.message || '寫入失敗，請稍後重試');
+    console.error('Publish initial values error:', error);
+    TLError(error.response?.data?.message || '發布失敗，請稍後重試');
   } finally {
     loading.value = false;
   }
 };
 
 const handleWriteSettingValues = async () => {
-  if (!confirm('確定要將資料庫中的「設定值」寫入 PLC 嗎？')) return;
+  try {
+    await ElMessageBox.confirm(
+      '確定要將資料庫中的「設定值」寫入 PLC 嗎？',
+      '寫入設定值確認',
+      {
+        confirmButtonText: '確定寫入',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    );
+  } catch {
+    return;
+  }
+
   loading.value = true;
   try {
     const res = await writeSettingValuesToPlc();
@@ -556,6 +594,14 @@ const handleDownloadMetadata = async (dialogRef: any) => {
                 :icon="mdiRefresh"
               >
                 重置
+              </BaseButton>
+
+              <BaseButton 
+                @click="handlePublishInitialValues"
+                colorClass="bg-amber-600 text-white hover:bg-amber-700 shadow-sm px-3 sm:px-4 py-1.5 rounded-lg text-sm font-bold flex-1 sm:flex-initial justify-center whitespace-nowrap"
+                :icon="mdiSend"
+              >
+                發布初始值至 PLC
               </BaseButton>
 
               <BaseButton 
