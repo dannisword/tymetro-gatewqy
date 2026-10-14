@@ -224,5 +224,93 @@ class GatewayMQTTService:
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Failed to batch publish messages to Local Broker: {e}")
 
+    async def publish_initial_values(self, db: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        將資料庫中 sensorType 為 INITIAL 的初始值暫存器，
+        透過 MQTT 發布至所有啟用的設備 (8 台 PLC)。
+        Topic 格式：TYMC/AIR/INI/{trainNo}/{carVin}/{endPos}
+        """
+        from collections import defaultdict
+        from app.database.session import SessionLocal
+        from app.models.car_model import Car
+        from app.models.equipment_model import Equipment
+        from app.models.sensor_model import Sensor
+
+        close_db = False
+        if db is None:
+            db = SessionLocal()
+            close_db = True
+
+        try:
+            # 1. 查詢所有啟用車廂與設備
+            equipments = (
+                db.query(Equipment, Car)
+                .join(Car, Equipment.carId == Car.id)
+                .filter(Equipment.isActive == True, Car.isActive == True)
+                .all()
+            )
+
+            if not equipments:
+                logger.warning("[GatewayMQTTService] No active equipments found to publish initial values.")
+                return {"count": 0, "targets": []}
+
+            # 2. 查詢所有 INITIAL 感測器
+            initial_sensors = (
+                db.query(Sensor)
+                .filter(Sensor.sensorType == "INITIAL", Sensor.isActive == True)
+                .all()
+            )
+
+            # 依 equipmentId 分組暫存器
+            eq_sensor_map = defaultdict(dict)
+            for s in initial_sensors:
+                val: Any = s.sensorValue or 0
+                if isinstance(val, float) and val.is_integer():
+                    val = int(val)
+                eq_sensor_map[s.equipmentId][s.sensorCode] = val
+
+            mqtt_messages = []
+            published_targets = []
+            current_timestamp = int(time.time())
+
+            for eq, car in equipments:
+                train_no = str(car.trainCode or "109").strip()
+                if train_no.upper().startswith("P"):
+                    train_no = train_no[1:]
+
+                car_vin = str(car.carVin or car.carNo or "")
+                end_pos = eq.endPos
+                car_no_val = int(car.carVin) if car.carVin and str(car.carVin).isdigit() else (car.carNo or 0)
+
+                topic = f"TYMC/AIR/INI/{train_no}/{car_vin}/{end_pos}"
+                registers = eq_sensor_map.get(eq.id, {})
+
+                payload = {
+                    "events": "set_value",
+                    "timestamp": current_timestamp,
+                    "trainCode": train_no,
+                    "carNo": car_no_val,
+                    "endPos": end_pos,
+                    "register": registers
+                }
+
+                mqtt_messages.append({
+                    "topic": topic,
+                    "payload": json.dumps(payload, ensure_ascii=False),
+                    "qos": 1,
+                    "retain": True
+                })
+                published_targets.append(topic)
+
+            await self.publish_messages(mqtt_messages)
+            logger.info(f"[GatewayMQTTService] Successfully published initial values to {len(mqtt_messages)} PLC(s).")
+            return {"count": len(mqtt_messages), "targets": published_targets}
+        except Exception as e:
+            logger.error(f"[GatewayMQTTService] Failed to publish initial values: {e}")
+            raise e
+        finally:
+            if close_db:
+                db.close()
+
 gateway_mqtt_service = GatewayMQTTService()
 

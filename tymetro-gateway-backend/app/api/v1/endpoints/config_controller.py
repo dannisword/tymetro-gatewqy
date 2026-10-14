@@ -311,83 +311,10 @@ async def publish_initial_values(
     Topic 格式：TYMC/AIR/INI/{trainNo}/{carVin}/{endPos}
     """
     try:
-        from collections import defaultdict
-        import json
-
-        # 1. 查詢所有啟用車廂與設備
-        equipments = (
-            db.query(Equipment, Car)
-            .join(Car, Equipment.carId == Car.id)
-            .filter(Equipment.isActive == True, Car.isActive == True)
-            .all()
-        )
-
-        if not equipments:
-            return ResponseUtil.error("未找到啟用的車廂與設備點位")
-
-        # 2. 查詢所有 INITIAL 感測器
-        initial_sensors = (
-            db.query(Sensor)
-            .filter(Sensor.sensorType == "INITIAL", Sensor.isActive == True)
-            .all()
-        )
-
-        # 依 equipmentId 分組暫存器
-        eq_sensor_map = defaultdict(dict)
-        for s in initial_sensors:
-            val: Any = s.sensorValue or 0
-            if isinstance(val, float) and val.is_integer():
-                val = int(val)
-            eq_sensor_map[s.equipmentId][s.sensorCode] = val
-
-        mqtt_messages = []
-        published_targets = []
-
-        import time
-
-        current_timestamp = int(time.time())
-
-        for eq, car in equipments:
-            train_no = str(car.trainCode or "109").strip()
-            # 確保 trainNo 不重複帶 P 前綴
-            if train_no.upper().startswith("P"):
-                train_no = train_no[1:]
-
-            car_vin = str(car.carVin or car.carNo or "")
-            end_pos = eq.endPos
-            car_no_val = int(car.carVin) if car.carVin and str(car.carVin).isdigit() else (car.carNo or 0)
-
-            # Topic: TYMC/AIR/INI/{trainNo}/{carVin}/{endPos}
-            topic = f"TYMC/AIR/INI/{train_no}/{car_vin}/{end_pos}"
-
-            registers = eq_sensor_map.get(eq.id, {})
-
-            payload = {
-                "events": "set_value",
-                "timestamp": current_timestamp,
-                "trainCode": train_no,
-                "carNo": car_no_val,
-                "endPos": end_pos,
-                "register": registers
-            }
-
-            mqtt_messages.append({
-                "topic": topic,
-                "payload": json.dumps(payload, ensure_ascii=False),
-                "qos": 1,
-                "retain": True
-            })
-            published_targets.append(topic)
-
-        # 3. 透過 gateway_mqtt_service 批次發布
-        await gateway_mqtt_service.publish_messages(mqtt_messages)
-
+        result = await gateway_mqtt_service.publish_initial_values(db)
         return ResponseUtil.success(
-            data={
-                "count": len(mqtt_messages),
-                "targets": published_targets
-            },
-            message=f"已成功將初始值暫存器發布至 {len(mqtt_messages)} 台 PLC (MQTT)"
+            data=result,
+            message=f"已成功將初始值暫存器發布至 {result.get('count', 0)} 台 PLC (MQTT)"
         )
     except Exception as e:
         return ResponseUtil.error(message=f"發布初始值至 PLC 失敗: {str(e)}")

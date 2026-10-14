@@ -58,6 +58,15 @@ async def lifespan(app: FastAPI):
     # 5. 啟動每小時排程引擎 (Hourly Scheduler Engine)
     scheduler_engine.start()
     
+    # 6. 開機自動寫入初始值暫存器至 8 台 PLC (MQTT)
+    if yaml_settings.network.gateway_mqtt.enabled:
+        try:
+            logger.info("[Startup] Publishing initial values to PLCs via MQTT...")
+            init_res = await gateway_mqtt_service.publish_initial_values()
+            logger.info(f"[Startup] Initial values published to {init_res.get('count', 0)} PLC(s) successfully.")
+        except Exception as e:
+            logger.error(f"[Startup] Failed to publish initial values on startup: {e}")
+    
     yield
 
     # 【關閉階段】
