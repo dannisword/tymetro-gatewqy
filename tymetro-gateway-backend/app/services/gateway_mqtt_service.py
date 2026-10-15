@@ -207,13 +207,13 @@ class GatewayMQTTService:
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Failed to publish message to Local Broker on topic '{topic}': {e}")
 
-    async def publish_messages(self, messages: List[Dict[str, Any]]):
-        """批次將多筆訊息發布至 Local MQTT Broker (共用單一連線)"""
+    async def publish_messages(self, messages: List[Dict[str, Any]], delay_sec: float = 0.05):
+        """批次將多筆訊息發布至 Local MQTT Broker (共用單一連線，每筆間隔微延遲避免塞車)"""
         if not messages:
             return
         try:
             async with aiomqtt.Client(self.host, port=self.port) as client:
-                for msg in messages:
+                for idx, msg in enumerate(messages):
                     topic = msg.get("topic")
                     payload = msg.get("payload")
                     qos = msg.get("qos", 0)
@@ -221,6 +221,8 @@ class GatewayMQTTService:
                     if topic and payload is not None:
                         await client.publish(topic, payload, qos=qos, retain=retain)
                         logger.info(f"[GatewayMQTTService] Successfully published message to Local Broker on topic '{topic}'")
+                    if delay_sec > 0 and idx < len(messages) - 1:
+                        await asyncio.sleep(delay_sec)
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Failed to batch publish messages to Local Broker: {e}")
 

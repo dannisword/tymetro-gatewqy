@@ -63,3 +63,6 @@ sudo ./deploy.sh
 
 MQT/TAR/OTR/TRC
 MQT/TAR/OTR/TRC/ACV/TRPAlert
+
+docker restart tymetro-gateway-backend
+docker logs -f --tail 100 tymetro-gateway-backend

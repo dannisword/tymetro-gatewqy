@@ -1,6 +1,6 @@
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.logger import logger
 from app.core.config import settings
@@ -93,21 +93,31 @@ class SchedulerService:
             shutil.copy2(src_path, dest_path)
 
     def _cleanup_expired_backups(self, backup_dir: str):
-        """依 BACKUP_RETENTION_DAYS 僅保留最新的 N 個備份檔"""
+        """刪除早於 BACKUP_RETENTION_DAYS 天前的備份檔 (依檔名日期判斷，且至少保留最新一份)"""
         try:
             if not os.path.exists(backup_dir):
                 return
-            backup_files = [
-                os.path.join(backup_dir, f)
-                for f in os.listdir(backup_dir)
+            backup_files = sorted(
+                f for f in os.listdir(backup_dir)
                 if f.startswith("gateway_backup_") and f.endswith(".db")
-            ]
-            # 依檔名排序 (排序後舊的在前、新的在後)
-            backup_files.sort()
+            )
+            if len(backup_files) <= 1:
+                return
+
             retention_days = max(1, settings.BACKUP_RETENTION_DAYS)
-            if len(backup_files) > retention_days:
-                files_to_delete = backup_files[:-retention_days]
-                for f_path in files_to_delete:
+            cutoff = (datetime.now() - timedelta(days=retention_days)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            logger.debug(f"[SchedulerService] retention_days: {retention_days}")
+            # 最新一份永遠保留，避免長時間關機後開機時備份被全數清空
+            for f_name in backup_files[:-1]:
+                f_path = os.path.join(backup_dir, f_name)
+                try:
+                    # 檔名格式: gateway_backup_YYYYMMDD_HHMMSS.db
+                    file_date = datetime.strptime(f_name[len("gateway_backup_"):][:8], "%Y%m%d")
+                except ValueError:
+                    continue
+                if file_date < cutoff:
                     try:
                         os.remove(f_path)
                         logger.info(f"[SchedulerService] Deleted expired database backup: {f_path}")
