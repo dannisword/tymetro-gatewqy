@@ -14,7 +14,7 @@ class SensorHistory(Base):
     endPos = Column("end_pos", Integer, nullable=True, comment="端點位置 (1端或2端，可為空)")
     sensorCode = Column("sensor_code", String(50), nullable=False, comment="感測器點位代碼")
     sensorValue = Column("sensor_value", Float, nullable=False, comment="感測器數值")
-    recordedAt = Column("recorded_at", DateTime, index=True, nullable=False, default=datetime.utcnow, server_default=func.now(), comment="記錄時間")
+    recordedAt = Column("recorded_at", DateTime, nullable=False, default=datetime.utcnow, server_default=func.now(), comment="記錄時間")
     sensorName = Column("sensor_name", String(100), nullable=True, comment="感測器名稱")
     sensorUnit = Column("sensor_unit", String(10), nullable=True, comment="感測器單位")
     equipmentName = Column("equipment_name", String(100), nullable=True, comment="設備名稱")
@@ -22,6 +22,7 @@ class SensorHistory(Base):
     __table_args__ = (
         Index("ix_sensor_histories_recorded_at_desc", recordedAt.desc()),
         Index("ix_sensor_histories_code_time", sensorCode, recordedAt.desc()),
+        Index("ix_sensor_histories_code_car_time", sensorCode, carVin, recordedAt.desc()),
         Index("ix_sensor_histories_car_time", carVin, recordedAt.desc()),
         Index("ix_sensor_histories_equip_time", equipmentName, recordedAt.desc()),
     )

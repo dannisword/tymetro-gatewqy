@@ -66,10 +66,14 @@ def get_sensor_histories(
     sensor_code: Optional[str] = Query(None, description="感測器代碼 (相容舊參數)"),
     carVin: Optional[str] = Query(None, description="車廂唯一代碼 (如 1101)"),
     car_vin: Optional[str] = Query(None, description="車廂唯一代碼 (相容舊參數)"),
+    endPos: Optional[int] = Query(None, description="端點位置 (1端或2端)"),
     equipmentName: Optional[str] = Query(None, description="設備名稱 (如 PFC11011)"),
     equipment_name: Optional[str] = Query(None, description="設備名稱 (相容舊參數)"),
     limit: Optional[int] = Query(None, ge=1, le=1000, description="每頁筆數 (相容舊版參數)"),
     offset: Optional[int] = Query(None, ge=0, description="偏移量 (相容舊版參數)"),
+    startTime: Optional[datetime] = Query(None, description="開始時間"),
+    endTime: Optional[datetime] = Query(None, description="結束時間"),
+    includeTotal: bool = Query(True, description="是否計算總筆數 (大量資料時設為 false 可大幅加速，total 回傳 -1)"),
     db: Session = Depends(get_db)
 ):
     target_sensor_code = sensorCode or sensor_code
@@ -83,12 +87,16 @@ def get_sensor_histories(
         sensor_code=target_sensor_code,
         car_vin=target_car_vin,
         equipment_name=target_equipment_name,
+        end_pos=endPos,
         page_index=actual_page_index,
         page_size=actual_page_size,
         property_name=propertyName,
         order=order,
         limit=limit,
         offset=offset,
+        start_time=startTime,
+        end_time=endTime,
+        include_total=includeTotal,
         db_session=db
     )
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseButton from '@/components/BaseButton.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
@@ -79,7 +79,53 @@ const loading = ref(false);
 
 // Filters
 const filterRegisterId = ref<number | string>('');
+
+const MAX_RANGE_MS = 2 * 24 * 60 * 60 * 1000; // 查詢區間上限 2 天
+
+// datetime-local 格式 (本地時間) YYYY-MM-DDTHH:mm:ss
+const toLocalInput = (d: Date) => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+// 預設為今日 00:00:00 ~ 23:59:59
+const defaultRange = () => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 0);
+  return { start: toLocalInput(start), end: toLocalInput(end) };
+};
+const filterStartTime = ref(defaultRange().start);
+const filterEndTime = ref(defaultRange().end);
+
+// 後端 recordedAt 為 UTC (無時區)，本地時間轉成 UTC 字串送出
+const toUtcParam = (local: string) => new Date(local).toISOString().slice(0, 19);
+
+const validateRange = (): boolean => {
+  if (!filterStartTime.value || !filterEndTime.value) {
+    TLError('請選擇起訖時間');
+    return false;
+  }
+  const diff = new Date(filterEndTime.value).getTime() - new Date(filterStartTime.value).getTime();
+  if (diff < 0) {
+    TLError('結束時間不可早於開始時間');
+    return false;
+  }
+  if (diff > MAX_RANGE_MS) {
+    TLError('查詢區間最多 2 天');
+    return false;
+  }
+  return true;
+};
 const registersOptions = ref<any[]>([]);
+const filterCarVin = ref('');
+const filterEndPos = ref<number | string>('');
+// 車廂編號選項：由暫存器清單的 carVin 去重排序
+const carVinOptions = computed(() =>
+  Array.from(new Set(registersOptions.value.map((r: any) => r.carVin).filter(Boolean)))
+    .map(String)
+    .sort()
+);
 
 const fetchRegisters = async () => {
   try {
@@ -97,16 +143,25 @@ const fetchRegisters = async () => {
 };
 
 const fetchRecords = async () => {
+  if (!validateRange()) return;
   loading.value = true;
   try {
     const params: Record<string, any> = {
       pageIndex: pagination.value.number,
       pageSize: pagination.value.size,
       propertyName: 'recordedAt',
-      order: 'DESC'
+      order: 'DESC',
+      startTime: toUtcParam(filterStartTime.value),
+      endTime: toUtcParam(filterEndTime.value)
     };
     if (filterRegisterId.value !== '') {
       params.sensorCode = filterRegisterId.value;
+    }
+    if (filterCarVin.value !== '') {
+      params.carVin = filterCarVin.value;
+    }
+    if (filterEndPos.value !== '') {
+      params.endPos = filterEndPos.value;
     }
 
     const res = await getModbusRecords(params);
@@ -142,6 +197,10 @@ const handleSearch = () => {
 
 const handleReset = () => {
   filterRegisterId.value = '';
+  filterCarVin.value = '';
+  filterEndPos.value = '';
+  filterStartTime.value = defaultRange().start;
+  filterEndTime.value = defaultRange().end;
   pagination.value.number = 0;
   fetchRecords();
 };
@@ -177,6 +236,63 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
 
           <!-- 搜尋與按鈕 -->
           <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto justify-end">
+            <!-- 起訖時間 (區間最多 2 天)，獨佔第一排 -->
+            <div class="flex items-center gap-2 w-full sm:justify-end sm:basis-full">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">起訖時間</label>
+              <input
+                v-model="filterStartTime"
+                type="datetime-local"
+                step="1"
+                :max="filterEndTime"
+                class="min-w-0 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white"
+              />
+              <span class="text-slate-400">~</span>
+              <input
+                v-model="filterEndTime"
+                type="datetime-local"
+                step="1"
+                :min="filterStartTime"
+                class="min-w-0 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white"
+              />
+            </div>
+
+            <!-- 車廂編號過濾 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">車廂編號</label>
+              <div class="relative flex-1 sm:w-36 min-w-0">
+                <select
+                  v-model="filterCarVin"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
+                  @change="handleSearch"
+                >
+                  <option value="">全部車廂</option>
+                  <option v-for="vin in carVinOptions" :key="vin" :value="vin">{{ vin }}</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 端點過濾 -->
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">端點</label>
+              <div class="relative flex-1 sm:w-28 min-w-0">
+                <select
+                  v-model="filterEndPos"
+                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
+                  @change="handleSearch"
+                >
+                  <option value="">全部端點</option>
+                  <option :value="1">1 端</option>
+                  <option :value="2">2 端</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
+                </div>
+              </div>
+            </div>
+
             <!-- 暫存器過濾 -->
             <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
               <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">暫存器</label>
@@ -223,7 +339,7 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
         </div>
 
         <!-- 數據表格 -->
-        <div class="h-[calc(100vh-270px)] sm:h-[calc(100vh-220px)] min-h-[360px]">
+        <div class="h-[calc(100vh-520px)] sm:h-[calc(100vh-290px)] min-h-[360px]">
           <AgGridView2
             :options="gridOptions"
             :columns="gridColumns"

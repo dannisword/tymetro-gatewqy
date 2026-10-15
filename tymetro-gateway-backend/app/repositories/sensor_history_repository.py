@@ -57,12 +57,16 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
         sensor_code: Optional[str] = None,
         car_vin: Optional[str] = None,
         equipment_name: Optional[str] = None,
+        end_pos: Optional[int] = None,
         page_index: int = 0,
         page_size: int = 50,
         property_name: str = "recordedAt",
         order: str = "DESC",
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        include_total: bool = True,
         db_session: Optional[Session] = None
     ) -> tuple[List[SensorHistory], int]:
         """查詢感測器歷史數據 (支援分頁、排序與多條件篩選，回傳 (records, total))"""
@@ -75,11 +79,19 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
                 query = query.filter(SensorHistory.carVin == car_vin)
             if equipment_name:
                 query = query.filter(SensorHistory.equipmentName == equipment_name)
+            if end_pos is not None:
+                query = query.filter(SensorHistory.endPos == end_pos)
 
-            total = query.count()
+            if start_time:
+                query = query.filter(SensorHistory.recordedAt >= start_time)
+            if end_time:
+                query = query.filter(SensorHistory.recordedAt <= end_time)
 
-            # 排序處理
-            if property_name and hasattr(SensorHistory, property_name):
+            # COUNT 在大表上需掃描全部符合列，允許呼叫端略過 (total 回傳 -1)
+            total = query.count() if include_total else -1
+
+            # 排序處理 (僅允許有索引的欄位，避免全表排序)
+            if property_name in ("recordedAt", "id") and hasattr(SensorHistory, property_name):
                 col = getattr(SensorHistory, property_name)
                 if order.upper() == "ASC":
                     query = query.order_by(col.asc())

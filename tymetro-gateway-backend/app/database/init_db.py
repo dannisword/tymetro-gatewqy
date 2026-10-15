@@ -38,6 +38,8 @@ def create_tables():
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_recorded_at_desc ON sensor_histories (recorded_at DESC)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_time ON sensor_histories (sensor_code, recorded_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_car_time ON sensor_histories (sensor_code, car_vin, recorded_at DESC)"))
+            conn.execute(text("DROP INDEX IF EXISTS ix_sensor_histories_recorded_at"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_car_time ON sensor_histories (car_vin, recorded_at DESC)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_equip_time ON sensor_histories (equipment_name, recorded_at DESC)"))
                 
