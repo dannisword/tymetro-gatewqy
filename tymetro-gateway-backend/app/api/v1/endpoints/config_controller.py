@@ -282,7 +282,13 @@ def download_metadata(
                 lastCalibrationDate=parse_date(s.get("lastCalibrationDate")),
                 showOnDashboard=s.get("showOnDashboard") if s.get("showOnDashboard") is not None else True,
                 isActive=s.get("isActive") if s.get("isActive") is not None else True,
-                saveHistory=s.get("saveHistory") if s.get("saveHistory") is not None else True
+                saveHistory=s.get("saveHistory") if s.get("saveHistory") is not None else True,
+                limitMode=s.get("limitMode") or "NONE",
+                minLimit=s.get("minLimit"),
+                maxLimit=s.get("maxLimit"),
+                scale=s.get("scale") if s.get("scale") is not None else 1.0,
+                dataType=s.get("dataType") or "int16",
+                defaultValue=s.get("defaultValue") if s.get("defaultValue") is not None else 0.0
             ))
         
         db.commit()

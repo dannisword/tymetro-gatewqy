@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, status, Depends
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.database.session import get_db
@@ -42,14 +42,30 @@ def get_sensor_trend(
     records = query.order_by(SensorHistory.recordedAt.desc()).limit(limit).all()
     records = list(reversed(records))
 
+    # 依 sensors.scale 換算 (歷史庫存原始值)
+    from app.models.sensor_model import Sensor
+    from app.models.equipment_model import Equipment
+    from app.models.car_model import Car
+    scale_query = (
+        db.query(Sensor.scale)
+        .join(Equipment, Sensor.equipmentId == Equipment.id)
+        .join(Car, Equipment.carId == Car.id)
+        .filter(Sensor.sensorCode == sensor_code, Car.carVin == carVin)
+    )
+    if endPos is not None:
+        scale_query = scale_query.filter(Equipment.endPos == endPos)
+    scale_row = scale_query.first()
+    scale = scale_row[0] if scale_row and scale_row[0] is not None else 1.0
+
     result = {
         "sensor_code": sensor_code,
+        "scale": scale,
         "car_vin": carVin,
         "end_pos": endPos,
         "points": [
             {
                 "timestamp": r.recordedAt.isoformat() + "Z" if r.recordedAt else None,
-                "value": r.sensorValue
+                "value": round(cast(float, r.sensorValue) * scale, 4)
             } for r in records
         ]
     }
@@ -100,7 +116,32 @@ def get_sensor_histories(
         db_session=db
     )
 
-    items = [SensorHistoryResponse.model_validate(r) for r in records]
+    # 依 sensors.scale 換算顯示值 (歷史庫存原始值)
+    from app.models.sensor_model import Sensor
+    from app.models.equipment_model import Equipment
+    scale_by_eq: Dict[tuple, float] = {}
+    scale_by_code: Dict[str, float] = {}
+    codes = {cast(str, r.sensorCode) for r in records}
+    if codes:
+        rows = (
+            db.query(Sensor.sensorCode, Sensor.scale, Equipment.equipmentName)
+            .outerjoin(Equipment, Sensor.equipmentId == Equipment.id)
+            .filter(Sensor.sensorCode.in_(codes))
+            .all()
+        )
+        for row_code, row_scale, row_eq in rows:
+            value = float(row_scale) if row_scale is not None else 1.0
+            scale_by_eq[(row_eq, row_code)] = value
+            scale_by_code.setdefault(row_code, value)
+
+    items = []
+    for r in records:
+        item = SensorHistoryResponse.model_validate(r)
+        code = cast(str, r.sensorCode)
+        eq_name = cast(Optional[str], r.equipmentName)
+        item.scale = scale_by_eq.get((eq_name, code), scale_by_code.get(code, 1.0))
+        item.scaledValue = round(cast(float, r.sensorValue) * item.scale, 4)
+        items.append(item)
     return ResponseUtil.list_success(
         data=items,
         total=total,

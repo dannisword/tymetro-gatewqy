@@ -14,5 +14,7 @@ class SensorHistoryResponse(BaseModel):
     sensorName: Optional[str] = Field(None, description="感測器名稱")
     sensorUnit: Optional[str] = Field(None, description="感測器單位")
     equipmentName: Optional[str] = Field(None, description="設備名稱")
+    scale: float = Field(1.0, description="縮放比例 (sensors.scale)")
+    scaledValue: Optional[float] = Field(None, description="依 scale 換算後的數值 (sensorValue × scale)")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

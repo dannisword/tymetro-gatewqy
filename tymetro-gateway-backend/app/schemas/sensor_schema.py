@@ -17,6 +17,12 @@ class SensorBase(BaseModel):
     showOnDashboard: Optional[bool] = Field(default=True, description="是否顯示在儀表板")
     isActive: Optional[bool] = Field(default=True, description="是否合法/啟用")
     saveHistory: Optional[bool] = Field(default=True, description="是否記錄歷史紀錄")
+    limitMode: Optional[str] = Field(default="NONE", description="上下限模式")
+    minLimit: Optional[float] = Field(None, description="下限值")
+    maxLimit: Optional[float] = Field(None, description="上限值")
+    scale: Optional[float] = Field(default=1.0, description="縮放比例")
+    dataType: Optional[str] = Field(default="int16", description="資料型別")
+    defaultValue: Optional[float] = Field(default=0.0, description="預設數值")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -37,6 +43,12 @@ class SensorUpdate(BaseModel):
     showOnDashboard: Optional[bool] = None
     isActive: Optional[bool] = None
     saveHistory: Optional[bool] = None
+    limitMode: Optional[str] = None
+    minLimit: Optional[float] = None
+    maxLimit: Optional[float] = None
+    scale: Optional[float] = None
+    dataType: Optional[str] = None
+    defaultValue: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

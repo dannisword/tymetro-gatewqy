@@ -33,6 +33,23 @@ def create_tables():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE configs ADD COLUMN version VARCHAR(50) DEFAULT '1.0.0'"))
 
+    # 檢查並動態遷移 sensors 新增欄位 (與雲端 PostgreSQL sensors 結構一致)
+    if "sensors" in inspector.get_table_names():
+        sensor_cols = [col["name"] for col in inspector.get_columns("sensors")]
+        new_sensor_cols = {
+            "limit_mode": "VARCHAR(20) DEFAULT 'NONE'",
+            "min_limit": "NUMERIC(10,2) DEFAULT NULL",
+            "max_limit": "NUMERIC(10,2) DEFAULT NULL",
+            "scale": "NUMERIC(6,4) NOT NULL DEFAULT 1.0",
+            "data_type": "VARCHAR(50) NOT NULL DEFAULT 'int16'",
+            "default_value": "NUMERIC(10,2) DEFAULT 0.00",
+        }
+        for col_name, col_def in new_sensor_cols.items():
+            if col_name not in sensor_cols:
+                logger.info(f"Adding missing column '{col_name}' to 'sensors' table...")
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE sensors ADD COLUMN {col_name} {col_def}"))
+
     # 建立/確保感測器歷史紀錄之複合降序索引存在 (顯著加速 PFC200 查詢)
     if "sensor_histories" in inspector.get_table_names():
         with engine.begin() as conn:
