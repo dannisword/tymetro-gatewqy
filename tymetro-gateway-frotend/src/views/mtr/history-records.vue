@@ -170,7 +170,7 @@ const fetchRecords = async () => {
         ...item,
         timestamp: item.recordedAt,
         name: item.sensorCode,
-        value: item.sensorValue,
+        value: item.scaledValue ?? item.sensorValue,
         registerId: item.sensorCode
       }));
       const totalCount = res.data.total || 0;
