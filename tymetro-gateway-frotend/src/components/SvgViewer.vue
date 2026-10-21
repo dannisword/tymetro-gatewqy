@@ -231,20 +231,20 @@ defineExpose({
         :key="marker.id"
         class="absolute pointer-events-auto left-0 top-0"
         :style="{
-          transform: `translate3d(${marker.x}px, ${marker.y}px, 0) translate(-50%, -100%)`,
+          transform: `translate3d(${marker.x}px, ${marker.y}px, 0) translate(0, -100%)`,
           zIndex: dragMarkerIndex === marker.id ? 100 : 10
         }"
         @mousedown="startDraggingMarker(marker.id || 0, $event)"
         @click="emit('click-marker', marker)"
       >
         <div 
-          class="flex items-center border-2 shadow-2xl rounded-2xl px-3 py-2 min-w-[70px] relative group/marker gap-1 transition-colors"
+          class="flex border-2 shadow-2xl rounded-2xl px-3 py-2 min-w-[70px] relative group/marker gap-1 transition-colors"
           :class="[
             editable ? 'cursor-move border-slate-200' : 'border-transparent',
-            (marker.styleConfig?.valuePosition === 'top' || marker.valuePosition === 'top') ? 'flex-col-reverse' :
-            (marker.styleConfig?.valuePosition === 'left' || marker.valuePosition === 'left') ? 'flex-row-reverse' :
-            (marker.styleConfig?.valuePosition === 'right' || marker.valuePosition === 'right') ? 'flex-row' :
-            'flex-col'
+            (marker.styleConfig?.valuePosition === 'top' || marker.valuePosition === 'top') ? 'flex-col-reverse items-center' :
+            (marker.styleConfig?.valuePosition === 'left' || marker.valuePosition === 'left') ? 'flex-row-reverse items-center justify-start' :
+            (marker.styleConfig?.valuePosition === 'right' || marker.valuePosition === 'right') ? 'flex-row items-center justify-start' :
+            'flex-col items-center'
           ]"
           :style="{ 
             borderColor: marker.color,
