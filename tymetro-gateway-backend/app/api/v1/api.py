@@ -12,7 +12,8 @@ from app.api.v1.endpoints import (
     time_period_template_controller,
     schedule_controller,
     audit_log_controller,
-    option_controller
+    option_controller,
+    sensor_value_label_controller
 )
 
 api_router = APIRouter()
@@ -35,3 +36,4 @@ api_router.include_router(option_controller.router, prefix="/options", tags=["�
 
 
 
+api_router.include_router(sensor_value_label_controller.router, prefix="/sensor-value-labels", tags=["數值對照文字 (Sensor Value Labels)"])

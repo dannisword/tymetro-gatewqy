@@ -15,6 +15,7 @@ from app.schemas.config_schema import ConfigCreate, ConfigUpdate, ConfigResponse
 from app.models.car_model import Car
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
+from app.models.sensor_value_label_model import SensorValueLabel
 from app.core.config import settings
 from app.utils.http_util import HttpUtil
 
@@ -202,6 +203,16 @@ def download_metadata(
     sensors_data = sensors_resp.get("data") or {}
     sensors_list = sensors_data.get("source", []) if isinstance(sensors_data, dict) else (sensors_data if isinstance(sensors_data, list) else [])
 
+    # 4. 取得數值對照文字 (3D 圖/儀表板顯示用)
+    labels_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensor-bit-labels/values"
+    labels_resp = HttpUtil.get(labels_url, headers=headers)
+    labels_ok = bool(labels_resp.get("success"))
+    if not labels_ok:
+        # 數值對照僅影響顯示文字，失敗時不中斷 cars/equipments/sensors 的同步，並保留本機既有對照資料
+        print(f"Download value labels failed, keeping local copy: {labels_resp.get('message')}")
+    labels_data = (labels_resp.get("data") if labels_ok else None) or []
+    labels_list = labels_data.get("source", []) if isinstance(labels_data, dict) else (labels_data if isinstance(labels_data, list) else [])
+
     if trainCode:
         # 篩選屬於該車組的車廂 ID 集合，並僅保留相關設備與感測器
         target_car_ids = {c.get("id") for c in cars_list if c.get("id") is not None}
@@ -227,6 +238,8 @@ def download_metadata(
 
     try:
         # 永遠清空所有舊資料 (依外鍵依賴反向刪除)
+        if labels_ok:
+            db.query(SensorValueLabel).delete()
         db.query(Sensor).delete()
         db.query(Equipment).delete()
         db.query(Car).delete()
@@ -291,6 +304,17 @@ def download_metadata(
                 defaultValue=s.get("defaultValue") if s.get("defaultValue") is not None else 0.0
             ))
         
+        # 插入數值對照文字 (下載失敗時略過，保留舊資料)
+        for v in (labels_list if labels_ok else []):
+            db.add(SensorValueLabel(
+                sensorCode=v.get("sensorCode"),
+                bitMask=v.get("bitMask"),
+                matchValue=v.get("matchValue"),
+                text=v.get("text"),
+                label=v.get("label"),
+                description=v.get("description")
+            ))
+
         db.commit()
 
         # 清空快取並重新預熱設備點位資料
@@ -298,7 +322,7 @@ def download_metadata(
         db_config_repo.get_all_equipments()
 
         print("Metadata download and sync completed successfully.")
-        return ResponseUtil.success(message=f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備及 {len(sensors_list)} 筆感測器資料。")
+        return ResponseUtil.success(message=f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備、{len(sensors_list)} 筆感測器及 {len(labels_list)} 筆數值對照資料。" if labels_ok else f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備及 {len(sensors_list)} 筆感測器資料；數值對照文字下載失敗，已保留本機既有資料。")
 
     except Exception as e:
         db.rollback()

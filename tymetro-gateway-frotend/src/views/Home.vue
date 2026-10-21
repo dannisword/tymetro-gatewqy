@@ -150,9 +150,6 @@ const getStatusBgClass = (status: string) => {
     default: return 'bg-muted-500';
   }
 };
-const onNavigatorTrain = (train: Train) => {
-  navigator(`/car-page/${train.trainCode}`, `監控(${train.trainCode})`);
-}
 const onNavigatorCar = (train: Train, car: Car) => {
   navigator(`/equipment-mgmt/${car.id}`, `詳情(${train.trainCode}-${car.carNo})`);
 }
@@ -262,7 +259,6 @@ const onNavigatorCar = (train: Train, car: Car) => {
                 :path="mdiDotsVertical"
                 size="24"
                 class="text-muted-500 transition-transform duration-300"
-                @click.stop="onNavigatorTrain(train)"
               />
               <BaseIcon 
                 :path="mdiChevronDown" 

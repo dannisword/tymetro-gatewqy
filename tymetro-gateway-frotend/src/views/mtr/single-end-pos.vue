@@ -195,6 +195,29 @@ const filteredRegisters = computed(() => {
 const planUrl = "/images/layout.svg";
 const mapTemplateSensors = ref<MapSensorMarker[]>([]);
 
+// 數值對照 (key: sensorCode)：(暫存器值 & bitMask) === matchValue 時顯示 text
+interface ValueLabel { bitMask: number; matchValue: number; text: string }
+const valueLabelMap = ref<Record<string, ValueLabel[]>>({});
+
+const fetchValueLabels = async () => {
+  try {
+    const res = await httpOperations.get('/api/v1/sensor-value-labels');
+    if (res.success && Array.isArray(res.data)) {
+      const map: Record<string, ValueLabel[]> = {};
+      res.data.forEach((v: any) => {
+        if (v.text == null || v.matchValue == null) return; // 位元名稱列不參與數值對照
+        (map[v.sensorCode] ||= []).push({ bitMask: v.bitMask, matchValue: v.matchValue, text: v.text });
+      });
+      valueLabelMap.value = map;
+    }
+  } catch (error) {
+    console.error("Fetch value labels failed:", error);
+  }
+};
+
+const findValueText = (code: string, raw: number, predicate: (mask: number) => boolean): string | undefined =>
+  valueLabelMap.value[code]?.find(v => predicate(v.bitMask) && (raw & v.bitMask) === v.matchValue)?.text;
+
 const mappedSensors = computed(() => {
   return mapTemplateSensors.value.map(s => {
     const matched = modbusRegisters.value.find(reg => reg.sensorCode === s.code);
@@ -208,11 +231,18 @@ const mappedSensors = computed(() => {
           const intVal = Number(matched.sensorValue) || 0;
           bitVal = (intVal & (1 << s.bitIndex)) !== 0 ? 1 : 0;
         }
+        const bitMask = 1 << s.bitIndex;
+        const customText = findValueText(s.code, bitVal ? bitMask : 0, mask => mask === bitMask);
         return { 
           ...s, 
           bitValue: bitVal,
-          value: bitVal === 1 ? 'ON' : 'OFF' 
+          value: customText || (bitVal === 1 ? 'ON' : 'OFF')
         };
+      }
+      // 多位元組合判定 (例如主控制模式)：有對照文字時直接顯示文字
+      const comboText = findValueText(s.code, Number(matched.sensorValue) || 0, mask => (mask & (mask - 1)) !== 0);
+      if (comboText) {
+        return { ...s, value: comboText };
       }
       return { ...s, value: String(matched.sensorValue || '0.0') };
     }
@@ -877,6 +907,7 @@ onMounted(async () => {
   await fetchCars();
   await fetchInitialSensors();
   fetchMapConfig();
+  fetchValueLabels();
   fetchRegisters();
 
   const brokerHost = import.meta.env.VITE_MQTT_BROKER;

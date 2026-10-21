@@ -134,18 +134,6 @@ export const baseRoutes: RouteRecordRaw[] = [
         meta: { title: "JSON 設計器", affix: false, keepAlive: true },
       },
       {
-        path: "equipment-page/:equipmentId/:endPos",
-        name: "equipment-page",
-        component: () => import("@/views/base/equipment-page.vue"),
-        meta: { title: "車廂系統圖", affix: false, keepAlive: false },
-      },
-      {
-        path: "car-page/:trainCode",
-        name: "car-page",
-        component: () => import("@/views/base/car-page.vue"),
-        meta: { title: "列車監控", affix: false, keepAlive: true },
-      },
-      {
         path: "sensor-records-list",
         name: "sensor-records-list",
         component: () => import("@/views/base/sensor-records-list.vue"),
