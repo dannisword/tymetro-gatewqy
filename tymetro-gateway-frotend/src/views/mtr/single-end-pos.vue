@@ -202,9 +202,12 @@ const mappedSensors = computed(() => {
 const showTrendModal = ref(false);
 const selectedRegister = ref<ModbusRegisterRow | null>(null);
 
-// 8 個端點批次設定溫度 Modal
+// 8 個端點批次控制 Modal (每次只能設定一種: 溫度 / 新鮮空氣擋板開度 / 開啟緊急供氣擋板)
 const showBatchTempModal = ref(false);
+const batchSettingType = ref<'temperature' | 'freshAir' | 'emergAir'>('temperature');
 const batchTemp = ref(24.0);
+const batchFreshAirDamperPos = ref<number>(0);
+const batchEmergAirDamper = ref<number>(1);
 const isBatchSettingLocked = ref(false);
 
 // ==========================================
@@ -650,21 +653,24 @@ const handlePlcReset = () => {
   });
 };
 
-const openBatchTempModal = () => {
-  // 預設填入當前端點的設定溫度，若為空則預設 24.0°C
+const openBatchTempModal = (type: 'temperature' | 'freshAir' | 'emergAir' = 'temperature') => {
+  batchSettingType.value = type;
+  // 預設填入當前端點的即時/設定數值
   batchTemp.value = setTemp.value !== null ? setTemp.value : 24.0;
+  batchFreshAirDamperPos.value = freshAirDamperPos.value || 0;
+  batchEmergAirDamper.value = emergAirDamper.value || 1;
   showBatchTempModal.value = true;
 };
 
 const handleBatchTempAdjust = (amount: number) => {
-  if (isBatchSettingLocked.value) return;
   const newTemp = parseFloat((batchTemp.value + amount).toFixed(1));
   if (newTemp >= 16 && newTemp <= 30) {
     batchTemp.value = newTemp;
-
-    // 執行後，畫面延遲 2 秒避免連續重複點擊
-    withLockDelay(isBatchSettingLocked);
   }
+};
+
+const handleBatchDamperAdjust = () => {
+  // 彈窗內調整暫存值，無需在此提前鎖定
 };
 
 const handleBatchTempDialogClose = async (res: any) => {
@@ -677,8 +683,6 @@ const handleBatchTempDialogClose = async (res: any) => {
 const handleBatchTempSubmit = async () => {
   if (isBatchSettingLocked.value) return;
 
-  const targetTemperature = batchTemp.value;
-  const scaled = Math.round(targetTemperature * 10);
   const currentTrainNo = trainNo.value;
 
   // 整理 8 個端點：使用 configCarVinsList 或標準 4 節車廂 × 2 端點
@@ -701,48 +705,81 @@ const handleBatchTempSubmit = async () => {
     }
   }
 
-  // 逐一發送 MQTT 指令
+  // 依據選擇的單一設定類型組裝 Register 與日誌資訊
+  let registersPayload: Record<string, number> = {};
+  let successMsg = '';
+  let logValue = '';
+  let settingTypeEnum = SettingTypeEnum.TEMPERATURE;
+
+  if (batchSettingType.value === 'temperature') {
+    const targetTemperature = batchTemp.value;
+    const scaled = Math.round(targetTemperature * 10);
+    registersPayload = {
+      D40200: scaled,
+      D40202: 1
+    };
+    successMsg = `8 個端點溫度設定指令已發送！設定溫度：${targetTemperature.toFixed(1)}°C`;
+    logValue = `8端點批次設定溫度: ${targetTemperature.toFixed(1)}°C (D40200: ${scaled})`;
+    settingTypeEnum = SettingTypeEnum.TEMPERATURE;
+    setTemp.value = targetTemperature;
+  } else if (batchSettingType.value === 'freshAir') {
+    const damperVal = batchFreshAirDamperPos.value;
+    registersPayload = {
+      D40212: damperVal
+    };
+    const label = freshAirDamperOptions.value.find(o => o.value === damperVal)?.label || `${damperVal}%`;
+    successMsg = `8 個端點新鮮空氣擋板開度指令已發送：${label}`;
+    logValue = `8端點批次設定新鮮空氣擋板: ${label} (D40212: ${damperVal})`;
+    settingTypeEnum = SettingTypeEnum.FRESH_AIR_DAMPER;
+    freshAirDamperPos.value = damperVal;
+  } else if (batchSettingType.value === 'emergAir') {
+    const emergVal = batchEmergAirDamper.value;
+    registersPayload = {
+      D40214: emergVal
+    };
+    const stateText = emergVal === 2 ? '開啟' : '關閉';
+    successMsg = `8 個端點緊急供氣擋板指令已發送：${stateText}`;
+    logValue = `8端點批次設定緊急供氣擋板: ${stateText} (D40214: ${emergVal})`;
+    settingTypeEnum = SettingTypeEnum.EMERGENCY_AIR_SUPPLY;
+    emergAirDamper.value = emergVal;
+  }
+
+  // 逐一發送 MQTT 指令至 8 個端點
   targets.forEach(({ carNo: cNo, endPos: ep }) => {
     const topic = `TYMC/AIR/SET/${currentTrainNo}/${cNo}/${ep}`;
     const payload = {
       events: 'set_value',
+      trainCode: String(currentTrainNo),
       carNo: cNo,
       endPos: ep,
-      register: {
-        D40200: scaled,
-        D40202: 1
-      }
+      register: registersPayload
     };
     publish(topic, payload);
   });
 
-  // 更新當前頁面的設定溫度與暫存器
-  setTemp.value = targetTemperature;
+  // 更新當前頁面的暫存器
   syncStatusToRegisters();
-
-  TLSuccess(`8 個端點溫度設定指令已發送！設定溫度：${targetTemperature.toFixed(1)}°C`);
+  TLSuccess(successMsg);
 
   // 記錄 setting log
   httpOperations.post('/api/v1/setting-logs', {
-    settingType: SettingTypeEnum.TEMPERATURE,
+    settingType: settingTypeEnum,
     train: String(currentTrainNo),
     carNo: Number(carNo.value),
-    value: `8端點批次設定溫度: ${targetTemperature.toFixed(1)}°C (D40200: ${scaled})`,
+    value: logValue,
     topic: `TYMC/AIR/SET/${currentTrainNo}/+/+`,
     payload: JSON.stringify({
-      targetTemp: targetTemperature,
-      scaled,
+      settingType: batchSettingType.value,
+      registers: registersPayload,
       endpointsCount: targets.length,
       targets
     })
   }).catch(err => {
-    console.error('Failed to log batch temperature setting:', err);
+    console.error('Failed to log batch setting:', err);
   });
 
-  isBatchSettingLocked.value = true;
-  setTimeout(() => {
-    isBatchSettingLocked.value = false;
-  }, TEMP_LOCK_DELAY);
+  // 送出後鎖定 2 秒延遲，避免連續重複送出
+  withLockDelay(isBatchSettingLocked, UI_ACTION_LOCK_DELAY);
 };
 
 const openTrend = (reg: ModbusRegisterRow) => {
@@ -1158,7 +1195,19 @@ onUnmounted(() => {
               <BaseIcon :path="mdiAirConditioner" class="text-primary-600" w="w-8" h="h-8" size="24"/>
               擋板位置與壓縮機狀態
             </h2>
-            <span class="text-sm text-slate-400 font-bold uppercase tracking-wider">Compressor Stats</span>
+            <div class="flex items-center gap-2">
+              <BaseButton 
+                @click="openBatchTempModal('freshAir')"
+                variant="default"
+                mode="outline"
+                class="rounded-lg px-2 py-1 flex items-center justify-center border-emerald-200 text-emerald-600 hover:bg-emerald-50 text-xs font-bold shadow-sm"
+                title="同時設定 8 個端點新鮮空氣或緊急供氣擋板"
+              >
+                <BaseIcon :path="mdiWeatherWindy" :w="'w-4'" :h="'h-4'" size="16" />
+                <span class="ml-1">8端點同步設定</span>
+              </BaseButton>
+              <span class="hidden sm:inline text-xs text-slate-400 font-bold uppercase tracking-wider">Stats</span>
+            </div>
           </div>
           <!-- 擋板控制區 -->
           <div class="space-y-3 pt-3">
@@ -1440,27 +1489,75 @@ onUnmounted(() => {
       :end-pos="endPosId"
     />
 
-    <!-- ── 8 個端點同步設定溫度 Dialog ─────────────────────────────────────────── -->
+    <!-- ── 8 個端點同步設定 Dialog ─────────────────────────────────────────── -->
     <ElDialogCustom
       v-model:visible="showBatchTempModal"
-      title="8 個端點同時設定溫度"
-      width="520px"
-      minHeight="240px"
+      title="8 個端點同時設定"
+      width="560px"
+      minHeight="320px"
       action="確認"
       cancel="取消"
       @on-before-close="handleBatchTempDialogClose"
     >
-      <div class="py-3 px-2 flex flex-col space-y-5">
+      <div class="py-2 px-1 flex flex-col space-y-4">
         <!-- 說明提示卡 -->
         <div class="bg-blue-50/80 border border-blue-200/70 rounded-xl p-3 flex items-start gap-2.5">
           <BaseIcon :path="mdiThermometer" class="text-blue-600 shrink-0 mt-0.5" :w="'w-5'" :h="'h-5'" size="20" />
           <div class="text-xs text-blue-900 leading-relaxed font-medium">
-            此操作將同時針對車組 <span class="font-bold text-blue-700 font-mono">#{{ trainNo }}</span> 的 <span class="font-bold text-blue-700">4 節車廂共 8 個端點 PLC</span> 發送目標溫度。
+            此操作將同時針對車組 <span class="font-bold text-blue-700 font-mono">#{{ trainNo }}</span> 的 <span class="font-bold text-blue-700">4 節車廂共 8 個端點 PLC</span> 發送控制指令（每次僅能設定一種）。
           </div>
         </div>
 
-        <!-- 溫度調整控制區 -->
-        <div class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col items-center space-y-4">
+        <!-- 選擇設定項目 (單選: 每次只能設定一種) -->
+        <div class="space-y-1.5">
+          <span class="text-xs font-black text-slate-500 uppercase tracking-widest block">選擇設定項目 (每次限選一種)</span>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              @click="batchSettingType = 'temperature'"
+              :class="[
+                'p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all',
+                batchSettingType === 'temperature'
+                  ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm ring-1 ring-blue-400 font-black'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              ]"
+            >
+              <BaseIcon :path="mdiThermometer" size="20" :class="batchSettingType === 'temperature' ? 'text-blue-600' : 'text-slate-400'" />
+              <span>目標溫度</span>
+            </button>
+
+            <button
+              type="button"
+              @click="batchSettingType = 'freshAir'"
+              :class="[
+                'p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all',
+                batchSettingType === 'freshAir'
+                  ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm ring-1 ring-emerald-400 font-black'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              ]"
+            >
+              <BaseIcon :path="mdiWeatherWindy" size="20" :class="batchSettingType === 'freshAir' ? 'text-emerald-600' : 'text-slate-400'" />
+              <span>新鮮空氣開度</span>
+            </button>
+
+            <button
+              type="button"
+              @click="batchSettingType = 'emergAir'"
+              :class="[
+                'p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all',
+                batchSettingType === 'emergAir'
+                  ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-sm ring-1 ring-rose-400 font-black'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              ]"
+            >
+              <BaseIcon :path="mdiAirConditioner" size="20" :class="batchSettingType === 'emergAir' ? 'text-rose-600' : 'text-slate-400'" />
+              <span>緊急供氣擋板</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. 目標溫度調整控制區 -->
+        <div v-if="batchSettingType === 'temperature'" class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col items-center space-y-4 animate-fade-in">
           <span class="text-xs font-black text-slate-500 uppercase tracking-widest">目標設定溫度 (TARGET TEMPERATURE)</span>
 
           <!-- 加減按鈕與數值顯示 -->
@@ -1504,6 +1601,48 @@ onUnmounted(() => {
               minLabel="16.0°C"
               midLabel="舒適值 (24°C)"
               maxLabel="30.0°C"
+            />
+          </div>
+        </div>
+
+        <!-- 2. 新鮮空氣擋板開度控制區 -->
+        <div v-else-if="batchSettingType === 'freshAir'" class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col items-center space-y-4 animate-fade-in">
+          <span class="text-xs font-black text-slate-500 uppercase tracking-widest">新鮮空氣擋板開度 (FRESH AIR DAMPER)</span>
+
+          <div class="text-center">
+            <span class="text-4xl font-black font-mono text-emerald-600 tracking-tight">
+              {{ freshAirDamperOptions.find(o => o.value === batchFreshAirDamperPos)?.label || `${batchFreshAirDamperPos}%` }}
+            </span>
+          </div>
+
+          <!-- 擋板開度滑桿 -->
+          <div class="w-full px-2">
+            <BaseRangeSlider
+              v-model="batchFreshAirDamperPos"
+              @change="handleBatchDamperAdjust"
+              :disabled="isBatchSettingLocked"
+              :min="0"
+              :max="100"
+              :step="25"
+              :labels="['0', '25', '50', '75', '100']"
+            />
+          </div>
+        </div>
+
+        <!-- 3. 開啟緊急供氣擋板控制區 -->
+        <div v-else-if="batchSettingType === 'emergAir'" class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col items-center space-y-4 animate-fade-in">
+          <span class="text-xs font-black text-slate-500 uppercase tracking-widest">緊急供氣擋板 (EMERGENCY AIR SUPPLY)</span>
+
+          <div class="flex items-center justify-between w-full max-w-xs px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <span class="text-base font-black" :class="batchEmergAirDamper === 2 ? 'text-rose-600' : 'text-slate-400'">
+              {{ batchEmergAirDamper === 2 ? '開啟' : '關閉' }}
+            </span>
+            <BaseSwitch
+              :modelValue="batchEmergAirDamper === 2"
+              @update:modelValue="(val) => { batchEmergAirDamper = val ? 2 : 1; handleBatchDamperAdjust(); }"
+              :disabled="isBatchSettingLocked"
+              activeColor="bg-rose-500"
+              inactiveColor="bg-slate-300"
             />
           </div>
         </div>
