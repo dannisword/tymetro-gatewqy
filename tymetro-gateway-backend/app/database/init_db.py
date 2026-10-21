@@ -78,10 +78,9 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = 
 
         def upsert_config(category: str, key: str, value: Any):
             val_str = str(value) if value is not None else ""
-            item = db.query(SystemConfig).filter(SystemConfig.key == key).first()
-            if item:
-                item.value = val_str
-                item.category = category
+            query = db.query(SystemConfig).filter(SystemConfig.key == key)
+            if query.first():
+                query.update({SystemConfig.value: val_str, SystemConfig.category: category})
             else:
                 db.add(SystemConfig(category=category, key=key, value=val_str))
 
@@ -119,10 +118,13 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = 
                 eq_rec = db.query(Equipment).filter(Equipment.equipmentName == eq_name).first()
 
             if eq_rec:
+                eq_values: Dict[Any, Any] = {}
                 if eq_name:
-                    eq_rec.equipmentName = eq_name
+                    eq_values[Equipment.equipmentName] = eq_name
                 if eq_ip:
-                    eq_rec.ipAddress = eq_ip
+                    eq_values[Equipment.ipAddress] = eq_ip
+                if eq_values:
+                    db.query(Equipment).filter(Equipment.id == eq_rec.id).update(eq_values)
 
             # 同步 registers 到 Sensors 表
             for reg in eq_item.get("registers", []):
@@ -133,14 +135,17 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = 
                 s_unit = reg.get("unit", "")
                 s_type = reg.get("sensor_type", "REAL_TIME")
 
-                sensor_rec = db.query(Sensor).filter(Sensor.sensorCode == code).first()
-                if sensor_rec:
+                sensor_query = db.query(Sensor).filter(Sensor.sensorCode == code)
+                if sensor_query.first():
+                    sensor_values: Dict[Any, Any] = {}
                     if s_name:
-                        sensor_rec.sensorName = s_name
+                        sensor_values[Sensor.sensorName] = s_name
                     if s_unit is not None:
-                        sensor_rec.sensorUnit = str(s_unit)
+                        sensor_values[Sensor.sensorUnit] = str(s_unit)
                     if s_type:
-                        sensor_rec.sensorType = s_type
+                        sensor_values[Sensor.sensorType] = s_type
+                    if sensor_values:
+                        sensor_query.update(sensor_values)
 
         db.commit()
         logger.info("SystemConfigs, Equipments, and Sensors synced from YAML to DB successfully.")

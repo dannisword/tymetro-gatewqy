@@ -98,8 +98,8 @@ const defaultRange = () => {
 const filterStartTime = ref(defaultRange().start);
 const filterEndTime = ref(defaultRange().end);
 
-// 後端 recordedAt 為 UTC (無時區)，本地時間轉成 UTC 字串送出
-const toUtcParam = (local: string) => new Date(local).toISOString().slice(0, 19);
+// 後端 recordedAt 為閘道器本地時間 (無時區)，直接送出本地時間字串 (YYYY-MM-DDTHH:mm:ss)
+const toQueryParam = (local: string) => (local.length === 16 ? `${local}:00` : local);
 
 const validateRange = (): boolean => {
   if (!filterStartTime.value || !filterEndTime.value) {
@@ -151,8 +151,8 @@ const fetchRecords = async () => {
       pageSize: pagination.value.size,
       propertyName: 'recordedAt',
       order: 'DESC',
-      startTime: toUtcParam(filterStartTime.value),
-      endTime: toUtcParam(filterEndTime.value)
+      startTime: toQueryParam(filterStartTime.value),
+      endTime: toQueryParam(filterEndTime.value)
     };
     if (filterRegisterId.value !== '') {
       params.sensorCode = filterRegisterId.value;
