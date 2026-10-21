@@ -41,3 +41,10 @@ export enum AuditCategory {
   Enum = "enum",
 }
 
+export enum SettingTypeEnum {
+  TEMPERATURE = "TEMPERATURE",
+  FRESH_AIR_DAMPER = "FRESH_AIR_DAMPER",
+  EMERGENCY_AIR_SUPPLY = "EMERGENCY_AIR_SUPPLY",
+  RESET_ALL = "RESET_ALL",
+}
+

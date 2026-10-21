@@ -9,7 +9,8 @@ import BaseRangeSlider from '@/components/BaseRangeSlider.vue';
 import RegisterTrendModal from '@/views/mtr/components/RegisterTrendModal.vue';
 import { useMQTT } from '@/store/useMQTT';
 import { useAlert } from "@/composables/TLAlter";
-import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus, CompressorHealth } from '@/utils/enums';
+import { ElMessageBox } from 'element-plus';
+import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus, CompressorHealth, SettingTypeEnum } from '@/utils/enums';
 import type { 
   TrainCarStatus, 
   EndpointStatus, 
@@ -31,6 +32,7 @@ import {
   mdiSnowflake, 
   mdiAirConditioner, 
   mdiRefresh,
+  mdiPower,
   mdiFlash,
   mdiPause,
   mdiGauge,
@@ -586,6 +588,39 @@ const onReload = () => {
   fetchRegisters();
 };
 
+const handlePlcReset = () => {
+  ElMessageBox.confirm("確定要發送重置復歸指令給此端點的 PLC 嗎？", "重置復歸", {
+    type: "warning",
+    confirmButtonText: "確定",
+    cancelButtonText: "取消"
+  }).then(() => {
+    const payload = {
+      events: 'write_register',
+      trainCode: String(trainNo.value),
+      carNo: Number(carNo.value),
+      endPos: endPosId.value,
+      register: { D40130: 1 }
+    };
+    const targetTopic = `TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`;
+    publish(targetTopic, payload);
+    TLSuccess("重置復歸指令已發送！");
+
+    // 新增 setting log
+    httpOperations.post('/api/v1/setting-logs', {
+      settingType: SettingTypeEnum.RESET_ALL,
+      train: String(trainNo.value),
+      carNo: Number(carNo.value),
+      value: "重置復歸觸發 (D40130: 1)",
+      topic: targetTopic,
+      payload: JSON.stringify(payload)
+    }).catch(err => {
+      console.error('Failed to log setting change:', err);
+    });
+  }).catch(() => {
+    // User cancelled
+  });
+};
+
 const openTrend = (reg: ModbusRegisterRow) => {
   selectedRegister.value = reg;
   showTrendModal.value = true;
@@ -768,15 +803,17 @@ onUnmounted(() => {
                 </BaseButton>
 
                 <BaseButton 
-                  @click="toggleFullscreen"
+                  @click="handlePlcReset"
+                  :disabled="!isDeviceConnected"
                   variant="default"
                   mode="outline"
-                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 shadow-sm"
-                  :title="isFullscreen ? '結束全螢幕' : '全螢幕模式'"
+                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-rose-200 text-rose-600 hover:bg-rose-50 shrink-0 shadow-sm disabled:opacity-50"
+                  title="PLC 復歸重置"
                 >
-                  <BaseIcon :path="isFullscreen ? mdiFullscreenExit : mdiFullscreen" :w="'w-6'" :h="'h-6'" size="18" />
-                  <span class="hidden xs:inline ml-1 text-xs font-bold">{{ isFullscreen ? '結束全螢幕' : '全螢幕' }}</span>
+                  <BaseIcon :path="mdiPower" :w="'w-6'" :h="'h-6'" size="18" />
+                  <span class="hidden xs:inline ml-1 text-xs font-bold">重置復歸</span>
                 </BaseButton>
+
               </div>
               
               <div class="flex flex-wrap items-center gap-3">
