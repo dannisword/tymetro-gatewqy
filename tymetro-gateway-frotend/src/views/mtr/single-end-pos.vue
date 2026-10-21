@@ -48,8 +48,21 @@ import {
 // 0. Configuration Parameters
 // ==========================================
 const TEMP_LOCK_DELAY = 3000; // 設定溫度鎖定延遲時間 (毫秒)
+const UI_ACTION_LOCK_DELAY = 2000; // 畫面操作防重複點擊鎖定延遲時間 (毫秒)
 const HEARTBEAT_TIMEOUT = 5000; // 判定斷線超時時間 (毫秒)
 const HEARTBEAT_CHECK_INTERVAL = 1000; // 心跳檢查間隔 (毫秒)
+
+/**
+ * 通用延遲鎖定函式 (防連續重複操作)
+ * @param lockRef 目標 ref<boolean> 鎖定旗標
+ * @param delayMs 延遲時間 (毫秒)，預設 2000ms
+ */
+const withLockDelay = (lockRef: { value: boolean }, delayMs = UI_ACTION_LOCK_DELAY) => {
+  lockRef.value = true;
+  setTimeout(() => {
+    lockRef.value = false;
+  }, delayMs);
+};
 // ==========================================
 // 1. Hook & Utilities
 // ==========================================
@@ -84,6 +97,7 @@ const trainNo = computed(() => carType.value * 100 + (carNo.value % 100));
 const { isConnected: isMqttConnected, connect, subscribe, publish } = useMQTT();
 const isDeviceConnected = ref(false);
 const isTempSettingLocked = ref(false);
+const isDamperSettingLocked = ref(false);
 const lastMsgTime = ref<number | null>(null);
 let mqttCheckInterval: ReturnType<typeof setInterval> | null = null;
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
@@ -509,6 +523,7 @@ const setTargetTemp = () => {
 
 
 const setFreshAirDamper = (val: number) => {
+  if (isDamperSettingLocked.value) return;
   freshAirDamperPos.value = val;
   const payload = {
     events: 'set_value',
@@ -518,9 +533,13 @@ const setFreshAirDamper = (val: number) => {
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`}`);
+
+  // 執行後，畫面延遲 2 秒避免連續重複點擊
+  withLockDelay(isDamperSettingLocked);
 };
 
 const setEmergAirDamper = (val: number) => {
+  if (isDamperSettingLocked.value) return;
   emergAirDamper.value = val;
   const payload = {
     events: 'set_value',
@@ -530,6 +549,9 @@ const setEmergAirDamper = (val: number) => {
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
+
+  // 執行後，畫面延遲 2 秒避免連續重複點擊
+  withLockDelay(isDamperSettingLocked);
 };
 
 const syncStatusToRegisters = () => {
@@ -635,9 +657,13 @@ const openBatchTempModal = () => {
 };
 
 const handleBatchTempAdjust = (amount: number) => {
+  if (isBatchSettingLocked.value) return;
   const newTemp = parseFloat((batchTemp.value + amount).toFixed(1));
   if (newTemp >= 16 && newTemp <= 30) {
     batchTemp.value = newTemp;
+
+    // 執行後，畫面延遲 2 秒避免連續重複點擊
+    withLockDelay(isBatchSettingLocked);
   }
 };
 
@@ -911,17 +937,6 @@ onUnmounted(() => {
                   <BaseIcon :path="mdiPower" :w="'w-6'" :h="'h-6'" size="18" />
                   <span class="hidden xs:inline ml-1 text-xs font-bold">重置復歸</span>
                 </BaseButton>
-
-                <BaseButton 
-                  @click="openBatchTempModal"
-                  variant="default"
-                  mode="outline"
-                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-blue-200 text-blue-600 hover:bg-blue-50 shrink-0 shadow-sm"
-                  title="同時設定 8 個端點目標溫度"
-                >
-                  <BaseIcon :path="mdiThermometer" :w="'w-6'" :h="'h-6'" size="18" />
-                  <span class="hidden xs:inline ml-1 text-xs font-bold">8端點同步設定溫度</span>
-                </BaseButton>
               </div>
               
               <div class="flex flex-wrap items-center gap-3">
@@ -1162,7 +1177,7 @@ onUnmounted(() => {
                   :min="0"
                   :max="100"
                   :step="25"
-                  :disabled="!isDeviceConnected"
+                  :disabled="!isDeviceConnected || isDamperSettingLocked"
                   :labels="['0', '25', '50', '75', '100']"
                 />
               </div>
@@ -1180,7 +1195,7 @@ onUnmounted(() => {
                   <BaseSwitch
                     :modelValue="emergAirDamper === 2"
                     @update:modelValue="setEmergAirDamper($event ? 2 : 1)"
-                    :disabled="!isDeviceConnected"
+                    :disabled="!isDeviceConnected || isDamperSettingLocked"
                     activeColor="bg-rose-500"
                     inactiveColor="bg-slate-300"
                   />
@@ -1452,9 +1467,10 @@ onUnmounted(() => {
           <div class="flex items-center justify-center gap-6 w-full">
             <BaseButton
               @click="handleBatchTempAdjust(-0.5)"
+              :disabled="isBatchSettingLocked"
               variant="default"
               mode="outline"
-              class="w-12 h-12 rounded-xl border-slate-200 shadow-sm flex items-center justify-center hover:bg-white active:scale-95 transition-all"
+              class="w-12 h-12 rounded-xl border-slate-200 shadow-sm flex items-center justify-center hover:bg-white active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               title="減少 0.5°C"
             >
               <BaseIcon :path="mdiMinus" size="22" />
@@ -1467,9 +1483,10 @@ onUnmounted(() => {
 
             <BaseButton
               @click="handleBatchTempAdjust(0.5)"
+              :disabled="isBatchSettingLocked"
               variant="default"
               mode="outline"
-              class="w-12 h-12 rounded-xl border-slate-200 shadow-sm flex items-center justify-center hover:bg-white active:scale-95 transition-all"
+              class="w-12 h-12 rounded-xl border-slate-200 shadow-sm flex items-center justify-center hover:bg-white active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               title="增加 0.5°C"
             >
               <BaseIcon :path="mdiPlus" size="22" />
@@ -1480,6 +1497,7 @@ onUnmounted(() => {
           <div class="w-full px-2">
             <BaseRangeSlider
               v-model="batchTemp"
+              :disabled="isBatchSettingLocked"
               :min="16"
               :max="30"
               :step="0.5"
