@@ -200,8 +200,19 @@ const mappedSensors = computed(() => {
     const matched = modbusRegisters.value.find(reg => reg.sensorCode === s.code);
     if (matched) {
       if (matched.dataType === 'bitmap' && s.bitIndex !== null && s.bitIndex !== undefined) {
-        const bitVal = String(matched.sensorValue || '').charAt(15 - s.bitIndex);
-        return { ...s, value: bitVal === '1' ? 'ON' : 'OFF' };
+        const rawStr = String(matched.sensorValue || '');
+        let bitVal = 0;
+        if (rawStr.length >= 16 && /^[01]+$/.test(rawStr)) {
+          bitVal = rawStr.charAt(15 - s.bitIndex) === '1' ? 1 : 0;
+        } else {
+          const intVal = Number(matched.sensorValue) || 0;
+          bitVal = (intVal & (1 << s.bitIndex)) !== 0 ? 1 : 0;
+        }
+        return { 
+          ...s, 
+          bitValue: bitVal,
+          value: bitVal === 1 ? 'ON' : 'OFF' 
+        };
       }
       return { ...s, value: String(matched.sensorValue || '0.0') };
     }
@@ -493,7 +504,8 @@ const fetchMapConfig = async () => {
           code: m.sensorCode,
           bitIndex: m.bitIndex,
           color: m.color || (m.markerType === 'circle' ? '#10b981' : '#3b82f6'),
-          type: m.markerType || 'rect'
+          type: m.markerType || 'rect',
+          styleConfig: (m as any).styleConfig || { valuePosition: 'bottom' }
         };
       });
     }

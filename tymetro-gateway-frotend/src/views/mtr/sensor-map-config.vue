@@ -66,8 +66,8 @@ const fetchData = async () => {
   try {
     loading.value = true;
     
-    // 獲取 Modbus 即時值暫存器清單作為感測器來源
-    const registerRes = await httpOperations.get('/api/v1/sensors', { registerGroup: 'realtime', pageSize: 100 });
+    // 獲取 Modbus 即時值暫存器清單作為感測器來源 (增加 pageSize 以涵蓋所有即時暫存器)
+    const registerRes = await httpOperations.get('/api/v1/sensors', { registerGroup: 'realtime', pageSize: 1000 });
     if (registerRes && registerRes.success) {
       const list = registerRes.data.source || [];
       allSensors.value = list.map((reg: any) => {
@@ -76,7 +76,7 @@ const fetchData = async () => {
           id: reg.id,
           sensorCode: reg.sensorCode, // 例如 D40201
           sensorName: reg.sensorName || reg.sensorCode,
-          sensorValue: reg.sensorValue || '0.0',
+          sensorValue: reg.sensorValue ?? '0.0',
           sensorUnit: reg.sensorUnit || '',
           sensorTypeName: isTemp ? '溫度' : '其他',
           dataType: reg.dataType || 'int16'
@@ -84,31 +84,49 @@ const fetchData = async () => {
       });
     }
 
+    const resolveMarkerValue = (matched: any, bitIndex?: number | null) => {
+      if (!matched) return { value: '0.0', bitValue: undefined };
+      const isBitmap = bitIndex !== null && bitIndex !== undefined;
+      if (matched.dataType === 'bitmap' && isBitmap) {
+        const rawStr = String(matched.sensorValue ?? '');
+        let bitVal = 0;
+        if (rawStr.length >= 16 && /^[01]+$/.test(rawStr)) {
+          bitVal = rawStr.charAt(15 - bitIndex) === '1' ? 1 : 0;
+        } else {
+          const intVal = Number(matched.sensorValue) || 0;
+          bitVal = (intVal & (1 << bitIndex)) !== 0 ? 1 : 0;
+        }
+        return {
+          value: bitVal === 1 ? 'ON' : 'OFF',
+          bitValue: bitVal
+        };
+      }
+      return {
+        value: String(matched.sensorValue ?? '0.0'),
+        bitValue: undefined
+      };
+    };
+
     const mapRes = await httpOperations.get('/api/v1/sensor-maps/template/HVAC_STANDARD');
     if (mapRes.success && mapRes.data) {
       const mapData = mapRes.data || [];
       sensors.value = mapData.map((m: any) => {
         const isBitmap = m.bitIndex !== null && m.bitIndex !== undefined;
         const matched = allSensors.value.find(as => as.sensorCode === m.sensorCode);
-        let resolvedVal = "0.0";
-        if (matched) {
-          if (matched.dataType === 'bitmap' && isBitmap) {
-            const bitVal = matched.sensorValue.charAt(15 - m.bitIndex) || '0';
-            resolvedVal = bitVal === '1' ? 'ON' : 'OFF';
-          } else {
-            resolvedVal = matched.sensorValue;
-          }
-        }
+        const { value, bitValue } = resolveMarkerValue(matched, m.bitIndex);
+
         return {
           id: isBitmap ? `${m.sensorCode}_bit${m.bitIndex}` : m.sensorCode,
           x: m.x,
           y: m.y,
           label: m.label || (isBitmap ? getBitLabel(m.sensorCode, m.bitIndex) : m.sensorCode),
-          value: resolvedVal,
+          value,
+          bitValue,
           code: m.sensorCode,
           bitIndex: m.bitIndex,
           color: m.color || (m.markerType === 'circle' ? '#10b981' : '#3b82f6'),
-          type: m.markerType || 'rect'
+          type: m.markerType || 'rect',
+          styleConfig: m.styleConfig || { valuePosition: 'bottom' }
         };
       });
     }
@@ -126,14 +144,24 @@ onMounted(() => {
 watch(() => allSensors.value, (newAll) => {
   sensors.value = sensors.value.map(s => {
     const matched = newAll.find(as => as.sensorCode === s.code);
-    if (matched) {
-      if (matched.dataType === 'bitmap' && s.bitIndex !== null && s.bitIndex !== undefined) {
-        const bitVal = matched.sensorValue.charAt(15 - s.bitIndex);
-        return { ...s, value: bitVal === '1' ? 'ON' : 'OFF' };
+    if (!matched) return s;
+    const isBitmap = s.bitIndex !== null && s.bitIndex !== undefined;
+    if (matched.dataType === 'bitmap' && isBitmap) {
+      const rawStr = String(matched.sensorValue ?? '');
+      let bitVal = 0;
+      if (rawStr.length >= 16 && /^[01]+$/.test(rawStr)) {
+        bitVal = rawStr.charAt(15 - s.bitIndex) === '1' ? 1 : 0;
+      } else {
+        const intVal = Number(matched.sensorValue) || 0;
+        bitVal = (intVal & (1 << s.bitIndex)) !== 0 ? 1 : 0;
       }
-      return { ...s, value: matched.sensorValue };
+      return { 
+        ...s, 
+        value: bitVal === 1 ? 'ON' : 'OFF',
+        bitValue: bitVal
+      };
     }
-    return s;
+    return { ...s, value: String(matched.sensorValue ?? '0.0') };
   });
 }, { deep: true });
 </script>

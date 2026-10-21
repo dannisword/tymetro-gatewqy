@@ -26,6 +26,7 @@ class SensorMapMarker(BaseModel):
     markerType: str
     color: str
     label: Optional[str] = None
+    styleConfig: Optional[dict] = None
     isActive: bool
 
 @router.get("/template/{template_code}", response_model=ResponseBase[List[SensorMapMarker]], summary="根據模板編號獲取感測器圖配置")
@@ -106,6 +107,7 @@ def download_sensor_map_template(
                     "markerType": item.get("markerType", "rect"),
                     "color": item.get("color", "#3b82f6"),
                     "label": item.get("label"),
+                    "styleConfig": item.get("styleConfig", {"valuePosition": "bottom"}),
                     "isActive": bool(item.get("isActive", True))
                 })
 

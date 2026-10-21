@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { mdiCog, mdiClose } from '@mdi/js';
+import BaseIcon from '@/components/BaseIcon.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -26,6 +28,7 @@ const emit = defineEmits<{
   (e: 'add-marker', data: any): void;
   (e: 'delete-marker', id: any): void;
   (e: 'click-marker', marker: any): void;
+  (e: 'edit-marker', marker: any): void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -235,32 +238,74 @@ defineExpose({
         @click="emit('click-marker', marker)"
       >
         <div 
-          class="flex flex-col items-center bg-white border-2 shadow-2xl rounded-2xl px-3 py-2 min-w-[70px] relative group/marker"
-          :class="[editable ? 'cursor-move border-slate-200' : 'border-transparent']"
-          :style="{ borderColor: marker.color }"
+          class="flex items-center border-2 shadow-2xl rounded-2xl px-3 py-2 min-w-[70px] relative group/marker gap-1 transition-colors"
+          :class="[
+            editable ? 'cursor-move border-slate-200' : 'border-transparent',
+            (marker.styleConfig?.valuePosition === 'top' || marker.valuePosition === 'top') ? 'flex-col-reverse' :
+            (marker.styleConfig?.valuePosition === 'left' || marker.valuePosition === 'left') ? 'flex-row-reverse' :
+            (marker.styleConfig?.valuePosition === 'right' || marker.valuePosition === 'right') ? 'flex-row' :
+            'flex-col'
+          ]"
+          :style="{ 
+            borderColor: marker.color,
+            backgroundColor: ((marker.bitValue === 1 || marker.value === '1' || marker.value === 'ON' || marker.value === '正常' || marker.value === '運轉' || marker.value === '啟動') && marker.styleConfig?.onColor) ? marker.styleConfig.onColor :
+                             ((marker.bitValue === 0 || marker.value === '0' || marker.value === 'OFF' || marker.value === '異常' || marker.value === '停止' || marker.value === '關閉') && marker.styleConfig?.offColor) ? marker.styleConfig.offColor :
+                             '#ffffff'
+          }"
         >
+          <!-- 設定 / 編輯屬性按鈕 -->
+          <div 
+            v-if="editable"
+            @mousedown.stop
+            @click.stop="emit('edit-marker', marker)"
+            class="absolute -top-2 -left-2 w-6 h-6 bg-[#2a7eb5] text-white rounded-full opacity-0 group-hover/marker:opacity-100 flex items-center justify-center cursor-pointer hover:bg-[#1f638f] transition-all hover:scale-110 shadow-lg z-20"
+            title="編輯標記屬性"
+          >
+            <BaseIcon :path="mdiCog" size="14" />
+          </div>
+
           <!-- 刪除按鈕 -->
           <div 
             v-if="editable"
+            @mousedown.stop
             @click.stop="emit('delete-marker', marker.id)"
-            class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover/marker:opacity-100 flex items-center justify-center text-sm cursor-pointer hover:bg-red-600 transition-all hover:scale-110 shadow-lg z-20"
+            class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover/marker:opacity-100 flex items-center justify-center cursor-pointer hover:bg-red-600 transition-all hover:scale-110 shadow-lg z-20"
             title="刪除標記"
           >
-            ×
+            <BaseIcon :path="mdiClose" size="14" />
           </div>
 
-          <span v-if="marker.label" class="text-lg font-black uppercase tracking-tighter mb-0.5 text-slate-800">{{ marker.label }}</span>
-          <span class="font-mono font-black text-slate-800 text-lg leading-none">{{ marker.value }}</span>
+          <span 
+            v-if="marker.label" 
+            class="text-lg font-black uppercase tracking-tighter whitespace-nowrap"
+            :class="[
+              (((marker.bitValue === 1 || marker.value === '1' || marker.value === 'ON' || marker.value === '正常' || marker.value === '運轉' || marker.value === '啟動') && marker.styleConfig?.onColor) ||
+               ((marker.bitValue === 0 || marker.value === '0' || marker.value === 'OFF' || marker.value === '異常' || marker.value === '停止' || marker.value === '關閉') && marker.styleConfig?.offColor))
+                ? 'text-white' : 'text-slate-800'
+            ]"
+          >{{ marker.label }}</span>
+          <span 
+            v-if="marker.styleConfig?.showValue !== false"
+            class="font-mono font-black text-lg leading-none whitespace-nowrap"
+            :class="[
+              (((marker.bitValue === 1 || marker.value === '1' || marker.value === 'ON' || marker.value === '正常' || marker.value === '運轉' || marker.value === '啟動') && marker.styleConfig?.onColor) ||
+               ((marker.bitValue === 0 || marker.value === '0' || marker.value === 'OFF' || marker.value === '異常' || marker.value === '停止' || marker.value === '關閉') && marker.styleConfig?.offColor))
+                ? 'text-white/90' :
+              (marker.bitValue === 1 || marker.value === '1' || marker.value === 'ON' || marker.value === '正常' || marker.value === '運轉') ? 'text-emerald-600 font-black' :
+              (marker.bitValue === 0 || marker.value === '0' || marker.value === 'OFF' || marker.value === '異常' || marker.value === '停止') ? 'text-slate-400 font-bold' : 'text-slate-800'
+            ]"
+          >{{ marker.value }}</span>
         </div>
       </div>
     </div>
 
     <!-- Debug Info -->
-    <div class="absolute top-6 left-6 z-30 pointer-events-none">
+    <div v-if="editable" class="absolute top-6 left-6 z-30 pointer-events-none">
       <div class="bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full px-4 py-1.5 text-[10px] font-mono text-white/60 shadow-xl">
         SCALE: {{ state.scale.toFixed(2) }} | X: {{ state.x }} | Y: {{ state.y }}
       </div>
     </div>
+
   </div>
 </template>
 
