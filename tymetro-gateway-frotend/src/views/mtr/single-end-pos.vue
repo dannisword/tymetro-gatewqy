@@ -7,6 +7,7 @@ import BaseButton from '@/components/BaseButton.vue';
 import BaseSwitch from '@/components/BaseSwitch.vue';
 import BaseRangeSlider from '@/components/BaseRangeSlider.vue';
 import RegisterTrendModal from '@/views/mtr/components/RegisterTrendModal.vue';
+import ElDialogCustom from '@/components/ElDialogCustom.vue';
 import { useMQTT } from '@/store/useMQTT';
 import { useAlert } from "@/composables/TLAlter";
 import { ElMessageBox } from 'element-plus';
@@ -33,6 +34,7 @@ import {
   mdiAirConditioner, 
   mdiRefresh,
   mdiPower,
+  mdiThermometer,
   mdiFlash,
   mdiPause,
   mdiGauge,
@@ -181,10 +183,15 @@ const mappedSensors = computed(() => {
 });
 
 // ==========================================
-// 8. Register Trend Modal State
+// 8. Modals State
 // ==========================================
 const showTrendModal = ref(false);
 const selectedRegister = ref<ModbusRegisterRow | null>(null);
+
+// 8 個端點批次設定溫度 Modal
+const showBatchTempModal = ref(false);
+const batchTemp = ref(24.0);
+const isBatchSettingLocked = ref(false);
 
 // ==========================================
 // 9. Methods & Event Handlers
@@ -621,6 +628,97 @@ const handlePlcReset = () => {
   });
 };
 
+const openBatchTempModal = () => {
+  // 預設填入當前端點的設定溫度，若為空則預設 24.0°C
+  batchTemp.value = setTemp.value !== null ? setTemp.value : 24.0;
+  showBatchTempModal.value = true;
+};
+
+const handleBatchTempAdjust = (amount: number) => {
+  const newTemp = parseFloat((batchTemp.value + amount).toFixed(1));
+  if (newTemp >= 16 && newTemp <= 30) {
+    batchTemp.value = newTemp;
+  }
+};
+
+const handleBatchTempDialogClose = async (res: any) => {
+  if (res?.success) {
+    await handleBatchTempSubmit();
+  }
+  showBatchTempModal.value = false;
+};
+
+const handleBatchTempSubmit = async () => {
+  if (isBatchSettingLocked.value) return;
+
+  const targetTemperature = batchTemp.value;
+  const scaled = Math.round(targetTemperature * 10);
+  const currentTrainNo = trainNo.value;
+
+  // 整理 8 個端點：使用 configCarVinsList 或標準 4 節車廂 × 2 端點
+  const targets: { carNo: number; endPos: number }[] = [];
+  if (configCarVinsList.value.length > 0) {
+    configCarVinsList.value.forEach(car => {
+      const cNo = car.carNo || (carType.value * 1000 + (car.id || 1) * 100 + (currentTrainNo % 100));
+      (car.equipment || []).forEach(eq => {
+        targets.push({ carNo: cNo, endPos: eq.id });
+      });
+    });
+  }
+
+  // 若 configCarVinsList 尚未載入齊全，使用標準桃園捷運車組 4 車廂 × 2 端點 fallback
+  if (targets.length === 0) {
+    for (let c = 1; c <= 4; c++) {
+      const cNo = carType.value * 1000 + c * 100 + (currentTrainNo % 100);
+      targets.push({ carNo: cNo, endPos: 1 });
+      targets.push({ carNo: cNo, endPos: 2 });
+    }
+  }
+
+  // 逐一發送 MQTT 指令
+  targets.forEach(({ carNo: cNo, endPos: ep }) => {
+    const topic = `TYMC/AIR/SET/${currentTrainNo}/${cNo}/${ep}`;
+    const payload = {
+      events: 'set_value',
+      carNo: cNo,
+      endPos: ep,
+      register: {
+        D40200: scaled,
+        D40202: 1
+      }
+    };
+    publish(topic, payload);
+  });
+
+  // 更新當前頁面的設定溫度與暫存器
+  setTemp.value = targetTemperature;
+  syncStatusToRegisters();
+
+  TLSuccess(`8 個端點溫度設定指令已發送！設定溫度：${targetTemperature.toFixed(1)}°C`);
+
+  // 記錄 setting log
+  httpOperations.post('/api/v1/setting-logs', {
+    settingType: SettingTypeEnum.TEMPERATURE,
+    train: String(currentTrainNo),
+    carNo: Number(carNo.value),
+    value: `8端點批次設定溫度: ${targetTemperature.toFixed(1)}°C (D40200: ${scaled})`,
+    topic: `TYMC/AIR/SET/${currentTrainNo}/+/+`,
+    payload: JSON.stringify({
+      targetTemp: targetTemperature,
+      scaled,
+      endpointsCount: targets.length,
+      targets
+    })
+  }).catch(err => {
+    console.error('Failed to log batch temperature setting:', err);
+  });
+
+  isBatchSettingLocked.value = true;
+  setTimeout(() => {
+    isBatchSettingLocked.value = false;
+  }, TEMP_LOCK_DELAY);
+};
+
 const openTrend = (reg: ModbusRegisterRow) => {
   selectedRegister.value = reg;
   showTrendModal.value = true;
@@ -814,6 +912,16 @@ onUnmounted(() => {
                   <span class="hidden xs:inline ml-1 text-xs font-bold">重置復歸</span>
                 </BaseButton>
 
+                <BaseButton 
+                  @click="openBatchTempModal"
+                  variant="default"
+                  mode="outline"
+                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-blue-200 text-blue-600 hover:bg-blue-50 shrink-0 shadow-sm"
+                  title="同時設定 8 個端點目標溫度"
+                >
+                  <BaseIcon :path="mdiThermometer" :w="'w-6'" :h="'h-6'" size="18" />
+                  <span class="hidden xs:inline ml-1 text-xs font-bold">8端點同步設定溫度</span>
+                </BaseButton>
               </div>
               
               <div class="flex flex-wrap items-center gap-3">
@@ -904,7 +1012,19 @@ onUnmounted(() => {
               <BaseIcon :path="mdiGauge" class="text-primary-600" w="w-8" h="h-8" size="28" />
               溫度與運行模式調整
             </h2>
-            <span class="text-sm text-slate-400 font-bold uppercase tracking-wider">PLC Control Panel</span>
+            <div class="flex items-center gap-2">
+              <BaseButton 
+                @click="openBatchTempModal"
+                variant="default"
+                mode="outline"
+                class="rounded-lg px-2.5 py-1 flex items-center justify-center border-blue-200 text-blue-600 hover:bg-blue-50 text-xs font-bold shadow-sm"
+                title="同時設定 8 個端點目標溫度"
+              >
+                <BaseIcon :path="mdiThermometer" :w="'w-4'" :h="'h-4'" size="16" />
+                <span class="ml-1">8端點同步設定</span>
+              </BaseButton>
+              <span class="hidden sm:inline text-xs text-slate-400 font-bold uppercase tracking-wider">PLC Control</span>
+            </div>
           </div>
         <!-- 切換控制模式 (OPERATION MODE) -->
         <div class="space-y-2">
@@ -1304,6 +1424,73 @@ onUnmounted(() => {
       :car-no="carNo"
       :end-pos="endPosId"
     />
+
+    <!-- ── 8 個端點同步設定溫度 Dialog ─────────────────────────────────────────── -->
+    <ElDialogCustom
+      v-model:visible="showBatchTempModal"
+      title="8 個端點同時設定溫度"
+      width="520px"
+      minHeight="240px"
+      action="確認"
+      cancel="取消"
+      @on-before-close="handleBatchTempDialogClose"
+    >
+      <div class="py-3 px-2 flex flex-col space-y-5">
+        <!-- 說明提示卡 -->
+        <div class="bg-blue-50/80 border border-blue-200/70 rounded-xl p-3 flex items-start gap-2.5">
+          <BaseIcon :path="mdiThermometer" class="text-blue-600 shrink-0 mt-0.5" :w="'w-5'" :h="'h-5'" size="20" />
+          <div class="text-xs text-blue-900 leading-relaxed font-medium">
+            此操作將同時針對車組 <span class="font-bold text-blue-700 font-mono">#{{ trainNo }}</span> 的 <span class="font-bold text-blue-700">4 節車廂共 8 個端點 PLC</span> 發送目標溫度。
+          </div>
+        </div>
+
+        <!-- 溫度調整控制區 -->
+        <div class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col items-center space-y-4">
+          <span class="text-xs font-black text-slate-500 uppercase tracking-widest">目標設定溫度 (TARGET TEMPERATURE)</span>
+
+          <!-- 加減按鈕與數值顯示 -->
+          <div class="flex items-center justify-center gap-6 w-full">
+            <BaseButton
+              @click="handleBatchTempAdjust(-0.5)"
+              variant="default"
+              mode="outline"
+              class="w-12 h-12 rounded-xl border-slate-200 shadow-sm flex items-center justify-center hover:bg-white active:scale-95 transition-all"
+              title="減少 0.5°C"
+            >
+              <BaseIcon :path="mdiMinus" size="22" />
+            </BaseButton>
+
+            <div class="text-center min-w-[130px]">
+              <span class="text-5xl font-black font-mono text-primary-700 tracking-tighter">{{ batchTemp.toFixed(1) }}</span>
+              <span class="text-base font-bold text-slate-400 ml-1">°C</span>
+            </div>
+
+            <BaseButton
+              @click="handleBatchTempAdjust(0.5)"
+              variant="default"
+              mode="outline"
+              class="w-12 h-12 rounded-xl border-slate-200 shadow-sm flex items-center justify-center hover:bg-white active:scale-95 transition-all"
+              title="增加 0.5°C"
+            >
+              <BaseIcon :path="mdiPlus" size="22" />
+            </BaseButton>
+          </div>
+
+          <!-- 拖拉滑桿 -->
+          <div class="w-full px-2">
+            <BaseRangeSlider
+              v-model="batchTemp"
+              :min="16"
+              :max="30"
+              :step="0.5"
+              minLabel="16.0°C"
+              midLabel="舒適值 (24°C)"
+              maxLabel="30.0°C"
+            />
+          </div>
+        </div>
+      </div>
+    </ElDialogCustom>
 
   </div>
 </template>
