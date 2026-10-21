@@ -10,7 +10,7 @@ import RegisterTrendModal from '@/views/mtr/components/RegisterTrendModal.vue';
 import ElDialogCustom from '@/components/ElDialogCustom.vue';
 import { useMQTT } from '@/store/useMQTT';
 import { useAlert } from "@/composables/TLAlter";
-import { ElMessageBox } from 'element-plus';
+import { ElMessageBox, ElLoading } from 'element-plus';
 import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus, CompressorHealth, SettingTypeEnum } from '@/utils/enums';
 import type { 
   TrainCarStatus, 
@@ -47,8 +47,6 @@ import {
 // ==========================================
 // 0. Configuration Parameters
 // ==========================================
-const TEMP_LOCK_DELAY = 3000; // 設定溫度鎖定延遲時間 (毫秒)
-const UI_ACTION_LOCK_DELAY = 2000; // 畫面操作防重複點擊鎖定延遲時間 (毫秒)
 const HEARTBEAT_TIMEOUT = 5000; // 判定斷線超時時間 (毫秒)
 const HEARTBEAT_CHECK_INTERVAL = 1000; // 心跳檢查間隔 (毫秒)
 
@@ -57,10 +55,25 @@ const HEARTBEAT_CHECK_INTERVAL = 1000; // 心跳檢查間隔 (毫秒)
  * @param lockRef 目標 ref<boolean> 鎖定旗標
  * @param delayMs 延遲時間 (毫秒)，預設 2000ms
  */
-const withLockDelay = (lockRef: { value: boolean }, delayMs = UI_ACTION_LOCK_DELAY) => {
+const withLockDelay = (lockRef: { value: boolean }, delayMs = 2000) => {
   lockRef.value = true;
   setTimeout(() => {
     lockRef.value = false;
+  }, delayMs);
+};
+
+/**
+ * 畫面通用全螢幕 loading 2 秒
+ * @param delayMs 延遲時間 (毫秒)，預設 2000ms
+ */
+const triggerActionLoading = (delayMs = 2000) => {
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: '載入中...',
+    background: 'rgba(0, 0, 0, 0.8)'
+  });
+  setTimeout(() => {
+    loadingInstance.close();
   }, delayMs);
 };
 // ==========================================
@@ -517,11 +530,11 @@ const setTargetTemp = () => {
   TLSuccess(`控制指令已發送！設定溫度：${setTemp.value}°C，模式：${mode.value}`);
   syncStatusToRegisters();
 
+  // 畫面全螢幕 loading 2 秒
+  triggerActionLoading();
+
   // 鎖定設定溫度按鈕與滑桿以避免連續點擊
-  isTempSettingLocked.value = true;
-  setTimeout(() => {
-    isTempSettingLocked.value = false;
-  }, TEMP_LOCK_DELAY);
+  withLockDelay(isTempSettingLocked);
 };
 
 
@@ -536,6 +549,9 @@ const setFreshAirDamper = (val: number) => {
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`}`);
+
+  // 畫面全螢幕 loading 2 秒
+  triggerActionLoading();
 
   // 執行後，畫面延遲 2 秒避免連續重複點擊
   withLockDelay(isDamperSettingLocked);
@@ -552,6 +568,9 @@ const setEmergAirDamper = (val: number) => {
   };
   publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
   TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
+
+  // 畫面全螢幕 loading 2 秒
+  triggerActionLoading();
 
   // 執行後，畫面延遲 2 秒避免連續重複點擊
   withLockDelay(isDamperSettingLocked);
@@ -778,8 +797,11 @@ const handleBatchTempSubmit = async () => {
     console.error('Failed to log batch setting:', err);
   });
 
+  // 畫面全螢幕 loading 2 秒
+  triggerActionLoading();
+
   // 送出後鎖定 2 秒延遲，避免連續重複送出
-  withLockDelay(isBatchSettingLocked, UI_ACTION_LOCK_DELAY);
+  withLockDelay(isBatchSettingLocked);
 };
 
 const openTrend = (reg: ModbusRegisterRow) => {
@@ -1504,7 +1526,7 @@ onUnmounted(() => {
         <div class="bg-blue-50/80 border border-blue-200/70 rounded-xl p-3 flex items-start gap-2.5">
           <BaseIcon :path="mdiThermometer" class="text-blue-600 shrink-0 mt-0.5" :w="'w-5'" :h="'h-5'" size="20" />
           <div class="text-xs text-blue-900 leading-relaxed font-medium">
-            此操作將同時針對車組 <span class="font-bold text-blue-700 font-mono">#{{ trainNo }}</span> 的 <span class="font-bold text-blue-700">4 節車廂共 8 個端點 PLC</span> 發送控制指令（每次僅能設定一種）。
+            此操作將同時針對車組 <span class="font-bold text-blue-700 font-mono">#{{ trainNo }}</span> 的 <span class="font-bold text-blue-700">4 節車廂共 8 個端點 PLC</span> 發送控制指令。
           </div>
         </div>
 
