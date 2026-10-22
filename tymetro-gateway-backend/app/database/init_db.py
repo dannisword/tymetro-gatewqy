@@ -51,6 +51,14 @@ def create_tables():
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE sensors ADD COLUMN {col_name} {col_def}"))
 
+    # 檢查並動態遷移 users.email 欄位 (與雲端 PostgreSQL users 結構一致)
+    if "users" in inspector.get_table_names():
+        user_cols = [col["name"] for col in inspector.get_columns("users")]
+        if "email" not in user_cols:
+            logger.info("Adding missing column 'email' to 'users' table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(100)"))
+
     # 建立/確保感測器歷史紀錄之複合降序索引存在 (顯著加速 PFC200 查詢)
     if "sensor_histories" in inspector.get_table_names():
         with engine.begin() as conn:

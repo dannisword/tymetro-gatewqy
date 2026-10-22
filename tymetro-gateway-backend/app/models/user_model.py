@@ -9,6 +9,7 @@ class User(AuditModel):
     orgCode = Column("org_code", String(50), nullable=True, comment="組織代碼")
     account = Column(String(50), unique=True, nullable=False, comment="登入帳號")
     userName = Column("user_name", String(100), nullable=True, comment="使用者姓名")
+    email = Column(String(100), nullable=True, comment="電子郵件")
     password = Column(String(255), nullable=True, comment="加密後的密碼")
     enableAt = Column("enable_at", DateTime, nullable=True, comment="生效日期")
     disableAt = Column("disable_at", DateTime, nullable=True, comment="停用日期")

@@ -6,6 +6,7 @@ from app.schemas.base import AuditBase
 class UserBase(BaseModel):
     account: str
     userName: Optional[str] = None
+    email: Optional[str] = None
     orgId: int
     orgCode: Optional[str] = None
     orgName: Optional[str] = None
@@ -21,6 +22,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     userName: Optional[str] = None
+    email: Optional[str] = None
     password: Optional[str] = None
     roleIds: Optional[List[int]] = None
     enableAt: Optional[datetime] = None
