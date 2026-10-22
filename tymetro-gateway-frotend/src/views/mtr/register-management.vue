@@ -78,6 +78,8 @@ const gridColumns = ref([
     minWidth: 110
   },
   { headerName: '最新讀取值', field: 'value', flex: 0.9, minWidth: 100 },
+  { headerName: '上限值', field: 'maxLimit', flex: 0.9, minWidth: 100 },
+  { headerName: '下限值', field: 'minLimit', flex: 0.9, minWidth: 100 },
   { headerName: '單位', field: 'unit', flex: 0.7, minWidth: 80 },
   {
     headerName: '啟用狀態',
