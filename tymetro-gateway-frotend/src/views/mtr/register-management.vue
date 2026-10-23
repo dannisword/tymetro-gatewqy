@@ -796,7 +796,7 @@ const handleDownloadMetadata = async (dialogRef: any) => {
     >
       <div class="p-2 space-y-4">
         <p class="text-sm text-slate-500">
-          請輸入車組編號，系統將從中心端下載並同步該車組的車廂、設備與感測器資料至本機。
+          請輸入車組編號，系統將從中心端下載並同步該車組的車廂、設備、感測器及使用者資料至本機。
         </p>
         <div class="flex flex-col gap-1.5">
           <label class="text-sm font-bold text-slate-600">

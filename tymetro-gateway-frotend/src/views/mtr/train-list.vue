@@ -19,6 +19,8 @@ import EndpointCard from '@/components/EndpointCard.vue';
 import { logger, updateEndpointData, frontendVersionInfo } from '@/utils';
 import { getHealthStatus } from '@/utils/api';
 
+import dayjs from 'dayjs';
+
 // 麵包屑設定
 const breadcrumbItems = [
   { label: '首頁', to: '/dashboard' },
@@ -35,7 +37,8 @@ const metroConfig = ref<MetroConfig>({
 });
 // 計時器管理
 const lastMsgTime = ref<Record<string, number>>({});
-const lastUpdated = ref(new Date().toLocaleTimeString());
+const formatCurrentTime = () => dayjs().format('YYYY-MM-DD (ddd) HH:mm:ss');
+const lastUpdated = ref(formatCurrentTime());
 let lastUpdatedTimer: any = null;
 let endpointTimeoutInterval: any = null; // MQTT 車廂端點 60 秒無資料之超時離線檢測
 let backendHealthInterval: any = null;   // 後端 API 健康度與 SDS Ready 輪詢
@@ -107,7 +110,7 @@ const triggerLastUpdated = () => {
     return;
   }
   lastUpdatedTimer = setTimeout(() => {
-    lastUpdated.value = new Date().toLocaleTimeString();
+    lastUpdated.value = formatCurrentTime();
     lastUpdatedTimer = null;
   }, 300);
 };

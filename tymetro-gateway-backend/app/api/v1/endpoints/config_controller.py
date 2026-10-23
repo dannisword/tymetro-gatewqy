@@ -213,6 +213,16 @@ def download_metadata(
     labels_data = (labels_resp.get("data") if labels_ok else None) or []
     labels_list = labels_data.get("source", []) if isinstance(labels_data, dict) else (labels_data if isinstance(labels_data, list) else [])
 
+    # 5. 取得使用者資料
+    users_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/users"
+    users_params = {"pageSize": 1000}
+    users_resp = HttpUtil.get(users_url, params=users_params, headers=headers)
+    users_ok = bool(users_resp.get("success"))
+    if not users_ok:
+        print(f"Download users failed, keeping local users: {users_resp.get('message')}")
+    users_data = (users_resp.get("data") if users_ok else None) or {}
+    users_list = users_data.get("source", []) if isinstance(users_data, dict) else (users_data if isinstance(users_data, list) else [])
+
     if trainCode:
         # 篩選屬於該車組的車廂 ID 集合，並僅保留相關設備與感測器
         target_car_ids = {c.get("id") for c in cars_list if c.get("id") is not None}
@@ -315,6 +325,53 @@ def download_metadata(
                 description=v.get("description")
             ))
 
+        # 同步更新使用者資料 (若有下載到使用者清單，採 upsert 避免覆蓋密碼，若為新增則預設 admin123)
+        synced_users_count = 0
+        if users_ok and users_list:
+            for u in users_list:
+                account = u.get("account")
+                if not account:
+                    continue
+                local_user = db.query(User).filter(User.account == account).first()
+                if local_user:
+                    update_fields: dict[str, Any] = {}
+                    if u.get("userName"):
+                        update_fields["userName"] = u.get("userName")
+                    if u.get("email"):
+                        update_fields["email"] = u.get("email")
+                    if u.get("orgId"):
+                        update_fields["orgId"] = u.get("orgId")
+                    if u.get("orgCode"):
+                        update_fields["orgCode"] = u.get("orgCode")
+                    if u.get("isActive") is not None:
+                        update_fields["isActive"] = u.get("isActive")
+                    if u.get("isMobile") is not None:
+                        update_fields["isMobile"] = u.get("isMobile")
+                    parsed_enable_at = parse_datetime(u.get("enableAt"))
+                    if parsed_enable_at is not None:
+                        update_fields["enableAt"] = parsed_enable_at
+                    parsed_disable_at = parse_datetime(u.get("disableAt"))
+                    if parsed_disable_at is not None:
+                        update_fields["disableAt"] = parsed_disable_at
+
+                    for k, val in update_fields.items():
+                        setattr(local_user, k, val)
+                else:
+                    from app.core.security import get_password_hash
+                    db.add(User(
+                        account=account,
+                        userName=u.get("userName"),
+                        email=u.get("email"),
+                        orgId=u.get("orgId") or 1,
+                        orgCode=u.get("orgCode") or "HQ",
+                        password=get_password_hash("admin123"),
+                        isActive=u.get("isActive") if u.get("isActive") is not None else True,
+                        isMobile=u.get("isMobile") if u.get("isMobile") is not None else False,
+                        enableAt=parse_datetime(u.get("enableAt")),
+                        disableAt=parse_datetime(u.get("disableAt"))
+                    ))
+                synced_users_count += 1
+
         db.commit()
 
         # 清空快取並重新預熱設備點位資料
@@ -322,7 +379,14 @@ def download_metadata(
         db_config_repo.get_all_equipments()
 
         print("Metadata download and sync completed successfully.")
-        return ResponseUtil.success(message=f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備、{len(sensors_list)} 筆感測器及 {len(labels_list)} 筆數值對照資料。" if labels_ok else f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備及 {len(sensors_list)} 筆感測器資料；數值對照文字下載失敗，已保留本機既有資料。")
+        detail_msg = f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備、{len(sensors_list)} 筆感測器"
+        if labels_ok:
+            detail_msg += f"、{len(labels_list)} 筆數值對照資料"
+        if users_ok:
+            detail_msg += f"及 {synced_users_count} 筆使用者資料。"
+        else:
+            detail_msg += "；使用者資料下載失敗，已保留本機既有帳號。"
+        return ResponseUtil.success(message=detail_msg)
 
     except Exception as e:
         db.rollback()
