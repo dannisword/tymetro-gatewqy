@@ -89,7 +89,7 @@ class OutboxRepository(BaseRepository[Outbox]):
             for row in rows:
                 results.append({
                     "id": row.id,
-                    "payload": json.loads(row.payload),
+                    "payload": json.loads(str(row.payload)),
                     "retry_count": row.retryCount
                 })
             return results

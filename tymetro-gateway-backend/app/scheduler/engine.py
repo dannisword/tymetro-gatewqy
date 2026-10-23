@@ -288,7 +288,7 @@ class SchedulerEngine:
                 self._record_audit_log(db, status="failure", detail=f"排程同步失敗: {err_msg}")
                 return
 
-            schedules_dict = json.loads(schedule_config.configContent)
+            schedules_dict = json.loads(str(schedule_config.configContent))
             matrix = schedules_dict.get(active_mode)
             if not matrix:
                 err_msg = f"找不到季節模式 '{active_mode}' 的排程矩陣"
