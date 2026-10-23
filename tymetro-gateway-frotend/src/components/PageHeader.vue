@@ -39,6 +39,7 @@ const emit = defineEmits(["refresh"]);
         >
           {{ count }} {{ countUnit }}
         </span>
+        <slot name="title-extra" />
       </h1>
       <div class="flex items-center gap-4 mt-2">
         <span class="text-xs font-semibold text-slate-400">{{ subtitle }}</span>

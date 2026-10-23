@@ -17,7 +17,7 @@ import PageHeader from '@/components/PageHeader.vue';
 import StatsCard from '@/components/StatsCard.vue';
 import EndpointCard from '@/components/EndpointCard.vue';
 import { logger, updateEndpointData, frontendVersionInfo } from '@/utils';
-import { getHealthStatus } from '@/utils/api';
+import { getHealthStatus, getSchedulesList } from '@/utils/api';
 
 import dayjs from 'dayjs';
 
@@ -67,6 +67,21 @@ const fetchBackendHealth = async () => {
   } catch (err) {
     logger.warn('[train-list] Failed to fetch backend health status:', err);
     backendStatus.value = 'offline';
+  }
+};
+
+// 同步時段溫度設定排程啟用狀態 (null = 尚未取得)
+const syncScheduleActive = ref<boolean | null>(null);
+
+const fetchSyncScheduleStatus = async () => {
+  try {
+    const res = await getSchedulesList();
+    const list = Array.isArray(res?.data) ? res.data : (res?.data?.source || res?.data?.records || []);
+    const task = list.find((s: any) => s.taskCode === 'SYNC_SCHEDULE_CONFIG');
+    syncScheduleActive.value = task ? !!task.isActive : null;
+  } catch (err) {
+    logger.warn('[train-list] Failed to fetch sync schedule status:', err);
+    syncScheduleActive.value = null;
   }
 };
 
@@ -272,8 +287,10 @@ onMounted(async() => {
 
   // 取得後端健康狀態與版本資訊，每 60 秒輪詢確認一次
   fetchBackendHealth();
+  fetchSyncScheduleStatus();
   backendHealthInterval = setInterval(() => {
     fetchBackendHealth();
+    fetchSyncScheduleStatus();
   }, 600000);
 
   // 啟動端點超時檢測：每 5 秒檢查各端點是否超過 60 秒未收到 MQTT 訊息
@@ -326,7 +343,24 @@ onUnmounted(() => {
         subtitle="系統即時數據監控"
         :last-updated="lastUpdated"
         :is-connected="isConnected"
-      />
+      >
+        <template #title-extra>
+          <span
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold normal-case tracking-normal border"
+            :class="syncScheduleActive === null
+              ? 'bg-slate-50 text-slate-400 border-slate-200'
+              : syncScheduleActive
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70'
+                : 'bg-amber-50 text-amber-700 border-amber-200/70'"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full"
+              :class="syncScheduleActive === null ? 'bg-slate-400' : syncScheduleActive ? 'bg-emerald-500' : 'bg-amber-500'"
+            ></span>
+            同步時段溫度設定：{{ syncScheduleActive === null ? '未知' : syncScheduleActive ? '啟用' : '停用' }}
+          </span>
+        </template>
+      </PageHeader>
 
       <!-- 統計面板 -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
