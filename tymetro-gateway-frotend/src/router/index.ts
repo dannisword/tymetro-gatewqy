@@ -83,6 +83,12 @@ export const baseRoutes: RouteRecordRaw[] = [
             meta: { title: "審計日誌", affix: false, keepAlive: true, requiresAuth: false },
           },
           {
+            path: "event-records",
+            name: "event-records",
+            component: () => import("@/views/mtr/event-records.vue"),
+            meta: { title: "事件紀錄", affix: false, keepAlive: true, requiresAuth: false },
+          },
+          {
             path: "train-list",
             name: "train-list",
             component: () => import("@/views/mtr/train-list.vue"),

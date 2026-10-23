@@ -150,6 +150,12 @@
       "route": "/mtr/history-records"
     },
     {
+      "id": 7,
+      "title": "事件紀錄",
+      "icon": "mdiAlertCircleOutline",
+      "route": "/mtr/event-records"
+    },
+    {
       "id": 6,
       "title": "感測器圖面配置",
       "icon": "mdiVectorSquare",
