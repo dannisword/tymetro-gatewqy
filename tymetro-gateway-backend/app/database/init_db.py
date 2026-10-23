@@ -12,6 +12,8 @@ from app.models.schedule_model import Schedule
 from app.models.audit_log_model import AuditLog
 from app.models.sensor_history_model import SensorHistory
 from app.models.sensor_value_label_model import SensorValueLabel
+from app.models.event_template_model import EventTemplate
+from app.models.equipment_event_model import EquipmentEvent
 
 from app.core.logger import logger
 from datetime import datetime, timezone

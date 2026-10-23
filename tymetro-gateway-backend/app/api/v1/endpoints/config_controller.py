@@ -16,6 +16,7 @@ from app.models.car_model import Car
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
 from app.models.sensor_value_label_model import SensorValueLabel
+from app.models.event_template_model import EventTemplate
 from app.core.config import settings
 from app.utils.http_util import HttpUtil
 
@@ -24,6 +25,7 @@ from app.core.config_yaml import reload_gateway_yaml_config
 from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.services.cloud_mqtt_service import cloud_mqtt_service
 from app.core.enums import get_all_enums
+from app.services.equipment_event_service import equipment_event_service
 
 router = APIRouter()
 
@@ -43,6 +45,7 @@ async def reload_config(db: Session = Depends(get_db)):
         # 3. 清空並立即預熱 (Pre-warm) 最新 RAM 快取
         db_config_repo.clear_cache()
         db_config_repo.get_all_equipments()
+        equipment_event_service.reload_templates()
         # 4. 熱重載並重連 MQTT Subscriber 與 Publisher (Cloud MQTT)
         await gateway_mqtt_service.restart()
         await cloud_mqtt_service.restart()
@@ -213,6 +216,16 @@ def download_metadata(
     labels_data = (labels_resp.get("data") if labels_ok else None) or []
     labels_list = labels_data.get("source", []) if isinstance(labels_data, dict) else (labels_data if isinstance(labels_data, list) else [])
 
+    # 4.1 取得 PLC 事件樣板 (D40016/D40017 位元定義，後端單頁上限 200 筆)
+    tmpl_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/event-templates"
+    tmpl_resp = HttpUtil.get(tmpl_url, params={"pageSize": 200, "isActive": True}, headers=headers)
+    tmpl_ok = bool(tmpl_resp.get("success"))
+    if not tmpl_ok:
+        print(f"Download event templates failed, keeping local copy: {tmpl_resp.get('message')}")
+    tmpl_data = (tmpl_resp.get("data") if tmpl_ok else None) or []
+    tmpl_list = tmpl_data.get("source", []) if isinstance(tmpl_data, dict) else (tmpl_data if isinstance(tmpl_data, list) else [])
+    tmpl_ok = tmpl_ok and bool(tmpl_list)
+
     # 5. 取得使用者資料
     users_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/users"
     users_params = {"pageSize": 1000}
@@ -250,6 +263,8 @@ def download_metadata(
         # 永遠清空所有舊資料 (依外鍵依賴反向刪除)
         if labels_ok:
             db.query(SensorValueLabel).delete()
+        if tmpl_ok:
+            db.query(EventTemplate).delete()
         db.query(Sensor).delete()
         db.query(Equipment).delete()
         db.query(Car).delete()
@@ -325,6 +340,20 @@ def download_metadata(
                 description=v.get("description")
             ))
 
+        # 插入事件樣板 (下載失敗時略過，保留舊資料)
+        for t in (tmpl_list if tmpl_ok else []):
+            db.add(EventTemplate(
+                templateCode=t.get("templateCode") or "HVAC_PLC_STANDARD",
+                registerCode=str(t.get("registerCode", "")).upper(),
+                bitIndex=t.get("bitIndex"),
+                tagName=t.get("tagName"),
+                tagDesc=t.get("tagDesc") or t.get("tagName"),
+                eventType=t.get("eventType") or "ALARM",
+                severity=t.get("severity") or "ERROR",
+                isActive=t.get("isActive") if t.get("isActive") is not None else True,
+                needConfirm=bool(t.get("needConfirm"))
+            ))
+
         # 同步更新使用者資料 (若有下載到使用者清單，採 upsert 避免覆蓋密碼，若為新增則預設 admin123)
         synced_users_count = 0
         if users_ok and users_list:
@@ -382,6 +411,8 @@ def download_metadata(
         detail_msg = f"成功下載並同步 {len(cars_list)} 筆車廂、{len(eq_list)} 筆設備、{len(sensors_list)} 筆感測器"
         if labels_ok:
             detail_msg += f"、{len(labels_list)} 筆數值對照資料"
+        if tmpl_ok:
+            detail_msg += f"、{len(tmpl_list)} 筆事件樣板"
         if users_ok:
             detail_msg += f"及 {synced_users_count} 筆使用者資料。"
         else:
