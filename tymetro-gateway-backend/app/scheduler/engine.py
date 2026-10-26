@@ -415,8 +415,7 @@ class SchedulerEngine:
                                 "carNo": item['car_no'],
                                 "endPos": item['end_pos'],
                                 "register": {
-                                    PlcRegister.TEMP_SETTING_CMD.value: scaled_temp,
-                                    "D40202": 1  # 觸發寫入，PLC 設定完成後會自動清 0
+                                    PlcRegister.TEMP_SETTING_CMD.value: scaled_temp
                                 }
                             }
                             mqtt_messages.append({
@@ -429,25 +428,40 @@ class SchedulerEngine:
                         await gateway_mqtt_service.publish_messages(mqtt_messages)
                         logger.info(
                             f"[SchedulerEngine Task] Attempt {attempt}/{max_retries}: Dispatched write_temperature "
-                            f"(targetTemp={target_val}°C, scaled={scaled_temp}, D40202=1) to {len(pending_targets)} PLC(s)."
+                            f"(targetTemp={target_val}°C, scaled={scaled_temp}) to {len(pending_targets)} PLC(s)."
                         )
 
                         # 2. 等待 PLC 處理並上報回讀數據
                         await asyncio.sleep(retry_interval)
 
-                        # 3. 檢查即時設備快取 (D40202 是否已清為 0)
+                        # 3. 檢查即時設備快取 (D40200 是否已被 PLC 執行並清零)
                         still_pending = []
                         for item in pending_targets:
                             eq_state = equipment_manager.get_equipment_state(item["eq_id"])
                             sensors = eq_state.get("sensors", {}) if eq_state else {}
 
-                            d40202_val = sensors.get("D40202")
+                            d40200_val = sensors.get(PlcRegister.TEMP_SETTING_CMD.value)
+                            d40201_val = sensors.get(PlcRegister.TEMP_SETTING_FEEDBACK.value)
                             d40121_val = sensors.get(PlcRegister.TEMP_SETTING_DISPLAY.value)
 
-                            # 判定成功：D40202 被 PLC 清回 0，或顯示點位 D40121 已同步為目標溫度
-                            is_completed = (d40202_val == 0 or d40202_val == 0.0)
-                            if d40121_val is not None and abs(float(d40121_val) - target_val) < 0.1:
-                                is_completed = True
+                            # 判定成功：
+                            # 1. D40200 被 PLC 執行後清零 (== 0)
+                            # 2. 或 D40201 (設定反饋) 吻合目標設定溫度
+                            # 3. 或 顯示點位 D40121 已同步為目標溫度
+                            d40201_matched = False
+                            if d40201_val is not None:
+                                try:
+                                    f_val = float(d40201_val)
+                                    if abs(f_val - scaled_temp) < 0.1 or abs((f_val / 10.0) - target_val) < 0.1 or abs(f_val - target_val) < 0.1:
+                                        d40201_matched = True
+                                except (ValueError, TypeError):
+                                    pass
+
+                            is_completed = (
+                                (d40200_val == 0 or d40200_val == 0.0) or
+                                d40201_matched or
+                                (d40121_val is not None and abs(float(d40121_val) - target_val) < 0.1)
+                            )
 
                             if not is_completed:
                                 still_pending.append(item)
@@ -464,7 +478,7 @@ class SchedulerEngine:
                             status="success",
                             detail=(
                                 f"已成功派送排程溫度至 {len(active_equipments)} 台 PLC 並確認設定完成 "
-                                f"(D40202 全數清零, 目標溫度: {target_val}°C, D40200={scaled_temp}, "
+                                f"(D40200 全數清零, 目標溫度: {target_val}°C, "
                                 f"主題範例: TYMC/AIR/SET/{first_train_code}/+/+)"
                             ),
                             action="dispatch_plc_temperature"

@@ -554,29 +554,41 @@ const handleTempAdjust = (amount: number) => {
   }
 };
 
-const setTargetTemp = () => {
+const setTargetTemp = async () => {
   if (setTemp.value === null || isTempSettingLocked.value) return;
 
-  const register = {
-     D40200: Math.round(setTemp.value * 10),
-     D40202: 1
-  };
-  const statusPayload = {
-    events: "set_value",
-    carNo: carNo.value,
-    endPos: endPosId.value,
-    register: register
-  };
+  const targetTemperature = setTemp.value;
+  isTempSettingLocked.value = true;
 
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, statusPayload);
-  TLSuccess(`控制指令已發送！設定溫度：${setTemp.value}°C，模式：${mode.value}`);
-  syncStatusToRegisters();
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: `正在設定溫度 (${targetTemperature}°C) 並等待 PLC 確認...`,
+    background: 'rgba(0, 0, 0, 0.7)'
+  });
 
-  // 畫面全螢幕 loading 2 秒
-  triggerActionLoading();
+  try {
+    const res = await httpOperations.post('/api/v1/equipments/set-temperature', {
+      trainCode: String(trainNo.value),
+      carNo: Number(carNo.value),
+      endPos: Number(endPosId.value),
+      targetTemperature: targetTemperature
+    }, { meta: { loading: false } });
 
-  // 鎖定設定溫度按鈕與滑桿以避免連續點擊
-  withLockDelay(isTempSettingLocked);
+    const isSuccess = Boolean(res?.success && (res?.data === undefined || res?.data?.success !== false));
+
+    if (isSuccess) {
+      TLSuccess(`溫度設定成功！目標溫度：${targetTemperature}°C (PLC 已確認)`);
+      syncStatusToRegisters();
+    } else {
+      TLWarning(res?.message || res?.data?.message || '溫度指令已送出，但 PLC 尚未確認');
+    }
+  } catch (err: any) {
+    console.error('Failed to set temperature via backend API:', err);
+    TLError(err?.message || '設定溫度請求失敗');
+  } finally {
+    loadingInstance.close();
+    withLockDelay(isTempSettingLocked, 1500);
+  }
 };
 
 
@@ -746,44 +758,58 @@ const handleBatchTempSubmit = async () => {
 
   const currentTrainNo = trainNo.value;
 
-  // 整理 8 個端點：使用 configCarVinsList 或標準 4 節車廂 × 2 端點
-  const targets: { carNo: number; endPos: number }[] = [];
-  if (configCarVinsList.value.length > 0) {
-    configCarVinsList.value.forEach(car => {
-      const cNo = car.carNo || (carType.value * 1000 + (car.id || 1) * 100 + (currentTrainNo % 100));
-      (car.equipment || []).forEach(eq => {
-        targets.push({ carNo: cNo, endPos: eq.id });
-      });
-    });
-  }
-
-  // 若 configCarVinsList 尚未載入齊全，使用標準桃園捷運車組 4 車廂 × 2 端點 fallback
-  if (targets.length === 0) {
-    for (let c = 1; c <= 4; c++) {
-      const cNo = carType.value * 1000 + c * 100 + (currentTrainNo % 100);
-      targets.push({ carNo: cNo, endPos: 1 });
-      targets.push({ carNo: cNo, endPos: 2 });
-    }
-  }
-
   // 依據選擇的單一設定類型組裝 Register 與日誌資訊
+  if (batchSettingType.value === 'temperature') {
+    const targetTemperature = batchTemp.value;
+    isBatchSettingLocked.value = true;
+
+    const loadingInstance = ElLoading.service({
+      lock: true,
+      text: `正在批次設定 8 端點目標溫度 (${targetTemperature}°C) 並等待 PLC 確認...`,
+      background: 'rgba(0, 0, 0, 0.7)'
+    });
+
+    try {
+      // 直接向後端發送 8 端點批次溫度命令 (由後端自動從 DB 載入 8 台設備並執行閉環驗證)
+      const res = await httpOperations.post('/api/v1/equipments/batch-set-temperature', {
+        trainCode: String(currentTrainNo),
+        targetTemperature: targetTemperature
+      }, { meta: { loading: false } });
+
+      const resData = res?.data;
+      const isBatchSuccess = Boolean(res?.success && resData?.success);
+
+      if (isBatchSuccess) {
+        TLSuccess(`8 個端點溫度設定成功！目標溫度：${targetTemperature.toFixed(1)}°C (全數 PLC 已確認)`);
+        setTemp.value = targetTemperature;
+        syncStatusToRegisters();
+      } else {
+        TLWarning(res?.message || resData?.message || '部分端點 PLC 尚未確認，請查看審計日誌');
+      }
+    } catch (err: any) {
+      console.error('Failed to batch set temperature via backend API:', err);
+      TLError(err?.message || '批次設定溫度請求失敗');
+    } finally {
+      loadingInstance.close();
+      withLockDelay(isBatchSettingLocked, 2000);
+    }
+    return;
+  }
+
+  // 整理 8 個端點供擋板類設定使用 (4 車廂 × 2 端點)
+  const targets: { carNo: number; endPos: number }[] = [];
+  for (let c = 1; c <= 4; c++) {
+    const cNo = carType.value * 1000 + c * 100 + (currentTrainNo % 100);
+    targets.push({ carNo: cNo, endPos: 1 });
+    targets.push({ carNo: cNo, endPos: 2 });
+  }
+
   let registersPayload: Record<string, number> = {};
   let successMsg = '';
   let logValue = '';
-  let settingTypeEnum = SettingTypeEnum.TEMPERATURE;
+  let settingTypeEnum = SettingTypeEnum.FRESH_AIR_DAMPER;
 
-  if (batchSettingType.value === 'temperature') {
-    const targetTemperature = batchTemp.value;
-    const scaled = Math.round(targetTemperature * 10);
-    registersPayload = {
-      D40200: scaled,
-      D40202: 1
-    };
-    successMsg = `8 個端點溫度設定指令已發送！設定溫度：${targetTemperature.toFixed(1)}°C`;
-    logValue = `8端點批次設定溫度: ${targetTemperature.toFixed(1)}°C (D40200: ${scaled})`;
-    settingTypeEnum = SettingTypeEnum.TEMPERATURE;
-    setTemp.value = targetTemperature;
-  } else if (batchSettingType.value === 'freshAir') {
+  if (batchSettingType.value === 'freshAir') {
     const damperVal = batchFreshAirDamperPos.value;
     registersPayload = {
       D40212: damperVal
@@ -805,7 +831,7 @@ const handleBatchTempSubmit = async () => {
     emergAirDamper.value = emergVal;
   }
 
-  // 逐一發送 MQTT 指令至 8 個端點
+  // 逐一發送 MQTT 指令至 8 個端點 (擋板類)
   targets.forEach(({ carNo: cNo, endPos: ep }) => {
     const topic = `TYMC/AIR/SET/${currentTrainNo}/${cNo}/${ep}`;
     const payload = {

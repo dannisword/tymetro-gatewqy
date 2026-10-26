@@ -75,11 +75,23 @@ class PlcEvent(LabeledEnum):
 class PlcRegister(LabeledEnum):
     """PLC 控制暫存器代碼"""
     TEMP_SETTING_CMD = ("D40200", "溫度設定命令 (x10)")
+    TEMP_SETTING_FEEDBACK = ("D40201", "溫度設定反饋/完成 (x10)")
     TEMP_SETTING_DISPLAY = ("D40121", "溫度設定顯示點位")
     FRESH_AIR_DAMPER_CMD = ("D40212", "新鮮空氣擋板設定")
     FRESH_AIR_DAMPER_DISPLAY = ("D40213", "新鮮空氣擋板顯示")
     EMERG_AIR_DAMPER_CMD = ("D40214", "緊急供氣擋板設定")
     EMERG_AIR_DAMPER_DISPLAY = ("D40215", "緊急供氣擋板顯示")
+
+class SettingType(LabeledEnum):
+    """設定記錄類型"""
+    TEMPERATURE = ("TEMPERATURE", "溫度設定")
+    FRESH_AIR_DAMPER = ("FRESH_AIR_DAMPER", "新鮮空氣擋板開度")
+    EMERGENCY_AIR_SUPPLY = ("EMERGENCY_AIR_SUPPLY", "緊急供氣擋板")
+    RESET_ALL = ("RESET_ALL", "全車重置復歸")
+
+
+# 相容別名
+SettingTypeEnum = SettingType
 
 
 def get_all_enums() -> Dict[str, Any]:
