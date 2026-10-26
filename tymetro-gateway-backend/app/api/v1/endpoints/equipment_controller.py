@@ -239,9 +239,8 @@ async def execute_temperature_setting(
             d40200_val = sensors.get(PlcRegister.TEMP_SETTING_CMD.value)
             d40201_val = sensors.get(PlcRegister.TEMP_SETTING_FEEDBACK.value)
 
-            # 判定條件：
-            # 1. D40200 PLC 設定完成會回傳 0(代表完成)
-            # 2. 或 D40201 反饋吻合
+            # 判定條件：僅以 D40201 反饋吻合為準
+            # (D40200 == 0 可能是發送前的預設/舊值，會造成誤判已完成)
             d40201_matched = False
             if d40201_val is not None:
                 try:
@@ -251,10 +250,7 @@ async def execute_temperature_setting(
                 except (ValueError, TypeError):
                     pass
 
-            is_completed = (
-                (d40200_val == 0 or d40200_val == 0.0) or
-                d40201_matched
-            )
+            is_completed = d40201_matched
 
             if not is_completed:
                 still_pending.append(item)
@@ -375,7 +371,7 @@ async def batch_set_temperature(
 
         return ResponseUtil.success(
             data=result,
-            message=f"8 個端點溫度設定成功！全數 PLC 已確認"
+            message=f"{len(targets)} 個端點溫度設定成功！目標溫度：{request.targetTemperature}°C (全數 PLC 已確認)"
         )
     except Exception as e:
         logger.error(f"[batch_set_temperature] Exception: {e}", exc_info=True)
