@@ -123,7 +123,7 @@ async def execute_temperature_setting(
     1. 解析與對齊目標設備 (車號 carVin, 端點 endPos, eq_id)
     2. 記錄 SettingLog
     3. 多端點同時下發 MQTT 指令 (TYMC/AIR/SET/...)
-    4. 閉環驗證與重試機制 (檢查 D40200 清零 / D40201 反饋 / D40121 顯示值)
+    4. 閉環驗證與重試機制 (檢查 D40200 清零 / D40201 反饋)
     5. 記錄 AuditLog 並回傳 TemperatureSetResult
     """
     scaled_temp = int(round(target_val * 10))

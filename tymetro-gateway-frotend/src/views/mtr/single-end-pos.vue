@@ -244,7 +244,9 @@ const mappedSensors = computed(() => {
       if (comboText) {
         return { ...s, value: comboText };
       }
-      return { ...s, value: String(matched.sensorValue || '0.0') };
+      const hasUnit = matched.sensorUnit && matched.sensorUnit.toUpperCase() !== 'N/A';
+      const unit = hasUnit ? ` ${matched.sensorUnit}` : '';
+      return { ...s, value: `${matched.sensorValue || '0.0'}${unit}` };
     }
     return s;
   });

@@ -238,6 +238,7 @@ defineExpose({
         @click="emit('click-marker', marker)"
       >
         <div 
+          :title="[marker.code, marker.label, marker.value].filter(Boolean).join(' | ')"
           class="flex border-2 shadow-2xl rounded-2xl px-3 py-2 min-w-[70px] relative group/marker gap-1 transition-colors"
           :class="[
             editable ? 'cursor-move border-slate-200' : 'border-transparent',
