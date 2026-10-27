@@ -40,10 +40,9 @@ import {
   mdiGauge,
   mdiPlus,
   mdiMinus,
-  mdiMagnify,
-  mdiFullscreen,
-  mdiFullscreenExit
+  mdiMagnify
 } from '@mdi/js';
+import marker from 'element-plus/es/components/slider/src/marker.mjs';
 // ==========================================
 // 0. Configuration Parameters
 // ==========================================
@@ -594,6 +593,66 @@ const setTargetTemp = async () => {
 };
 
 
+// 2D 圖標記點擊 (clickAction 為 detail 時開啟詳細視窗，與 tymetro 一致)
+const showMarkerModal = ref(false);
+const activeMarker = ref<any>(null);
+
+// 標記點位對應的設定指令 (key: 點位代碼，bit 標記為 代碼:bit)；options 為可選擇的設定值
+interface MarkerCommand {
+  command: SettingTypeEnum;
+  options?: { label: string; value: number }[];
+}
+const MARKER_COMMANDS: Record<string, MarkerCommand> = {
+  'D40015:8': {
+    command: SettingTypeEnum.MANUAL_START_AC,
+    options: [
+      { label: '開啟', value: 2 },
+      { label: '關閉', value: 1 }
+    ]
+  }
+};
+const activeMarkerCommand = computed(() => {
+  const m = activeMarker.value;
+  if (!m) return undefined;
+  const code = String(m.code || '').toUpperCase();
+  const hasBit = m.bitIndex !== null && m.bitIndex !== undefined;
+  return MARKER_COMMANDS[hasBit ? `${code}:${m.bitIndex}` : code];
+});
+
+const handleMarkerClick = (marker: any) => {
+  console.log(marker);
+
+  if (marker?.styleConfig?.clickAction !== 'detail') return;
+  activeMarker.value = marker;
+  showMarkerModal.value = true;
+};
+
+const executeMarkerCommand = async (option?: { label: string; value: number }) => {
+  const cmd = activeMarkerCommand.value;
+  if (!cmd) return;
+  const name = `${activeMarker.value?.label || activeMarker.value?.code}${option ? `：${option.label}` : ''}`;
+  try {
+    await ElMessageBox.confirm(`確定要執行「${name}」嗎？`, '確認設定', {
+      type: 'warning',
+      confirmButtonText: '確定',
+      cancelButtonText: '取消'
+    });
+  } catch {
+    return; // User cancelled
+  }
+  // 由後端確認 PLC 完成暫存器，最長約 10 秒
+  const loadingInstance = ElLoading.service({ lock: true, text: '等待 PLC 回報完成...', background: 'rgba(0, 0, 0, 0.8)' });
+  try {
+    if (await executePlcCommand(cmd.command, option?.value)) {
+      TLSuccess(`「${name}」已完成`);
+      showMarkerModal.value = false;
+      fetchRegisters();
+    }
+  } finally {
+    loadingInstance.close();
+  }
+};
+
 // 呼叫後端執行設定 API (後端負責發布 MQTT、寫入稽核與設定紀錄)
 const executePlcCommand = async (command: SettingTypeEnum, value?: number): Promise<boolean> => {
   try {
@@ -605,6 +664,11 @@ const executePlcCommand = async (command: SettingTypeEnum, value?: number): Prom
       value
     }, { meta: { loading: false } });
     if (res?.success) {
+      // 後端會依 sensors 完成暫存器確認的指令 (confirmed === false 表示 PLC 逾時未回報完成)
+      if (res.data?.confirmed === false) {
+        TLError(res.data.confirmMessage || 'PLC 未回報完成');
+        return false;
+      }
       return true;
     }
     TLError(res?.message || '設定指令送出失敗');
@@ -961,7 +1025,7 @@ onMounted(async () => {
   logger.info(`${mqttTopicPrefix}/${trainNo.value}/${carNo.value}/#`);
   subscribe(`${mqttTopicPrefix}/${trainNo.value}/${carNo.value}/#`, (topic: string, data: unknown) => {
     const payload = data as MqttPayload;
-    logger.info('single-end-pos', topic, data);
+    //logger.info('single-end-pos', topic, data);
     const payloadCarNo = payload.carNo !== undefined ? Number(payload.carNo) : (payload.carVin !== undefined ? Number(payload.carVin) : undefined);
     
     if (payload && payloadCarNo === carNo.value && Number(payload.endPos) === endPosId.value) {   
@@ -1412,6 +1476,7 @@ onUnmounted(() => {
         v-else-if="activeTab === 'map'"
         :planUrl="planUrl"
         :markers="mappedSensors"
+        @click-marker="handleMarkerClick"
         :heightClass="isFullscreen ? 'h-[calc(100vh-280px)]' : 'h-[500px]'"
       />
 
@@ -1733,6 +1798,52 @@ onUnmounted(() => {
         </div>
       </div>
     </ElDialogCustom>
+
+    <!-- 標記詳細資訊 Modal -->
+    <Teleport to="body">
+      <div v-if="showMarkerModal && activeMarker" class="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showMarkerModal = false">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+          <div class="px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex justify-between items-center">
+            <h3 class="text-lg font-black">{{ activeMarker.label }}</h3>
+            <button @click="showMarkerModal = false" class="text-white/80 hover:text-white transition-colors">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div class="p-6 space-y-3 text-sm">
+            <div class="flex justify-between">
+              <span class="font-black text-slate-400">點位代碼</span>
+              <span class="font-mono text-slate-700">{{ activeMarker.code }}<template v-if="activeMarker.bitIndex !== null && activeMarker.bitIndex !== undefined"> (Bit {{ activeMarker.bitIndex }})</template></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-black text-slate-400">目前數值</span>
+              <span class="font-mono font-black text-slate-800">{{ activeMarker.value }}<template v-if="activeMarker.unit"> {{ activeMarker.unit }}</template></span>
+            </div>
+          </div>
+          <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+            <template v-if="activeMarkerCommand">
+              <BaseButton
+                v-for="opt in (activeMarkerCommand.options || [undefined])"
+                :key="opt?.value ?? 'run'"
+                @click="executeMarkerCommand(opt)"
+                class="rounded-xl px-4 py-2 font-bold"
+              >
+                {{ opt?.label || '執行' }}
+              </BaseButton>
+            </template>
+            <BaseButton
+              @click="showMarkerModal = false"
+              variant="default"
+              mode="outline"
+              class="rounded-xl px-4 py-2 border-slate-200 text-slate-500 hover:bg-slate-100 font-bold"
+            >
+              關閉
+            </BaseButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </div>
 </template>

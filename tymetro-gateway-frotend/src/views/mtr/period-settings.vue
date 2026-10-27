@@ -54,6 +54,7 @@ const isDialogVisible = ref(false);
 const templateOptions = ref<any[]>([]);
 const selectedTemplateCode = ref('');
 const currentVersion = ref('');
+const currentName = ref('');
 
 // 預設產生單一模式的 24x7 矩陣
 const createDefaultMatrix = () => {
@@ -89,6 +90,7 @@ onBeforeMount(() => {
       if (response.data && response.data.configContent) {
         try {
           const content = JSON.parse(response.data.configContent);
+          currentName.value = content.templateName || '';
           modeOptions.forEach(m => {
             if (content[m.code]) {
               allSchedules.value[m.code] = content[m.code];
@@ -142,10 +144,11 @@ const handleDialogClose = async (dialogRef: any) => {
     const res = await downloadTimePeriodTemplate(selectedTemplateCode.value);
     if (res.success && res.data && res.data.payload) {
       const payload = res.data.payload;
+      const templateName = templateOptions.value.find(o => o.code === selectedTemplateCode.value)?.name || res.data.name || '';
       const configPayload = {
         configType: 'SCHEDULE',
-        configContent: JSON.stringify(payload),
-        version: res.data.version || '1.0.0'
+        configContent: JSON.stringify({ ...payload, templateName }),
+        version: [templateName, res.data.version || '1.0.0'].filter(Boolean).join(' ')
       };
       const upsertRes = await upsertConfig(configPayload);
       if (upsertRes.success) {
@@ -158,6 +161,7 @@ const handleDialogClose = async (dialogRef: any) => {
             allSchedules.value[m.code] = payload[m.label];
           }
         });
+        currentName.value = templateName;
         scheduleData.value = allSchedules.value[activeMode.value];
         if (upsertRes.data && upsertRes.data.id) {
           configId.value = upsertRes.data.id;
@@ -194,7 +198,7 @@ const handleDialogClose = async (dialogRef: any) => {
         <div class="flex items-center gap-3">
           <h1 class="text-2xl font-bold text-slate-800 tracking-wide font-sans">
             模式時段設定
-            <span v-if="currentVersion" class="text-sm font-normal text-slate-500 ml-2">(版本: {{ currentVersion }})</span>
+            <span v-if="currentName || currentVersion" class="text-sm font-normal text-slate-500 ml-2">({{ currentName && currentVersion ? '' : '' }}{{ currentVersion ? `版本: ${currentVersion}` : '' }})</span>
           </h1>
         </div>
         <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">

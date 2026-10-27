@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from app.core.enums import AuditCategory, PlcEvent, SettingType
 from app.core.logger import logger
 from app.models.car_model import Car
 from app.models.equipment_model import Equipment
+from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
 from app.schemas.plc_command_schema import PlcCommandRequest, PlcCommandResponse
 from app.services.audit_log_service import AuditLogService
@@ -27,6 +29,8 @@ class PlcCommandSpec:
     to_register_value: Callable[[Optional[float]], int]
     # 設定紀錄顯示文字
     to_log_value: Callable[[Optional[float], int], str]
+    # PLC 完成回報暫存器 (值為 1 表示完成)，由後端查 sensors 資料表確認
+    done_register: Optional[str] = None
 
 
 def _require(value: Optional[float]) -> float:
@@ -49,13 +53,21 @@ def _emergency_air(value: Optional[float]) -> int:
     return int(v)
 
 
-def _trigger(register: str, name: str) -> PlcCommandSpec:
+def _manual_ac(value: Optional[float]) -> int:
+    v = _require(value)
+    if v not in (1, 2):
+        raise PlcCommandError("手動開啟空調系統值須為 1 (關閉) 或 2 (開啟)")
+    return int(v)
+
+
+def _trigger(register: str, name: str, done_register: Optional[str] = None) -> PlcCommandSpec:
     """觸發型暫存器：寫入 1 觸發，PLC 完成後由「完成」暫存器回報"""
     return PlcCommandSpec(
         event=PlcEvent.WRITE_REGISTER.value,
         register=register,
         to_register_value=lambda v: 1,
         to_log_value=lambda v, reg: f"{name}觸發 ({register}: {reg})",
+        done_register=done_register,
     )
 
 
@@ -76,13 +88,24 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
     ),
     SettingType.RESET_ALL.value: _trigger("D40130", "重置復歸"),
     SettingType.INITIAL_VALUE.value: _trigger("D40216", "初始值"),
-    SettingType.MANUAL_START_AC.value: _trigger("D40218", "手動開啟空調系統"),
-    SettingType.FORCE_EMERGENCY_DAMPER.value: _trigger("D40220", "強制開啟緊急供氣擋板"),
-    SettingType.FORCE_EXCHANGER.value: _trigger("D40222", "強制開啟換流器"),
+    SettingType.MANUAL_START_AC.value: PlcCommandSpec(
+        event=PlcEvent.SET_VALUE.value,
+        register="D40218",
+        to_register_value=_manual_ac,
+        to_log_value=lambda v, reg: "開啟" if reg == 2 else "關閉",
+        done_register="D40219",
+    ),
+    SettingType.FORCE_EMERGENCY_DAMPER.value: _trigger("D40220", "強制開啟緊急供氣擋板", done_register="D40221"),
+    SettingType.FORCE_EXCHANGER.value: _trigger("D40222", "強制開啟換流器", done_register="D40223"),
     SettingType.CLEAR_COMP1_HOURS.value: _trigger("D40224", "清除壓縮機1運轉時數"),
     SettingType.CLEAR_COMP2_HOURS.value: _trigger("D40226", "清除壓縮機2運轉時數"),
     SettingType.CLEAR_AC_HOURS.value: _trigger("D40228", "清除空調運轉時數"),
 }
+
+
+# 完成確認：每秒查詢一次 sensors，逾時視為未完成
+CONFIRM_TIMEOUT_SEC = 10
+CONFIRM_INTERVAL_SEC = 1.0
 
 
 class PlcCommandService:
@@ -119,9 +142,12 @@ class PlcCommandService:
         log_value: Optional[str] = None
         error: Optional[str] = None
         train_code = req.trainCode or ""
+        car: Optional[Car] = None
+        equipment: Optional[Equipment] = None
+        baseline_done: Optional[float] = None
 
         try:
-            car, _ = self._resolve_target(req)
+            car, equipment = self._resolve_target(req)
             if not train_code:
                 train_code = str(car.trainCode or "").strip()
                 if train_code.upper().startswith("P"):
@@ -129,6 +155,7 @@ class PlcCommandService:
             car_vin = str(car.carVin or "")
             car_no = int(car_vin) if car_vin.isdigit() else int(str(car.carNo or req.carNo))
 
+            baseline_done = self._read_sensor_value(car, equipment, spec.done_register)
             reg_value = spec.to_register_value(req.value)
             log_value = spec.to_log_value(req.value, reg_value)
             topic = f"TYMC/AIR/SET/{train_code}/{car_no}/{req.endPos}"
@@ -149,6 +176,12 @@ class PlcCommandService:
             logger.error(f"[PlcCommand] 執行失敗: {e}")
             error = f"MQTT 指令發布失敗: {e}"
 
+        confirmed: Optional[bool] = None
+        confirm_message: Optional[str] = None
+        if not error and spec.done_register and car is not None and equipment is not None:
+            confirmed, confirm_message = await self._wait_done(car, equipment, spec.done_register, baseline_done)
+            log_value = f"{log_value} | {confirm_message}"
+
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         self._write_audit(req, operator, ip_address, label, log_value, topic, payload, error, elapsed_ms)
 
@@ -164,7 +197,36 @@ class PlcCommandService:
             topic=topic,
             registers=payload["register"],
             settingLogId=self._write_setting_log(req, operator, log_value, topic, payload),
+            confirmed=confirmed,
+            confirmMessage=confirm_message,
         )
+
+    def _read_sensor_value(self, car: Car, equipment: Equipment, code: Optional[str]) -> Optional[float]:
+        if not code:
+            return None
+        # 結束目前交易以讀到 MQTT 寫入的最新值
+        self.db.rollback()
+        value = (
+            self.db.query(Sensor.sensorValue)
+            .filter(Sensor.carId == car.id, Sensor.equipmentId == equipment.id, Sensor.sensorCode == code)
+            .scalar()
+        )
+        return None if value is None else float(value)
+
+    async def _wait_done(
+        self, car: Car, equipment: Equipment, done_register: str, baseline: Optional[float]
+    ) -> tuple[bool, str]:
+        """輪詢完成暫存器是否為 1。發送前已為 1 時，須先看到歸零再回到 1，避免把舊值當成完成"""
+        seen_reset = baseline != 1
+        deadline = time.monotonic() + CONFIRM_TIMEOUT_SEC
+        while time.monotonic() < deadline:
+            await asyncio.sleep(CONFIRM_INTERVAL_SEC)
+            value = self._read_sensor_value(car, equipment, done_register)
+            if value != 1:
+                seen_reset = True
+            elif seen_reset:
+                return True, f"PLC 已完成 ({done_register}=1)"
+        return False, f"PLC 未於 {CONFIRM_TIMEOUT_SEC} 秒內回報完成 ({done_register})"
 
     def _write_setting_log(
         self, req: PlcCommandRequest, operator: str, log_value: Optional[str], topic: str, payload: Dict[str, Any]

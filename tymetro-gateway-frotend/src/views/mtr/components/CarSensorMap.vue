@@ -18,6 +18,8 @@ interface Props {
   heightClass?: string;
 }
 
+defineEmits<{ (e: 'click-marker', marker: MapSensorMarker): void }>();
+
 withDefaults(defineProps<Props>(), {
   planUrl: '/images/layout.svg',
   heightClass: 'h-[500px]'
@@ -73,6 +75,7 @@ const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(mapContainerRef
         :src="planUrl"
         :markers="markers"
         :editable="false"
+        @click-marker="$emit('click-marker', $event)"
         :zoomable="true"
         :autoFit="true"
         :initialScale="0.7"

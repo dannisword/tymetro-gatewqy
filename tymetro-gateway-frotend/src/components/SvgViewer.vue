@@ -184,6 +184,9 @@ const fit = () => {
   state.y = Math.round((cRect.height - bh * scale) / 2 - minY * scale);
 };
 
+// 設有點擊動作的標記以橘色外框標示 (點擊會觸發事件)
+const hasClickAction = (marker: any) => !!marker.styleConfig?.clickAction && marker.styleConfig.clickAction !== 'none';
+
 const reset = () => {
   userAdjusted = false;
   if (props.autoFit) {
@@ -303,14 +306,14 @@ defineExpose({
           :title="[marker.code, marker.label, marker.value].filter(Boolean).join(' | ')"
           class="flex border-2 shadow-2xl rounded-2xl px-3 py-2 min-w-[70px] relative group/marker gap-1 transition-colors"
           :class="[
-            editable ? 'cursor-move border-slate-200' : 'border-transparent',
+            editable ? 'cursor-move border-slate-200' : (hasClickAction(marker) ? 'cursor-pointer border-transparent' : 'border-transparent'),
             (marker.styleConfig?.valuePosition === 'top' || marker.valuePosition === 'top') ? 'flex-col-reverse items-center' :
             (marker.styleConfig?.valuePosition === 'left' || marker.valuePosition === 'left') ? 'flex-row-reverse items-center justify-start' :
             (marker.styleConfig?.valuePosition === 'right' || marker.valuePosition === 'right') ? 'flex-row items-center justify-start' :
             'flex-col items-center'
           ]"
           :style="{ 
-            borderColor: marker.color,
+            borderColor: hasClickAction(marker) ? '#f97316' : marker.color,
             backgroundColor: ((marker.bitValue === 1 || marker.value === '1' || marker.value === 'ON' || marker.value === '正常' || marker.value === '運轉' || marker.value === '啟動') && marker.styleConfig?.onColor) ? marker.styleConfig.onColor :
                              ((marker.bitValue === 0 || marker.value === '0' || marker.value === 'OFF' || marker.value === '異常' || marker.value === '停止' || marker.value === '關閉') && marker.styleConfig?.offColor) ? marker.styleConfig.offColor :
                              '#ffffff'

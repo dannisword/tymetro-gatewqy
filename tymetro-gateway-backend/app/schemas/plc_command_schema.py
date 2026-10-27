@@ -19,3 +19,6 @@ class PlcCommandResponse(BaseModel):
     topic: str
     registers: dict
     settingLogId: Optional[int] = None
+    # 需完成確認的指令：True 已完成 / False 逾時未完成 / None 無需或無法確認
+    confirmed: Optional[bool] = None
+    confirmMessage: Optional[str] = None
