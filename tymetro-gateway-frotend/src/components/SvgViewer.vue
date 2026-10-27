@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { mdiCog, mdiClose } from '@mdi/js';
 import BaseIcon from '@/components/BaseIcon.vue';
 
@@ -12,6 +12,7 @@ const props = withDefaults(
     initialScale?: number;
     minScale?: number;
     maxScale?: number;
+    autoFit?: boolean;
   }>(),
   {
     editable: false,
@@ -19,7 +20,8 @@ const props = withDefaults(
     zoomable: true,
     initialScale: undefined,
     minScale: 0.05,
-    maxScale: 10
+    maxScale: 10,
+    autoFit: false
   }
 );
 
@@ -47,6 +49,7 @@ const state = reactive({
 
 const handleMouseDown = (e: MouseEvent) => {
   if (dragMarkerIndex.value !== null || isDropping.value) return;
+  userAdjusted = true;
   state.isDragging = true;
   state.start = { x: e.clientX - state.x, y: e.clientY - state.y };
 };
@@ -132,6 +135,7 @@ const onDrop = (e: DragEvent) => {
 const handleWheel = (e: WheelEvent) => {
   e.preventDefault();
   if (!props.zoomable) return;
+  userAdjusted = true;
   const delta = e.deltaY > 0 ? 0.9 : 1.1;
   const newScale = Math.min(Math.max(state.scale * delta, props.minScale), props.maxScale);
   
@@ -146,7 +150,46 @@ const handleWheel = (e: WheelEvent) => {
   }
 };
 
+// 依容器大小自動縮放置中，涵蓋底圖與所有標記
+let userAdjusted = false;
+
+const fit = () => {
+  const container = containerRef.value;
+  if (!container) return;
+  const cRect = container.getBoundingClientRect();
+  if (!cRect.width || !cRect.height) return;
+
+  const els = container.querySelectorAll<HTMLElement>('[data-map-item]');
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  els.forEach(el => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    // 換算回未縮放的畫布座標
+    minX = Math.min(minX, (r.left - cRect.left - state.x) / state.scale);
+    minY = Math.min(minY, (r.top - cRect.top - state.y) / state.scale);
+    maxX = Math.max(maxX, (r.right - cRect.left - state.x) / state.scale);
+    maxY = Math.max(maxY, (r.bottom - cRect.top - state.y) / state.scale);
+  });
+  if (!isFinite(minX)) return;
+
+  const padding = 24;
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+  const scale = Math.min(
+    Math.max(Math.min((cRect.width - padding * 2) / bw, (cRect.height - padding * 2) / bh), props.minScale),
+    props.maxScale
+  );
+  state.scale = scale;
+  state.x = Math.round((cRect.width - bw * scale) / 2 - minX * scale);
+  state.y = Math.round((cRect.height - bh * scale) / 2 - minY * scale);
+};
+
 const reset = () => {
+  userAdjusted = false;
+  if (props.autoFit) {
+    fit();
+    return;
+  }
   state.scale = props.initialScale !== undefined ? props.initialScale : (props.zoomable ? 0.8 : 1.0);
   state.x = 0;
   state.y = 0;
@@ -155,6 +198,7 @@ const reset = () => {
 const zoomCenter = (delta: number) => {
   if (!props.zoomable) return;
   if (!containerRef.value) return;
+  userAdjusted = true;
   const rect = containerRef.value.getBoundingClientRect();
   const centerX = rect.width / 2;
   const centerY = rect.height / 2;
@@ -166,11 +210,26 @@ const zoomCenter = (delta: number) => {
   console.log(`Zoom called: delta=${delta}, newScale=${state.scale}`);
 };
 
+const autoFitIfIdle = () => {
+  if (props.autoFit && !userAdjusted) nextTick(fit);
+};
+
+let resizeObserver: ResizeObserver | null = null;
+
 onMounted(() => {
   window.addEventListener('mouseup', handleGlobalMouseUp);
+  if (props.autoFit && containerRef.value) {
+    // 容器尺寸改變 (如全螢幕切換) 時重新置中
+    resizeObserver = new ResizeObserver(autoFitIfIdle);
+    resizeObserver.observe(containerRef.value);
+  }
 });
 
+// 標記非同步載入後重新整版
+watch(() => props.markers.length, autoFitIfIdle);
+
 onUnmounted(() => {
+  resizeObserver?.disconnect();
   window.removeEventListener('mouseup', handleGlobalMouseUp);
 });
 
@@ -212,6 +271,8 @@ defineExpose({
     >
       <img 
         :src="src" 
+        data-map-item
+        @load="autoFitIfIdle"
         class="max-w-none max-h-none block" 
         style="margin: 0; padding: 0; border: none;"
       />
@@ -229,6 +290,7 @@ defineExpose({
       <div 
         v-for="marker in markers" 
         :key="marker.id"
+        data-map-item
         class="absolute pointer-events-auto left-0 top-0"
         :style="{
           transform: `translate3d(${marker.x}px, ${marker.y}px, 0) translate(0, -100%)`,

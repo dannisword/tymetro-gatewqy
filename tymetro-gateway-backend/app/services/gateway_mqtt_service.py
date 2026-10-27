@@ -206,14 +206,16 @@ class GatewayMQTTService:
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Error processing MQTT payload: {e}")
 
-    async def publish_message(self, topic: str, payload: str, qos: int = 0, retain: bool = False):
-        """將訊息發布至 Local MQTT Broker"""
+    async def publish_message(self, topic: str, payload: str, qos: int = 0, retain: bool = False, raise_on_error: bool = False):
+        """將訊息發布至 Local MQTT Broker (raise_on_error=True 時發布失敗會拋出例外，供需回報結果的呼叫端使用)"""
         try:
             async with aiomqtt.Client(self.host, port=self.port) as client:
                 await client.publish(topic, payload, qos=qos, retain=retain)
                 logger.info(f"[GatewayMQTTService] Successfully published message to Local Broker on topic '{topic}'")
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Failed to publish message to Local Broker on topic '{topic}': {e}")
+            if raise_on_error:
+                raise
 
     async def publish_messages(self, messages: List[Dict[str, Any]], delay_sec: float = 0.05):
         """批次將多筆訊息發布至 Local MQTT Broker (共用單一連線，每筆間隔微延遲避免塞車)"""

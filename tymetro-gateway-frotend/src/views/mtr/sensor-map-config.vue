@@ -233,6 +233,7 @@ watch(() => allSensors.value, (newAll) => {
         v-model:markers="sensors"
         :editable="false"
         :zoomable="true"
+        :autoFit="true"
         :initial-scale="0.8"
       />
 

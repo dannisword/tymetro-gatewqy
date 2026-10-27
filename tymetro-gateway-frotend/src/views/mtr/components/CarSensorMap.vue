@@ -74,6 +74,7 @@ const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(mapContainerRef
         :markers="markers"
         :editable="false"
         :zoomable="true"
+        :autoFit="true"
         :initialScale="0.7"
         :minScale="0.2"
         :maxScale="3.0"

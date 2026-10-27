@@ -594,17 +594,33 @@ const setTargetTemp = async () => {
 };
 
 
-const setFreshAirDamper = (val: number) => {
+// 呼叫後端執行設定 API (後端負責發布 MQTT、寫入稽核與設定紀錄)
+const executePlcCommand = async (command: SettingTypeEnum, value?: number): Promise<boolean> => {
+  try {
+    const res = await httpOperations.post('/api/v1/plc-control/execute', {
+      command,
+      trainCode: String(trainNo.value),
+      carNo: Number(carNo.value),
+      endPos: Number(endPosId.value),
+      value
+    }, { meta: { loading: false } });
+    if (res?.success) {
+      return true;
+    }
+    TLError(res?.message || '設定指令送出失敗');
+  } catch (err: any) {
+    console.error('Execute PLC command error:', err);
+    TLError(err?.message || '設定指令送出失敗');
+  }
+  return false;
+};
+
+const setFreshAirDamper = async (val: number) => {
   if (isDamperSettingLocked.value) return;
   freshAirDamperPos.value = val;
-  const payload = {
-    events: 'set_value',
-    carNo: carNo.value,
-    endPos: endPosId.value,
-    register: { D40212: val }
-  };
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
-  TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`}`);
+  if (await executePlcCommand(SettingTypeEnum.FRESH_AIR_DAMPER, val)) {
+    TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`}`);
+  }
 
   // 畫面全螢幕 loading 2 秒
   triggerActionLoading();
@@ -613,17 +629,12 @@ const setFreshAirDamper = (val: number) => {
   withLockDelay(isDamperSettingLocked);
 };
 
-const setEmergAirDamper = (val: number) => {
+const setEmergAirDamper = async (val: number) => {
   if (isDamperSettingLocked.value) return;
   emergAirDamper.value = val;
-  const payload = {
-    events: 'set_value',
-    carNo: carNo.value,
-    endPos: endPosId.value,
-    register: { D40214: val }
-  };
-  publish(`TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`, payload);
-  TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
+  if (await executePlcCommand(SettingTypeEnum.EMERGENCY_AIR_SUPPLY, val)) {
+    TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
+  }
 
   // 畫面全螢幕 loading 2 秒
   triggerActionLoading();
@@ -636,36 +647,36 @@ const syncStatusToRegisters = () => {
   modbusRegisters.value.forEach(reg => {
     const prevRaw = reg.rawValue;
     let updated = false;
-  
+
     if (reg.sensorCode === 'D40001') {
       const modeEntry = mode.value ? Object.entries(SYSTEM_MODE_MAP).find(([_, val]) => val === mode.value) : null;
       const modeVal = modeEntry ? Number(modeEntry[0]) : 2;
-      
+
       reg.rawValue = modeVal;
       reg.sensorValue = String(modeVal);
       updated = prevRaw !== modeVal;
-    } 
+    }
     else if (reg.sensorCode === 'D40004') {
       const rawTemp = returnTemp.value !== null ? Math.round(returnTemp.value * 10) : 0;
       reg.rawValue = rawTemp;
       reg.sensorValue = returnTemp.value !== null ? returnTemp.value.toFixed(1) : '';
       updated = prevRaw !== rawTemp;
-    } 
+    }
     else if (reg.sensorCode === 'D40005') {
       reg.rawValue = compressors.value[0].lowPress;
       reg.sensorValue = String(compressors.value[0].lowPress);
       updated = prevRaw !== compressors.value[0].lowPress;
-    }  
+    }
     else if (reg.sensorCode === 'D40006') {
       reg.rawValue = compressors.value[0].highPress;
       reg.sensorValue = String(compressors.value[0].highPress);
       updated = prevRaw !== compressors.value[0].highPress;
-    }  
+    }
     else if (reg.sensorCode === 'D40007') {
       reg.rawValue = compressors.value[1].lowPress;
       reg.sensorValue = String(compressors.value[1].lowPress);
       updated = prevRaw !== compressors.value[1].lowPress;
-    } 
+    }
     else if (reg.sensorCode === 'D40008') {
       reg.rawValue = compressors.value[1].highPress;
       reg.sensorValue = String(compressors.value[1].highPress);
@@ -700,29 +711,10 @@ const handlePlcReset = () => {
     type: "warning",
     confirmButtonText: "確定",
     cancelButtonText: "取消"
-  }).then(() => {
-    const payload = {
-      events: 'write_register',
-      trainCode: String(trainNo.value),
-      carNo: Number(carNo.value),
-      endPos: endPosId.value,
-      register: { D40130: 1 }
-    };
-    const targetTopic = `TYMC/AIR/SET/${trainNo.value}/${carNo.value}/${endPosId.value}`;
-    publish(targetTopic, payload);
-    TLSuccess("重置復歸指令已發送！");
-
-    // 新增 setting log
-    httpOperations.post('/api/v1/setting-logs', {
-      settingType: SettingTypeEnum.RESET_ALL,
-      train: String(trainNo.value),
-      carNo: Number(carNo.value),
-      value: "重置復歸觸發 (D40130: 1)",
-      topic: targetTopic,
-      payload: JSON.stringify(payload)
-    }).catch(err => {
-      console.error('Failed to log setting change:', err);
-    });
+  }).then(async () => {
+    if (await executePlcCommand(SettingTypeEnum.RESET_ALL)) {
+      TLSuccess("重置復歸指令已發送！");
+    }
   }).catch(() => {
     // User cancelled
   });
