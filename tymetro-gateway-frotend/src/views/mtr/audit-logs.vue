@@ -46,30 +46,38 @@ const gridColumns = ref([
     headerName: '時間',
     field: 'timestamp',
     flex: 1.2,
-    minWidth: 160,
+    maxWidth: 180,
     format: 'datetime'
   },
   {
     headerName: '審計類別',
     field: 'auditCategory',
     flex: 0.9,
-    minWidth: 90,
+    maxWidth: 140,
     cellRenderer: (p: any) => {
       const label = categoryMap.value[p.value] || p.value || '';
       return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">${label}</span>`;
     }
   },
   {
-    headerName: '動作',
-    field: 'action',
-    flex: 1.2,
-    minWidth: 140
+    headerName: '詳細資訊',
+    field: 'detail',
+    flex: 2.2,
+    minWidth: 300,
+    wrapText: true,
+    autoHeight: true
   },
+  // {
+  //   headerName: '動作',
+  //   field: 'action',
+  //   flex: 1.2,
+  //   minWidth: 140
+  // },
   {
     headerName: '狀態',
     field: 'status',
     flex: 0.7,
-    minWidth: 70,
+    maxWidth: 80,
     cellRenderer: (p: any) => {
       const isSuccess = p.value === 'success';
       return isSuccess
@@ -81,20 +89,14 @@ const gridColumns = ref([
     headerName: '操作人',
     field: 'operator',
     flex: 0.9,
-    minWidth: 120
+    maxWidth: 120
   },
-  {
-    headerName: 'IP 位址',
-    field: 'ipAddress',
-    flex: 1.0,
-    minWidth: 110
-  },
-  {
-    headerName: '詳細資訊',
-    field: 'detail',
-    flex: 2.2,
-    minWidth: 220
-  }
+  // {
+  //   headerName: 'IP 位址',
+  //   field: 'ipAddress',
+  //   flex: 1.0,
+  //   minWidth: 110
+  // }
 ]);
 
 const logs = ref([]);

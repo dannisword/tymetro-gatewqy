@@ -20,6 +20,7 @@ router = APIRouter()
 class SensorMapMarker(BaseModel):
     templateCode: str
     sensorCode: str
+    sensorType: Optional[str] = None
     bitIndex: Optional[int] = None
     x: float
     y: float
@@ -27,6 +28,7 @@ class SensorMapMarker(BaseModel):
     color: str
     label: Optional[str] = None
     styleConfig: Optional[dict] = None
+    sensorConfig: Optional[dict] = None
     isActive: bool
 
 @router.get("/template/{template_code}", response_model=ResponseBase[List[SensorMapMarker]], summary="根據模板編號獲取感測器圖配置")
@@ -101,6 +103,7 @@ def download_sensor_map_template(
                 markers.append({
                     "templateCode": template_code,
                     "sensorCode": item.get("sensorCode", ""),
+                    "sensorType": item.get("sensorType"),
                     "bitIndex": item.get("bitIndex"),
                     "x": float(item.get("x", 0.0)),
                     "y": float(item.get("y", 0.0)),
@@ -108,6 +111,7 @@ def download_sensor_map_template(
                     "color": item.get("color", "#3b82f6"),
                     "label": item.get("label"),
                     "styleConfig": item.get("styleConfig", {"valuePosition": "bottom"}),
+                    "sensorConfig": item.get("sensorConfig"),
                     "isActive": bool(item.get("isActive", True))
                 })
 

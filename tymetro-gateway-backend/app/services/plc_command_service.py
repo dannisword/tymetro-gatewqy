@@ -53,13 +53,6 @@ def _emergency_air(value: Optional[float]) -> int:
     return int(v)
 
 
-def _manual_ac(value: Optional[float]) -> int:
-    v = _require(value)
-    if v not in (1, 2):
-        raise PlcCommandError("手動開啟空調系統值須為 1 (關閉) 或 2 (開啟)")
-    return int(v)
-
-
 def _trigger(register: str, name: str, done_register: Optional[str] = None) -> PlcCommandSpec:
     """觸發型暫存器：寫入 1 觸發，PLC 完成後由「完成」暫存器回報"""
     return PlcCommandSpec(
@@ -88,13 +81,7 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
     ),
     SettingType.RESET_ALL.value: _trigger("D40130", "重置復歸"),
     SettingType.INITIAL_VALUE.value: _trigger("D40216", "初始值"),
-    SettingType.MANUAL_START_AC.value: PlcCommandSpec(
-        event=PlcEvent.SET_VALUE.value,
-        register="D40218",
-        to_register_value=_manual_ac,
-        to_log_value=lambda v, reg: "開啟" if reg == 2 else "關閉",
-        done_register="D40219",
-    ),
+    SettingType.MANUAL_START_AC.value: _trigger("D40218", "手動開啟空調系統", done_register="D40219"),
     SettingType.FORCE_EMERGENCY_DAMPER.value: _trigger("D40220", "強制開啟緊急供氣擋板", done_register="D40221"),
     SettingType.FORCE_EXCHANGER.value: _trigger("D40222", "強制開啟換流器", done_register="D40223"),
     SettingType.CLEAR_COMP1_HOURS.value: _trigger("D40224", "清除壓縮機1運轉時數"),
@@ -114,6 +101,7 @@ class PlcCommandService:
         self.audit_log_service = AuditLogService(db)
 
     def _resolve_target(self, req: PlcCommandRequest) -> tuple[Car, Equipment]:
+        logger.debug(f"_resolve_target: {req}")
         record = (
             self.db.query(Car, Equipment)
             .join(Equipment, Equipment.carId == Car.id)

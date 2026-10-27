@@ -33,6 +33,7 @@ import {
   mdiSnowflake, 
   mdiAirConditioner, 
   mdiRefresh,
+  mdiClockOutline,
   mdiPower,
   mdiThermometer,
   mdiFlash,
@@ -42,7 +43,6 @@ import {
   mdiMinus,
   mdiMagnify
 } from '@mdi/js';
-import marker from 'element-plus/es/components/slider/src/marker.mjs';
 // ==========================================
 // 0. Configuration Parameters
 // ==========================================
@@ -147,8 +147,8 @@ const mode = ref(''); // 停止 / 自動 / 送風 / 測試
 const returnTemp = ref<number | null>(null);
 const setTemp = ref<number | null>(null);
 const compressors = ref([
-  { id: 1, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0 },
-  { id: 2, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0 }
+  { id: 1, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0, runHours: 0 },
+  { id: 2, status: CompressorStatus.OFF, health: CompressorHealth.Normal, highPress: 0, lowPress: 0, runHours: 0 }
 ]);
 // 新鮮空氣擋板開度 (設定觸發: D40212, 顯示完成: D40213): 0=關閉, 25=25%, 50=50%, 75=75%, 100=100%
 const freshAirDamperPos = ref<number>(0);
@@ -597,42 +597,74 @@ const setTargetTemp = async () => {
 const showMarkerModal = ref(false);
 const activeMarker = ref<any>(null);
 
-// 標記點位對應的設定指令 (key: 點位代碼，bit 標記為 代碼:bit)；options 為可選擇的設定值
+// 標記點位對應的設定指令，key 為 點位代碼:bit (暫時寫死，之後再改由標記資料帶入)；dataType 為 bitmap 的標記以 ON / OFF 切換，寫入 onValue / offValue
 interface MarkerCommand {
   command: SettingTypeEnum;
-  options?: { label: string; value: number }[];
+  onValue: number;
+  offValue: number;
 }
+// 皆為觸發型指令：後端一律寫入 1 觸發 (不看 value)，PLC 以完成暫存器回報
 const MARKER_COMMANDS: Record<string, MarkerCommand> = {
-  'D40015:8': {
-    command: SettingTypeEnum.MANUAL_START_AC,
-    options: [
-      { label: '開啟', value: 2 },
-      { label: '關閉', value: 1 }
-    ]
-  }
+  'D40015:8': { command: SettingTypeEnum.MANUAL_START_AC, onValue: 1, offValue: 1 },         // D40218 / D40219
+  'D40015:9': { command: SettingTypeEnum.FORCE_EMERGENCY_DAMPER, onValue: 1, offValue: 1 },  // D40220 / D40221
+  'D40015:10': { command: SettingTypeEnum.FORCE_EXCHANGER, onValue: 1, offValue: 1 }         // D40222 / D40223
 };
-const activeMarkerCommand = computed(() => {
+const markerKey = (m: any) => `${String(m?.code || '').toUpperCase()}:${m?.bitIndex}`;
+
+// 以即時資料取得標記目前值 (視窗開啟期間隨 MQTT 更新)
+const liveMarker = computed(() => {
   const m = activeMarker.value;
-  if (!m) return undefined;
-  const code = String(m.code || '').toUpperCase();
-  const hasBit = m.bitIndex !== null && m.bitIndex !== undefined;
-  return MARKER_COMMANDS[hasBit ? `${code}:${m.bitIndex}` : code];
+  return m ? (mappedSensors.value.find((s: any) => s.code === m.code && s.bitIndex === m.bitIndex) ?? m) : null;
 });
+const currentMarkerOn = computed(() => liveMarker.value?.bitValue === 1);
+const activeMarkerCommand = computed(() => {
+  const m = liveMarker.value;
+  // 僅 bitmap (有 bitValue) 且有對應指令的標記可切換
+  if (!m || m.bitValue === undefined || m.bitValue === null) return undefined;
+  return MARKER_COMMANDS[markerKey(m)];
+});
+// 視窗中的 ON / OFF 切換狀態 (開啟時帶入目前值)
+const markerToggleOn = ref(false);
 
 const handleMarkerClick = (marker: any) => {
-  console.log(marker);
-
   if (marker?.styleConfig?.clickAction !== 'detail') return;
   activeMarker.value = marker;
+  markerToggleOn.value = marker.bitValue === 1;
   showMarkerModal.value = true;
 };
 
-const executeMarkerCommand = async (option?: { label: string; value: number }) => {
+const handleMarkerDialogClose = async (res: any) => {
+  const needExecute = res?.success && markerToggleOn.value !== currentMarkerOn.value;
+  // 先關閉詳細視窗，再跳出確認框與執行指令 (避免確認框疊在視窗上)
+  showMarkerModal.value = false;
+  if (needExecute) await executeMarkerCommand();
+};
+
+const resetCompressorHours = async (id: number) => {
+  try {
+    await ElMessageBox.confirm(`確定要重置壓縮機 ${id} 的運轉時數嗎？此操作無法復原。`, '確認重置時數', {
+      type: 'warning',
+      confirmButtonText: '確定重置',
+      cancelButtonText: '取消'
+    });
+  } catch {
+    return; // User cancelled
+  }
+  const command = id === 1 ? SettingTypeEnum.CLEAR_COMP1_HOURS : SettingTypeEnum.CLEAR_COMP2_HOURS;
+  if (await executePlcCommand(command)) {
+    TLSuccess(`壓縮機 ${id} 運轉時數重置指令已發送！`);
+  }
+};
+
+
+
+const executeMarkerCommand = async () => {
   const cmd = activeMarkerCommand.value;
   if (!cmd) return;
-  const name = `${activeMarker.value?.label || activeMarker.value?.code}${option ? `：${option.label}` : ''}`;
+  const stateText = markerToggleOn.value ? 'ON' : 'OFF';
+  const name = `${activeMarker.value?.label || activeMarker.value?.code}：${stateText}`;
   try {
-    await ElMessageBox.confirm(`確定要執行「${name}」嗎？`, '確認設定', {
+    await ElMessageBox.confirm(`確定要將「${activeMarker.value?.label || activeMarker.value?.code}」設為 ${stateText} 嗎？`, '確認設定', {
       type: 'warning',
       confirmButtonText: '確定',
       cancelButtonText: '取消'
@@ -640,10 +672,10 @@ const executeMarkerCommand = async (option?: { label: string; value: number }) =
   } catch {
     return; // User cancelled
   }
-  // 由後端確認 PLC 完成暫存器，最長約 10 秒
+  // 由後端發布 MQTT 並確認 PLC 完成暫存器，最長約 10 秒
   const loadingInstance = ElLoading.service({ lock: true, text: '等待 PLC 回報完成...', background: 'rgba(0, 0, 0, 0.8)' });
   try {
-    if (await executePlcCommand(cmd.command, option?.value)) {
+    if (await executePlcCommand(cmd.command, markerToggleOn.value ? cmd.onValue : cmd.offValue)) {
       TLSuccess(`「${name}」已完成`);
       showMarkerModal.value = false;
       fetchRegisters();
@@ -778,6 +810,20 @@ const handlePlcReset = () => {
   }).then(async () => {
     if (await executePlcCommand(SettingTypeEnum.RESET_ALL)) {
       TLSuccess("重置復歸指令已發送！");
+    }
+  }).catch(() => {
+    // User cancelled
+  });
+};
+
+const handleClearAcHours = () => {
+  ElMessageBox.confirm("確定要清除此端點的空調運轉時數嗎？此操作無法復原。", "空調時數重置", {
+    type: "warning",
+    confirmButtonText: "確定",
+    cancelButtonText: "取消"
+  }).then(async () => {
+    if (await executePlcCommand(SettingTypeEnum.CLEAR_AC_HOURS)) {
+      TLSuccess("空調運轉時數重置指令已發送！");
     }
   }).catch(() => {
     // User cancelled
@@ -1107,6 +1153,7 @@ onUnmounted(() => {
                   variant="default"
                   mode="outline"
                   class="rounded-xl px-2.5 py-1 flex items-center justify-center border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 shadow-sm"
+                  title="重新整理"
                 >
                   <BaseIcon :path="mdiRefresh" :w="'w-6'" :h="'h-6'" size="18" />
                   <span class="hidden xs:inline ml-1 text-xs font-bold">重新整理</span>
@@ -1122,6 +1169,18 @@ onUnmounted(() => {
                 >
                   <BaseIcon :path="mdiPower" :w="'w-6'" :h="'h-6'" size="18" />
                   <span class="hidden xs:inline ml-1 text-xs font-bold">重置復歸</span>
+                </BaseButton>
+
+                <BaseButton
+                  @click="handleClearAcHours"
+                  :disabled="!isDeviceConnected"
+                  variant="default"
+                  mode="outline"
+                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-rose-200 text-rose-600 hover:bg-rose-50 shrink-0 shadow-sm disabled:opacity-50"
+                  title="清除空調運轉時數 (D40228)"
+                >
+                  <BaseIcon :path="mdiClockOutline" :w="'w-6'" :h="'h-6'" size="18" />
+                  <span class="hidden xs:inline ml-1 text-xs font-bold">空調時數重置</span>
                 </BaseButton>
               </div>
               
@@ -1464,6 +1523,25 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
+
+              <!-- 運轉時數 -->
+              <div class="flex justify-between items-center pt-2 border-t border-slate-200/70">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-xs font-black text-slate-400 uppercase">累計運轉時數</span>
+                  <span class="text-sm font-black font-mono text-slate-700">
+                    {{ isDeviceConnected ? (comp.runHours ?? 0) : '--' }}<small class="text-[9px] font-sans text-slate-400 ml-0.5" v-if="isDeviceConnected">hr</small>
+                  </span>
+                </div>
+                <el-button
+                  size="small"
+                  plain
+                  type="danger"
+                  :disabled="!isDeviceConnected"
+                  @click="resetCompressorHours(comp.id)"
+                >
+                  <BaseIcon :path="mdiClockOutline" :w="'w-4'" :h="'h-4'" size="14" class="mr-1" />重置時數
+                </el-button>
+              </div>
             </div>
           </div>
 
@@ -1800,50 +1878,34 @@ onUnmounted(() => {
     </ElDialogCustom>
 
     <!-- 標記詳細資訊 Modal -->
-    <Teleport to="body">
-      <div v-if="showMarkerModal && activeMarker" class="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" @click.self="showMarkerModal = false">
-        <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-          <div class="px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex justify-between items-center">
-            <h3 class="text-lg font-black">{{ activeMarker.label }}</h3>
-            <button @click="showMarkerModal = false" class="text-white/80 hover:text-white transition-colors">
-              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-          <div class="p-6 space-y-3 text-sm">
-            <div class="flex justify-between">
-              <span class="font-black text-slate-400">點位代碼</span>
-              <span class="font-mono text-slate-700">{{ activeMarker.code }}<template v-if="activeMarker.bitIndex !== null && activeMarker.bitIndex !== undefined"> (Bit {{ activeMarker.bitIndex }})</template></span>
-            </div>
-            <div class="flex justify-between">
-              <span class="font-black text-slate-400">目前數值</span>
-              <span class="font-mono font-black text-slate-800">{{ activeMarker.value }}<template v-if="activeMarker.unit"> {{ activeMarker.unit }}</template></span>
-            </div>
-          </div>
-          <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-            <template v-if="activeMarkerCommand">
-              <BaseButton
-                v-for="opt in (activeMarkerCommand.options || [undefined])"
-                :key="opt?.value ?? 'run'"
-                @click="executeMarkerCommand(opt)"
-                class="rounded-xl px-4 py-2 font-bold"
-              >
-                {{ opt?.label || '執行' }}
-              </BaseButton>
-            </template>
-            <BaseButton
-              @click="showMarkerModal = false"
-              variant="default"
-              mode="outline"
-              class="rounded-xl px-4 py-2 border-slate-200 text-slate-500 hover:bg-slate-100 font-bold"
-            >
-              關閉
-            </BaseButton>
-          </div>
+    <ElDialogCustom
+      v-model:visible="showMarkerModal"
+      :title="activeMarker?.label"
+      width="448px"
+      minHeight="0px"
+      action="確認"
+      cancel="關閉"
+      :show-action="!!activeMarkerCommand"
+      @on-before-close="handleMarkerDialogClose"
+    >
+      <div v-if="activeMarker" class="space-y-3 text-sm">
+        <div class="flex justify-between">
+          <span class="font-black text-slate-400">點位代碼</span>
+          <span class="font-mono text-slate-700">{{ activeMarker.code }}<template v-if="activeMarker.bitIndex !== null && activeMarker.bitIndex !== undefined"> (Bit {{ activeMarker.bitIndex }})</template></span>
         </div>
+        <div class="flex justify-between">
+          <span class="font-black text-slate-400">目前數值</span>
+          <span class="font-mono font-black text-slate-800">{{ liveMarker?.value }}<template v-if="activeMarker.unit"> {{ activeMarker.unit }}</template></span>
+        </div>
+        <label v-if="activeMarkerCommand" class="flex items-center justify-between cursor-pointer pt-2 border-t border-slate-100">
+          <span class="font-black text-slate-400">設定狀態</span>
+          <span class="flex items-center gap-2">
+            <span class="font-mono font-black" :class="markerToggleOn ? 'text-emerald-600' : 'text-slate-500'">{{ markerToggleOn ? 'ON' : 'OFF' }}</span>
+            <input type="checkbox" v-model="markerToggleOn" class="w-5 h-5 accent-emerald-600 cursor-pointer" />
+          </span>
+        </label>
       </div>
-    </Teleport>
+    </ElDialogCustom>
 
   </div>
 </template>

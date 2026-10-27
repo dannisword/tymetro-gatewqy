@@ -1,3 +1,4 @@
+from paho.mqtt import packettypes
 import asyncio
 import json
 import time
@@ -199,7 +200,7 @@ class GatewayMQTTService:
                 topic_suffix = f"{car_vin}/{end_pos}" if car_vin and end_pos is not None else str(eq_id)
                 await cloud_mqtt_service.push_telemetry(data, topic_suffix=topic_suffix)
 
-            logger.debug(f"[GatewayMQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
+            #logger.debug(f"[GatewayMQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
 
         except json.JSONDecodeError:
             logger.warning(f"[GatewayMQTTService] Non-JSON payload received on topic {message.topic}: {message.payload}")
@@ -208,6 +209,7 @@ class GatewayMQTTService:
 
     async def publish_message(self, topic: str, payload: str, qos: int = 0, retain: bool = False, raise_on_error: bool = False):
         """將訊息發布至 Local MQTT Broker (raise_on_error=True 時發布失敗會拋出例外，供需回報結果的呼叫端使用)"""
+        logger.info(payload)
         try:
             async with aiomqtt.Client(self.host, port=self.port) as client:
                 await client.publish(topic, payload, qos=qos, retain=retain)

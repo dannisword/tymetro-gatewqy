@@ -53,7 +53,7 @@ export enum SettingTypeEnum {
   EMERGENCY_AIR_SUPPLY = "EMERGENCY_AIR_SUPPLY",      // 緊急供氣擋板 (D40214；1 關閉 / 2 開啟)
   RESET_ALL = "RESET_ALL",                            // 重置復歸 (D40130，觸發)
   INITIAL_VALUE = "INITIAL_VALUE",                    // 初始值 (D40216，觸發；D40217 完成)
-  MANUAL_START_AC = "MANUAL_START_AC", // 手動開啟空調系統 (D40218；1 關閉 / 2 開啟；D40219 完成)
+  MANUAL_START_AC = "MANUAL_START_AC", // 手動開啟空調系統 (D40218，觸發；D40219 完成)
   FORCE_EMERGENCY_DAMPER = "FORCE_EMERGENCY_DAMPER",  // 強制開啟緊急供氣擋板 (D40220，觸發；D40221 完成)
   FORCE_EXCHANGER = "FORCE_EXCHANGER",                // 強制開啟換流器 (D40222，觸發；D40223 完成)
   CLEAR_COMP1_HOURS = "CLEAR_COMP1_HOURS",            // 清除壓縮機1運轉時數 (D40224，觸發；D40225 完成)
