@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { useFullscreen } from '@vueuse/core';
 import SvgViewer from '@/components/SvgViewer.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
@@ -28,6 +28,12 @@ withDefaults(defineProps<Props>(), {
 const mapContainerRef = ref<HTMLElement | null>(null);
 const svgViewerRef = ref<any>(null);
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(mapContainerRef);
+
+// 切換全螢幕後即使使用者曾手動移動/縮放，也重新置中 (等版面尺寸穩定後再整版)
+watch(isFullscreen, async () => {
+  await nextTick();
+  setTimeout(() => svgViewerRef.value?.reset(), 100);
+});
 </script>
 
 <template>
@@ -79,8 +85,8 @@ const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(mapContainerRef
         :zoomable="true"
         :autoFit="true"
         :initialScale="0.7"
-        :minScale="0.2"
-        :maxScale="3.0"
+        :minScale="0.5"
+        :maxScale="2.0"
       />
 
       <!-- 右下角縮放浮動按鈕 -->
