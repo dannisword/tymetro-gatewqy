@@ -1155,48 +1155,6 @@ onUnmounted(() => {
                   {{ carNo }}車廂-{{ endPos.name }}
                 </h1>
                 
-                <BaseButton 
-                  @click="onReload"
-                  variant="default"
-                  mode="outline"
-                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-slate-200 text-slate-600 hover:bg-slate-50 shrink-0 shadow-sm"
-                  title="重新整理"
-                >
-                  <BaseIcon :path="mdiRefresh" :w="'w-6'" :h="'h-6'" size="18" />
-                  <span class="hidden xs:inline ml-1 text-xs font-bold">重新整理</span>
-                </BaseButton>
-
-                <BaseButton 
-                  @click="handlePlcReset"
-                  :disabled="!isDeviceConnected"
-                  variant="default"
-                  mode="outline"
-                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-rose-200 text-rose-600 hover:bg-rose-50 shrink-0 shadow-sm disabled:opacity-50"
-                  title="PLC 復歸重置"
-                >
-                  <BaseIcon :path="mdiPower" :w="'w-6'" :h="'h-6'" size="18" />
-                  <span class="hidden xs:inline ml-1 text-xs font-bold">重置復歸</span>
-                </BaseButton>
-
-                <BaseButton
-                  @click="handleClearAcHours"
-                  :disabled="!isDeviceConnected"
-                  variant="default"
-                  mode="outline"
-                  class="rounded-xl px-2.5 py-1 flex items-center justify-center border-rose-200 text-rose-600 hover:bg-rose-50 shrink-0 shadow-sm disabled:opacity-50"
-                  title="清除空調運轉時數 (D40228)"
-                >
-                  <BaseIcon :path="mdiClockOutline" :w="'w-6'" :h="'h-6'" size="18" />
-                  <span class="hidden xs:inline ml-1 text-xs font-bold">空調時數重置</span>
-                </BaseButton>
-              </div>
-              
-              <div class="flex flex-wrap items-center gap-3">
-                <!-- MQTT 連線狀態 -->
-                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-full border border-slate-200 shrink-0 shadow-sm">
-                  <div :class="['w-3.5 h-3.5 rounded-full', isMqttConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-600']"></div>
-                  <span class="text-xs font-black text-emerald-600 uppercase tracking-wider">MQTT Broker</span>
-                </div>
                 <!-- 端點連線狀態 -->
                 <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-full border border-slate-200 shrink-0 shadow-sm">
                   <div :class="['w-3.5 h-3.5 rounded-full', isDeviceConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500']"></div>
@@ -1207,6 +1165,37 @@ onUnmounted(() => {
                   實體 IP: <span class="font-mono text-slate-600 bg-slate-100/50 px-1.5 py-0.5 rounded border border-slate-200/50">{{ endPos.address }}</span>
                 </div>
               </div>
+
+              <BaseButtonGroup aria-label="操作" class="self-start">
+                <BaseButton data-tip="重新整理"
+                  @click="onReload"
+                  variant="default"
+                  mode="outline"
+                  class="tip-btn px-2.5 py-1 flex items-center justify-center border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm"
+                >
+                  <BaseIcon :path="mdiRefresh" :w="'w-6'" :h="'h-6'" size="18" />
+                </BaseButton>
+
+                <BaseButton data-tip="PLC 復歸重置" 
+                  @click="handlePlcReset"
+                  :disabled="!isDeviceConnected"
+                  variant="default"
+                  mode="outline"
+                  class="tip-btn px-2.5 py-1 flex items-center justify-center border-rose-200 text-rose-600 hover:bg-rose-50 shadow-sm disabled:opacity-50"
+                >
+                  <BaseIcon :path="mdiPower" :w="'w-6'" :h="'h-6'" size="18" />
+                </BaseButton>
+
+                <BaseButton data-tip="清除空調運轉時數 (D40228)"
+                  @click="handleClearAcHours"
+                  :disabled="!isDeviceConnected"
+                  variant="default"
+                  mode="outline"
+                  class="tip-btn px-2.5 py-1 flex items-center justify-center border-rose-200 text-rose-600 hover:bg-rose-50 shadow-sm disabled:opacity-50"
+                >
+                  <BaseIcon :path="mdiClockOutline" :w="'w-6'" :h="'h-6'" size="18" />
+                </BaseButton>
+              </BaseButtonGroup>
             </div>
           </div>
 
@@ -1945,5 +1934,24 @@ input[type="range"]::-webkit-slider-runnable-track {
 }
 input[type="range"]::-webkit-slider-thumb {
   margin-top: -4px;
+}
+.tip-btn {
+  position: relative;
+}
+.tip-btn[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #303133;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
 }
 </style>
