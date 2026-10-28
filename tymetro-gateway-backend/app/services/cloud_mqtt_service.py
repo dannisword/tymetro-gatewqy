@@ -203,14 +203,20 @@ class CloudMQTTService:
                             finally:
                                 self._queue.task_done()
 
-                    # 同時執行監聽與發送，任一者拋出異常即中斷並重連
-                    await asyncio.gather(
-                        self._listen_cloud_messages(client),
-                        send_worker()
-                    )
+                    # 同時執行監聽與發送，任一者拋出異常時 TaskGroup 會取消另一個任務，避免舊連線的任務殘留
+                    async with asyncio.TaskGroup() as tg:
+                        tg.create_task(self._listen_cloud_messages(client))
+                        tg.create_task(send_worker())
 
             except asyncio.CancelledError:
                 break
+            except ExceptionGroup as eg:
+                mqtt_errs, others = eg.split(aiomqtt.MqttError)
+                if others is None and mqtt_errs is not None:
+                    logger.warning(f"[CloudMQTTService] Cloud MQTT Connection error: {mqtt_errs.exceptions[0]}. Reconnecting in {self.reconnect_delay_sec}s...")
+                elif others is not None:
+                    logger.error(f"[CloudMQTTService] Unexpected error in Cloud MQTT loop: {others.exceptions[0]}. Reconnecting in {self.reconnect_delay_sec}s...")
+                await asyncio.sleep(self.reconnect_delay_sec)
             except aiomqtt.MqttError as err:
                 logger.warning(f"[CloudMQTTService] Cloud MQTT Connection error: {err}. Reconnecting in {self.reconnect_delay_sec}s...")
                 await asyncio.sleep(self.reconnect_delay_sec)
