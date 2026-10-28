@@ -50,7 +50,6 @@ declare module 'vue' {
     ElTabs: typeof import('element-plus/es')['ElTabs']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTimeSelect: typeof import('element-plus/es')['ElTimeSelect']
-    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     EndpointCard: typeof import('./components/EndpointCard.vue')['default']
     LoadingOverlay: typeof import('./components/LoadingOverlay.vue')['default']
     MapEditor: typeof import('./components/MapEditor.vue')['default']

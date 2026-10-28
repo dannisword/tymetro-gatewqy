@@ -41,7 +41,7 @@ const handleError = (e: any, config?: AxiosRequestConfig): ErrorResponse | void 
 };
 
 const httpOperations = {
-  async get<T = any>(url: string, params: any = undefined, config?: AxiosRequestConfig): Promise<T> {
+  async get<T = any>(url: string, params: any = undefined, config?: AxiosRequestConfig, timeout?: number): Promise<T> {
     const finalUrl = encodeURI(url);
     try {
       const response = await request({
@@ -49,6 +49,7 @@ const httpOperations = {
         method: "GET",
         params,
         ...config,
+        ...(timeout !== undefined && { timeout }),
       });
       return response as T;
     } catch (e: any) {
@@ -57,13 +58,14 @@ const httpOperations = {
     }
   },
 
-  async post<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig): Promise<T> {
+  async post<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig, timeout?: number): Promise<T> {
     try {
       const response = await request({
         url,
         method: "POST",
         data,
         ...config,
+        ...(timeout !== undefined && { timeout }),
       });
       return response as T;
     } catch (e: any) {
@@ -72,13 +74,14 @@ const httpOperations = {
     }
   },
 
-  async put<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig): Promise<T> {
+  async put<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig, timeout?: number): Promise<T> {
     try {
       const response = await request({
         url,
         method: "PUT",
         data,
         ...config,
+        ...(timeout !== undefined && { timeout }),
       });
       return response as T;
     } catch (e: any) {
@@ -87,13 +90,14 @@ const httpOperations = {
     }
   },
 
-  async delete<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig): Promise<T> {
+  async delete<T = any>(url: string, data: any = undefined, config?: AxiosRequestConfig, timeout?: number): Promise<T> {
     try {
       const response = await request({
         url,
         method: "DELETE",
         data,
         ...config,
+        ...(timeout !== undefined && { timeout }),
       });
       return response as T;
     } catch (e: any) {

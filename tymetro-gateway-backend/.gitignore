@@ -33,3 +33,6 @@ data/
 .Trashes
 ehthumbs.db
 Thumbs.db
+gateway.db
+gateway.db-shm
+gateway.db-wal

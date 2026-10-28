@@ -100,7 +100,7 @@ export const getRegisterTrend = async (params: {
     if (params.endPos !== undefined) {
         queryParams.end_pos = params.endPos
     }
-    return await httpOperations.get('/api/v1/sensor-histories/trend', queryParams)
+    return await httpOperations.get('/api/v1/sensor-histories/trend', queryParams, { timeout: 300000 })
 }
 
 export const writeInitialValuesToPlc = async (): Promise<any> => {
