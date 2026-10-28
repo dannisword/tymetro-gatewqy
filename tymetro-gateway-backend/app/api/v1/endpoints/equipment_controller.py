@@ -1,7 +1,5 @@
-import asyncio
-import json
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from typing import Optional, List
 from sqlalchemy.orm import Session
 from app.api.deps import get_equipment_service, get_current_user, get_db
 from app.services.equipment_service import EquipmentService
@@ -16,13 +14,13 @@ from app.schemas.equipment_schema import (
 from app.schemas.response_schema import ResponseBase, ResponseList
 from app.utils.response_util import ResponseUtil
 from app.services.equipment_manager import equipment_manager
-from app.services.gateway_mqtt_service import gateway_mqtt_service
-from app.services.audit_log_service import AuditLogService
+from app.services.plc_command_service import PlcCommandService
+from app.schemas.plc_command_schema import PlcCommandRequest
+from app.api.v1.endpoints.plc_control_controller import _client_ip
+from app.core.enums import SettingType
 from app.models.user_model import User
 from app.models.equipment_model import Equipment
 from app.models.car_model import Car
-from app.models.setting_log_model import SettingLog
-from app.core.enums import PlcEvent, PlcRegister, SettingTypeEnum
 from app.core.logger import logger
 
 router = APIRouter()
@@ -110,209 +108,41 @@ def delete_equipment(
     except Exception as e:
         return ResponseUtil.error(message=str(e))
 
-async def execute_temperature_setting(
-    db: Session,
-    train_code: str,
-    target_val: float,
-    targets: List[Dict[str, Any]],
-    operator_name: str = "system",
-    is_batch: bool = False
-) -> TemperatureSetResult:
-    """
-    整合獨立的溫度設定核心邏輯 (支援單端點與多端點批次)：
-    1. 解析與對齊目標設備 (車號 carVin, 端點 endPos, eq_id)
-    2. 記錄 SettingLog
-    3. 多端點同時下發 MQTT 指令 (TYMC/AIR/SET/...)
-    4. 閉環驗證與重試機制 (檢查 D40200 清零 / D40201 反饋)
-    5. 記錄 AuditLog 並回傳 TemperatureSetResult
-    """
-    scaled_temp = int(round(target_val * 10))
-
-    # 1. 解析目標設備清單與 DB 對齊
-    pending_targets = []
-    for t in targets:
-        car_val = t.get("carNo") or t.get("car_no") or t.get("carVin")
-        ep_val = t.get("endPos") or t.get("end_pos")
-        eq_id = t.get("eq_id")
-
-        if not car_val or not ep_val:
-            continue
-
-        car_val = int(car_val)
-        ep_val = int(ep_val)
-        car_str = str(car_val)
-
-        eq_record = (
-            db.query(Equipment, Car)
-            .join(Car, Equipment.carId == Car.id)
-            .filter(
-                (Car.carNo == car_val) | (Car.carVin == car_str),
-                Equipment.endPos == ep_val,
-                Equipment.isActive == True
-            )
-            .first()
-        )
-        if eq_record:
-            found_eq, found_car = eq_record
-            eq_id = str(found_eq.id)
-            resolved_car_no = int(found_car.carVin) if found_car.carVin and found_car.carVin.isdigit() else found_car.carNo
-        else:
-            eq_id = eq_id or f"{car_val}_{ep_val}"
-            resolved_car_no = car_val
-
-        pending_targets.append({
-            "carNo": resolved_car_no,
-            "endPos": ep_val,
-            "eq_id": eq_id
-        })
-
-    if not pending_targets:
-        raise ValueError("未找到任何有效之目標設備以執行設定")
-
-    # 2. 寫入 SettingLog
-    log_title = f"{'8端點批次' if is_batch else '單端點'}設定溫度: {target_val}°C (D40200: {scaled_temp})"
-    log_topic = f"TYMC/AIR/SET/{train_code}/+/+" if is_batch else f"TYMC/AIR/SET/{train_code}/{pending_targets[0]['carNo']}/{pending_targets[0]['endPos']}"
-    try:
-        log_entry = SettingLog(
-            settingType=SettingTypeEnum.TEMPERATURE.value if hasattr(SettingTypeEnum, "TEMPERATURE") else "TEMPERATURE",
-            train=str(train_code),
-            carNo=pending_targets[0]["carNo"],
-            value=log_title,
-            operator=operator_name,
-            isNotified=True,
-            topic=log_topic,
-            payload=json.dumps({
-                "targetTemperature": target_val,
-                "scaledTemp": scaled_temp,
-                "targetsCount": len(pending_targets),
-                "targets": [{"carNo": p["carNo"], "endPos": p["endPos"]} for p in pending_targets]
-            }, ensure_ascii=False)
-        )
-        db.add(log_entry)
-        db.commit()
-    except Exception as log_err:
-        logger.warning(f"[execute_temperature_setting] Failed to write setting log: {log_err}")
-
-    # 3. 閉環驗證與重試
-    max_retries = 3
-    retry_interval = 2.0 if not is_batch else 2.5
-    waiting_targets = list(pending_targets)
-
-    for attempt in range(1, max_retries + 1):
-        mqtt_messages = []
-        for item in waiting_targets:
-            topic = f"TYMC/AIR/SET/{train_code}/{item['carNo']}/{item['endPos']}"
-            payload = {
-                "events": PlcEvent.SET_VALUE.value,
-                "trainCode": str(train_code),
-                "carNo": item["carNo"],
-                "endPos": item["endPos"],
-                "register": {
-                    PlcRegister.TEMP_SETTING_CMD.value: scaled_temp
-                }
-            }
-            mqtt_messages.append({
-                "topic": topic,
-                "payload": json.dumps(payload, ensure_ascii=False),
-                "qos": 1,
-                "retain": True
-            })
-
-        if len(mqtt_messages) == 1:
-            await gateway_mqtt_service.publish_message(mqtt_messages[0]["topic"], mqtt_messages[0]["payload"])
-        else:
-            await gateway_mqtt_service.publish_messages(mqtt_messages)
-
-        logger.info(
-            f"[execute_temperature_setting] Attempt {attempt}/{max_retries}: Dispatched {target_val}°C to {len(waiting_targets)} PLC(s)."
-        )
-
-        await asyncio.sleep(retry_interval)
-
-        still_pending = []
-        for item in waiting_targets:
-            eq_state = (
-                equipment_manager.get_equipment_state(item["eq_id"]) or
-                equipment_manager.get_equipment_state(f"{item['carNo']}_{item['endPos']}")
-            )
-            sensors = eq_state.get("sensors", {}) if eq_state else {}
-            d40200_val = sensors.get(PlcRegister.TEMP_SETTING_CMD.value)
-            d40201_val = sensors.get(PlcRegister.TEMP_SETTING_FEEDBACK.value)
-
-            # 判定條件：僅以 D40201 反饋吻合為準
-            # (D40200 == 0 可能是發送前的預設/舊值，會造成誤判已完成)
-            d40201_matched = False
-            if d40201_val is not None:
-                try:
-                    f_val = float(d40201_val)
-                    if abs(f_val - scaled_temp) < 0.1 or abs((f_val / 10.0) - target_val) < 0.1 or abs(f_val - target_val) < 0.1:
-                        d40201_matched = True
-                except (ValueError, TypeError):
-                    pass
-
-            is_completed = d40201_matched
-
-            if not is_completed:
-                still_pending.append(item)
-
-        waiting_targets = still_pending
-        if not waiting_targets:
-            logger.info(f"[execute_temperature_setting] All {len(pending_targets)} PLC(s) verified at attempt {attempt}!")
-            break
-
-    confirmed_count = len(pending_targets) - len(waiting_targets)
-    failed_names = [f"{p['carNo']}-{p['endPos']}端" for p in waiting_targets]
-    all_success = (len(waiting_targets) == 0)
-
-    # 4. 記錄 AuditLog
-    audit_service = AuditLogService(db)
-    action_name = "batch_set_temperature" if is_batch else "set_temperature"
-    detail_msg = (
-        f"{'批次' if is_batch else '單端點'}溫度設定{'全數成功' if all_success else '未完全成功'}: "
-        f"車組={train_code}, 目標={target_val}°C, 成功={confirmed_count}/{len(pending_targets)}"
-        + (f", 失敗端點={', '.join(failed_names)}" if failed_names else "")
-    )
-    audit_service.log(
-        auditCategory="system",
-        action=action_name,
-        status="success" if all_success else "failure",
-        operator=operator_name,
-        detail=detail_msg
-    )
-
-    return TemperatureSetResult(
-        success=all_success,
-        message=detail_msg,
-        targetTemperature=target_val,
-        confirmedCount=confirmed_count,
-        failedTargets=failed_names
-    )
-
-
-@router.post("/set-temperature", response_model=ResponseBase[TemperatureSetResult], summary="設定單端點目標溫度 (整合獨立執行)")
+@router.post("/set-temperature", response_model=ResponseBase[TemperatureSetResult], summary="設定單端點目標溫度 (與 PLC 控制指令共用 PlcCommandService)")
 async def set_temperature(
     request: TemperatureSetRequest,
+    req: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    對指定車廂端點發送設定溫度 (調用整合獨立核心邏輯)。
+    對指定車廂端點發送設定溫度：與其他 PLC 設定指令走同一套流程 (設定紀錄、稽核紀錄、以 D40201 確認 PLC 已套用)。
     """
     try:
         operator_name: str = str(current_user.userName or current_user.account) if current_user else "system"
-        train_code = request.trainCode or "101"
-        targets = [{"carNo": request.carNo, "endPos": request.endPos}]
 
-        result = await execute_temperature_setting(
-            db=db,
-            train_code=train_code,
-            target_val=request.targetTemperature,
-            targets=targets,
-            operator_name=operator_name,
-            is_batch=False
+        resp = await PlcCommandService(db).execute(
+            PlcCommandRequest(
+                command=SettingType.TEMPERATURE.value,
+                carNo=request.carNo,
+                endPos=request.endPos,
+                trainCode=request.trainCode or "101",
+                value=request.targetTemperature,
+            ),
+            operator=operator_name,
+            ip_address=_client_ip(req),
         )
 
-        if not result.success:
+        success = resp.confirmed is True
+        result = TemperatureSetResult(
+            success=success,
+            message=resp.confirmMessage or "",
+            targetTemperature=request.targetTemperature,
+            confirmedCount=1 if success else 0,
+            failedTargets=[] if success else [f"{resp.carNo}-{resp.endPos}端"],
+        )
+
+        if not success:
             return ResponseUtil.error(
                 message=f"溫度設定指令已送出，但 PLC 逾時未確認 (目標溫度: {request.targetTemperature}°C)"
             )
@@ -326,14 +156,15 @@ async def set_temperature(
         return ResponseUtil.error(message=f"設定溫度失敗: {str(e)}")
 
 
-@router.post("/batch-set-temperature", response_model=ResponseBase[TemperatureSetResult], summary="批次設定目標溫度 (調用整合獨立邏輯)")
+@router.post("/batch-set-temperature", response_model=ResponseBase[TemperatureSetResult], summary="批次設定目標溫度 (與 PLC 控制指令共用 PlcCommandService)")
 async def batch_set_temperature(
     request: TemperatureBatchSetRequest,
+    req: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    對多端點 (預設 8 端點) 發送設定溫度 (調用整合獨立核心邏輯)。
+    對多端點 (預設 8 端點) 發送設定溫度：一次發出、逐台以 D40201 確認 PLC 已套用，並各自留下設定紀錄。
     """
     try:
         current_train_no = request.trainCode or "101"
@@ -353,25 +184,40 @@ async def batch_set_temperature(
             )
             for eq, car in active_equipments:
                 car_no_val = int(car.carVin) if car.carVin and car.carVin.isdigit() else (car.carNo or 0)
-                targets.append({"carNo": car_no_val, "endPos": eq.endPos, "eq_id": str(eq.id)})
+                targets.append({"carNo": car_no_val, "endPos": eq.endPos})
 
-        result = await execute_temperature_setting(
-            db=db,
-            train_code=str(current_train_no),
-            target_val=request.targetTemperature,
+        results = await PlcCommandService(db).execute_batch(
+            command=SettingType.TEMPERATURE.value,
+            value=request.targetTemperature,
             targets=targets,
-            operator_name=operator_name,
-            is_batch=True
+            operator=operator_name,
+            ip_address=_client_ip(req),
+            train_code=str(current_train_no),
         )
 
-        if not result.success:
+        failed_names = [r.name for r in results if not r.ok]
+        success = not failed_names
+        confirmed_count = len(results) - len(failed_names)
+        result = TemperatureSetResult(
+            success=success,
+            message=(
+                f"批次溫度設定{'全數成功' if success else '未完全成功'}: 車組={current_train_no}, "
+                f"目標={request.targetTemperature}°C, 成功={confirmed_count}/{len(results)}"
+                + (f", 失敗端點={', '.join(failed_names)}" if failed_names else "")
+            ),
+            targetTemperature=request.targetTemperature,
+            confirmedCount=confirmed_count,
+            failedTargets=failed_names,
+        )
+
+        if not success:
             return ResponseUtil.error(
-                message=f"批次設定溫度未全數成功: {len(result.failedTargets)} 台設備逾時未確認 ({', '.join(result.failedTargets)})"
+                message=f"批次設定溫度未全數成功: {len(failed_names)} 台設備逾時未確認 ({', '.join(failed_names)})"
             )
 
         return ResponseUtil.success(
             data=result,
-            message=f"{len(targets)} 個端點溫度設定成功！目標溫度：{request.targetTemperature}°C (全數 PLC 已確認)"
+            message=f"{len(results)} 個端點溫度設定成功！目標溫度：{request.targetTemperature}°C (全數 PLC 已確認)"
         )
     except Exception as e:
         logger.error(f"[batch_set_temperature] Exception: {e}", exc_info=True)

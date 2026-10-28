@@ -25,6 +25,10 @@ class CloudMQTTService:
     - 訂閱 {cloud_topic_prefix}/+/+，只處理最後一層以 'R' 結尾的控制指令 (如 '1R')，其餘忽略
     - 指令會先寫入 SettingLog (operator='Cloud')，再轉換 Topic 後轉發至本地 MQTT：
       雲端 MQT/TRA/OTR/TRC/102/1102/1R -> 本地 TYMC/AIR/SET/102/1102/1
+    - 僅寫入單一暫存器、且為 PlcCommandService.COMMANDS 已定義的指令 (溫度、擋板、重置、強制開啟等)，改走 PlcCommandService.execute：
+      驗證設定值、完成暫存器確認 (設定值型比對寫入值並可重發，觸發型等待旗標為 1；逾時回報 FAILED)、
+      SettingLog / AuditLog 格式皆與 Gateway 前端相同，operator='Cloud'，SettingLog 由該流程寫入
+    - 其餘指令 (多暫存器、未定義暫存器) 維持原樣轉發至本地 MQTT
     - 5 秒內相同 (topic, payload) 視為重複並略過，避免 Local 與 Cloud 為同一 Broker 時的 Echo 無窮迴圈
 
     指令結果回報 (Gateway -> Cloud)，僅 payload 帶 commandId 的指令：
@@ -244,10 +248,18 @@ class CloudMQTTService:
                             logger.warning(f"[CloudMQTTService] Duplicate commandId ignored: {command['commandId']}")
                             continue
 
-                        # 1. 儲存設定紀錄至資料庫
-                        self._save_setting_log(topic, payload_str, command["commandId"] if command else None)
+                        # PlcCommandService 已定義的設定指令 (含溫度)，與 Gateway 前端共用同一套流程
+                        setting_cmd = self._parse_setting_command(payload_str, parts)
 
-                        if command:
+                        # 1. 儲存設定紀錄至資料庫 (共用流程自行寫入設定紀錄)
+                        if setting_cmd is None:
+                            self._save_setting_log(topic, payload_str, command["commandId"] if command else None)
+
+                        if setting_cmd:
+                            task = asyncio.create_task(self._run_setting_command(client, topic, command, setting_cmd))
+                            self._command_tasks.add(task)
+                            task.add_done_callback(self._command_tasks.discard)
+                        elif command:
                             # 帶 commandId 的指令：背景執行 ACK -> 轉發 -> 確認 -> 回報，不阻塞後續訊息
                             task = asyncio.create_task(self._run_tracked_command(client, topic, parts, command))
                             self._command_tasks.add(task)
@@ -340,6 +352,48 @@ class CloudMQTTService:
         if isinstance(data, dict) and isinstance(data.get("commandId"), str) and data["commandId"]:
             return {"commandId": data["commandId"], "data": data}
         return None
+
+    @staticmethod
+    def _parse_single_register_command(payload_str: str, parts: list) -> Optional[Dict[str, Any]]:
+        """只寫入單一暫存器的指令回傳 {register, raw, trainCode, carNo, endPos, event}，否則回傳 None (車組/車廂/端點取自 Topic)"""
+        try:
+            data = json.loads(payload_str)
+        except ValueError:
+            return None
+        if not isinstance(data, dict) or len(parts) < 7:
+            return None
+        regs = data.get("register")
+        if not isinstance(regs, dict) or len(regs) != 1:
+            return None
+        register, raw = next(iter(regs.items()))
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        end_pos = parts[6].rstrip("R")
+        if not (parts[5].isdigit() and end_pos.isdigit()):
+            return None
+        event = data.get("events")
+        return {
+            "register": register,
+            "raw": raw,
+            "trainCode": parts[4],
+            "carNo": int(parts[5]),
+            "endPos": int(end_pos),
+            "event": event if isinstance(event, str) and event else None,
+        }
+
+    @classmethod
+    def _parse_setting_command(cls, payload_str: str, parts: list) -> Optional[Dict[str, Any]]:
+        """
+        PlcCommandService.COMMANDS 已定義的單一暫存器設定指令 (溫度、擋板、重置、強制開啟等)，
+        回傳 {command, value, register, raw, trainCode, carNo, endPos, event}，否則回傳 None
+        """
+        from app.services.plc_command_service import COMMAND_BY_REGISTER, COMMANDS
+
+        cmd = cls._parse_single_register_command(payload_str, parts)
+        if cmd is None or cmd["register"] not in COMMAND_BY_REGISTER:
+            return None
+        command = COMMAND_BY_REGISTER[cmd["register"]]
+        return {**cmd, "command": command, "value": COMMANDS[command].from_register_value(cmd["raw"])}
 
     def _is_duplicate_command_id(self, command_id: str) -> bool:
         now = time.time()
@@ -449,6 +503,63 @@ class CloudMQTTService:
         finally:
             if db is not None:
                 db.close()
+
+    async def _run_setting_command(
+        self, client: aiomqtt.Client, topic: str, command: Optional[Dict[str, Any]], cmd: Dict[str, Any]
+    ):
+        """共用流程的設定指令：有 commandId 時回報 ACKED -> SUCCESS / FAILED，沒有則只執行不回報"""
+        command_id: Optional[str] = command["commandId"] if command else None
+        registers = {cmd["register"]: cmd["raw"]}
+
+        if command_id:
+            await self._report_command(client, topic, command_id, "ACKED", registers)
+
+        db = None
+        try:
+            from app.database.session import SessionLocal
+
+            db = SessionLocal()
+            ok, confirmed, message = await self._execute_setting_command(db, cmd, command_id)
+        except Exception as e:
+            logger.error(f"[CloudMQTTService] Setting command {command_id or topic} failed: {e}")
+            ok, confirmed, message = False, None, f"Gateway 處理失敗: {e}"
+        finally:
+            if db is not None:
+                db.close()
+
+        if command_id:
+            await self._report_command(
+                client, topic, command_id, "SUCCESS" if ok else "FAILED", registers,
+                error=None if ok else message, confirmed=confirmed, message=message,
+            )
+        elif not ok:
+            logger.error(f"[CloudMQTTService] Setting command {topic} failed: {message}")
+
+    @staticmethod
+    async def _execute_setting_command(db, cmd: Dict[str, Any], command_id: Optional[str]) -> tuple:
+        """透過 PlcCommandService 執行 (與 Gateway 前端共用)，回傳 (是否成功, 是否經 PLC 確認, 訊息)"""
+        from app.schemas.plc_command_schema import PlcCommandRequest
+        from app.services.plc_command_service import PlcCommandError, PlcCommandService
+
+        try:
+            result = await PlcCommandService(db).execute(
+                PlcCommandRequest(
+                    command=cmd["command"],
+                    carNo=cmd["carNo"],
+                    endPos=cmd["endPos"],
+                    trainCode=cmd["trainCode"],
+                    value=cmd["value"],
+                ),
+                operator="Cloud",
+                ip_address=None,
+                command_id=command_id,
+                event=cmd["event"],
+            )
+        except PlcCommandError as e:
+            return False, None, str(e)
+        if result.confirmed is False:
+            return False, False, result.confirmMessage
+        return True, result.confirmed is True, result.confirmMessage or "已轉發至本地 MQTT，此指令無完成暫存器可確認"
 
     async def _forward_to_local_mqtt(self, topic: str, payload_str: str, parts: list) -> bool:
         """將雲端指令轉換主題格式並發送至 Gateway 本地 MQTT，回傳是否成功發布"""
