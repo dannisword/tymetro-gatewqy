@@ -33,6 +33,8 @@ def get_setting_logs(
     propertyName: str = Query("id", description="排序欄位"),
     order: str = Query("DESC", description="排序順序 (ASC/DESC)"),
     settingType: Optional[str] = Query(None, description="設定類型"),
+    auditCategory: Optional[str] = Query(None, description="審計類別 (例如: auth, modbus, schedule, system, setting)"),
+    status: Optional[str] = Query(None, description="執行狀態"),
     operator: Optional[str] = Query(None, description="操作人員"),
     isNotified: Optional[bool] = Query(None, description="是否已通知"),
     startTime: Optional[datetime] = Query(None, description="開始時間"),
@@ -42,6 +44,8 @@ def get_setting_logs(
 ):
     records, total = service.get_setting_logs(
         settingType=settingType,
+        auditCategory=auditCategory,
+        status=status,
         operator=operator,
         isNotified=isNotified,
         startTime=startTime,

@@ -11,8 +11,8 @@ from app.core.logger import logger
 from app.models.car_model import Car
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
-from app.models.setting_log_model import SettingLog
 from app.schemas.plc_command_schema import PlcCommandRequest, PlcCommandResponse
+from app.models.setting_log_model import SettingLog
 from app.services.audit_log_service import AuditLogService
 from app.services.gateway_mqtt_service import gateway_mqtt_service
 
@@ -95,6 +95,21 @@ CONFIRM_TIMEOUT_SEC = 10
 CONFIRM_INTERVAL_SEC = 1.0
 
 
+@dataclass(frozen=True)
+class CloudConfirmation:
+    """雲端指令的完成確認所需資訊 (發送前先取得完成暫存器的基準值)"""
+    car: Car
+    equipment: Equipment
+    done_register: str
+    baseline: Optional[float]
+
+
+# 以寫入暫存器反查完成暫存器 (雲端指令只帶暫存器位址，不帶設定類型)
+DONE_REGISTER_BY_REGISTER: Dict[str, str] = {
+    spec.register: spec.done_register for spec in COMMANDS.values() if spec.done_register
+}
+
+
 class PlcCommandService:
     def __init__(self, db: Session):
         self.db = db
@@ -102,19 +117,22 @@ class PlcCommandService:
 
     def _resolve_target(self, req: PlcCommandRequest) -> tuple[Car, Equipment]:
         logger.debug(f"_resolve_target: {req}")
+        return self._find_target(req.carNo, req.endPos)
+
+    def _find_target(self, car_no: Any, end_pos: int) -> tuple[Car, Equipment]:
         record = (
             self.db.query(Car, Equipment)
             .join(Equipment, Equipment.carId == Car.id)
             .filter(
-                (Car.carVin == str(req.carNo)) | (Car.carNo == req.carNo),
-                Equipment.endPos == req.endPos,
+                (Car.carVin == str(car_no)) | (Car.carNo == car_no),
+                Equipment.endPos == end_pos,
                 Equipment.isActive == True,
                 Car.isActive == True,
             )
             .first()
         )
         if not record:
-            raise PlcCommandError(f"找不到車廂 {req.carNo} 的 {req.endPos} 端設備")
+            raise PlcCommandError(f"找不到車廂 {car_no} 的 {end_pos} 端設備")
         car, equipment = record
         return car, equipment
 
@@ -187,6 +205,23 @@ class PlcCommandService:
             settingLogId=self._write_setting_log(req, operator, log_value, topic, payload),
             confirmed=confirmed,
             confirmMessage=confirm_message,
+        )
+
+    def prepare_cloud_confirmation(self, car_no: Any, end_pos: int, register: str) -> Optional[CloudConfirmation]:
+        """雲端指令發送前呼叫：找出設備並記錄完成暫存器目前值；此暫存器沒有完成回報或找不到設備時回傳 None"""
+        done_register = DONE_REGISTER_BY_REGISTER.get(register)
+        if not done_register:
+            return None
+        try:
+            car, equipment = self._find_target(car_no, end_pos)
+        except PlcCommandError as e:
+            logger.warning(f"[PlcCommand] 雲端指令無法確認完成: {e}")
+            return None
+        return CloudConfirmation(car, equipment, done_register, self._read_sensor_value(car, equipment, done_register))
+
+    async def wait_cloud_confirmation(self, confirmation: CloudConfirmation) -> tuple[bool, str]:
+        return await self._wait_done(
+            confirmation.car, confirmation.equipment, confirmation.done_register, confirmation.baseline
         )
 
     def _read_sensor_value(self, car: Car, equipment: Equipment, code: Optional[str]) -> Optional[float]:

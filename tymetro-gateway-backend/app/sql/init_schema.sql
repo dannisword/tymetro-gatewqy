@@ -140,8 +140,19 @@ CREATE TABLE IF NOT EXISTS `setting_logs` (
   `is_notified` BOOLEAN NOT NULL DEFAULT 0,               -- 是否已通知
   `topic` VARCHAR(255) DEFAULT NULL,                      -- MQTT Topic
   `payload` TEXT DEFAULT NULL,                            -- MQTT Payload
+  `command_id` VARCHAR(36) DEFAULT NULL,                  -- 指令關聯 ID (UUID)
+  `status` VARCHAR(20) DEFAULT NULL,                      -- 指令狀態 (ACKED/SUCCESS/FAILED)
+  `error_message` VARCHAR(500) DEFAULT NULL,              -- 失敗原因
+  `acked_at` DATETIME DEFAULT NULL,                       -- gateway 收到指令時間
+  `finished_at` DATETIME DEFAULT NULL,                    -- 指令結束時間 (成功/失敗)
+  `audit_category` VARCHAR(50) DEFAULT NULL,              -- 審計類別 (非審計紀錄為 NULL)
+  `action` VARCHAR(100) DEFAULT NULL,                     -- 審計操作動作
+  `ip_address` VARCHAR(50) DEFAULT NULL,                  -- 來源 IP 位址
+  `detail` VARCHAR(1000) DEFAULT NULL,                    -- 審計詳細資訊或異常錯誤訊息
   `recorded_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP -- 操作時間
 );
+CREATE INDEX IF NOT EXISTS `ix_setting_logs_command_id` ON `setting_logs` (`command_id`);
+CREATE INDEX IF NOT EXISTS `ix_setting_logs_audit_category` ON `setting_logs` (`audit_category`);
 
 -- ------------------------------------------------------------
 -- 7. Table structure for schedules
@@ -172,20 +183,3 @@ INSERT INTO `schedules` (
   `description`, `created_at`, `created_by`, `updated_at`, `updated_by`
 ) VALUES
 (1, '每小時同步資料', 'hourly', 'SYNC_SCHEDULE_CONFIG', NULL, 0, NULL, NULL, NULL, 0, '同步時段溫度設定', CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP, 0);
-
--- ------------------------------------------------------------
--- 8. Table structure for audit_logs
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `audit_logs` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `audit_category` VARCHAR(50) NOT NULL,
-  `action` VARCHAR(100) NOT NULL,
-  `status` VARCHAR(20) NOT NULL DEFAULT 'success',
-  `operator` VARCHAR(100) DEFAULT NULL,
-  `ip_address` VARCHAR(50) DEFAULT NULL,
-  `detail` VARCHAR(1000) DEFAULT NULL,
-  `timestamp` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS `ix_audit_logs_timestamp` ON `audit_logs` (`timestamp`);
-CREATE INDEX IF NOT EXISTS `ix_audit_logs_audit_category` ON `audit_logs` (`audit_category`);

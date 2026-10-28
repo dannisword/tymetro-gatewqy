@@ -16,6 +16,8 @@ class SettingLogService(BaseService[SettingLog, SettingLogCreate, SettingLogUpda
     def get_setting_logs(
         self,
         settingType: Optional[str] = None,
+        auditCategory: Optional[str] = None,
+        status: Optional[str] = None,
         operator: Optional[str] = None,
         isNotified: Optional[bool] = None,
         startTime: Optional[datetime] = None,
@@ -29,6 +31,10 @@ class SettingLogService(BaseService[SettingLog, SettingLogCreate, SettingLogUpda
         expressions = []
         if settingType:
             expressions.append(lambda x: x.settingType.like(f"%{settingType}%"))
+        if auditCategory:
+            expressions.append(lambda x: x.auditCategory == auditCategory)
+        if status:
+            expressions.append(lambda x: x.status == status)
         if operator:
             expressions.append(lambda x: x.operator.like(f"%{operator}%"))
         if isNotified is not None:

@@ -73,6 +73,10 @@ export const getAuditLogs = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/audit-logs', params)
 }
 
+export const getSettingLogs = async (params?: any): Promise<any> => {
+    return await httpOperations.get('/api/v1/setting-logs', params)
+}
+
 export const getEquipmentEvents = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/equipment-events', params)
 }

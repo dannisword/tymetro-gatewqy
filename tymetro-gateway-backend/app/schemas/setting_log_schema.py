@@ -9,6 +9,15 @@ class SettingLogBase(BaseModel):
     isNotified: Optional[bool] = Field(default=False, description="是否已通知")
     topic: Optional[str] = Field(None, description="MQTT Topic")
     payload: Optional[str] = Field(None, description="MQTT Payload")
+    commandId: Optional[str] = Field(None, description="指令關聯 ID (UUID)")
+    status: Optional[str] = Field(None, description="指令狀態 (ACKED/SUCCESS/FAILED)")
+    errorMessage: Optional[str] = Field(None, description="失敗原因")
+    ackedAt: Optional[datetime] = Field(None, description="gateway 收到指令時間")
+    finishedAt: Optional[datetime] = Field(None, description="指令結束時間")
+    auditCategory: Optional[str] = Field(None, description="審計類別，非審計紀錄為 NULL")
+    action: Optional[str] = Field(None, description="審計操作動作")
+    ipAddress: Optional[str] = Field(None, description="來源 IP 位址")
+    detail: Optional[str] = Field(None, description="審計詳細資訊或異常錯誤訊息")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 

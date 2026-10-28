@@ -8,7 +8,6 @@ from app.repositories.sensor_history_repository import SensorHistoryRepository, 
 from app.repositories.outbox_repository import OutboxRepository, outbox_repo
 from app.repositories.setting_log_repository import SettingLogRepository
 from app.repositories.schedule_repository import ScheduleRepository
-from app.repositories.audit_log_repository import AuditLogRepository
 
 __all__ = [
     "BaseRepository",
@@ -23,7 +22,6 @@ __all__ = [
     "outbox_repo",
     "SettingLogRepository",
     "ScheduleRepository",
-    "AuditLogRepository"
 ]
 
 

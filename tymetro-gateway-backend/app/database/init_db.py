@@ -9,7 +9,6 @@ from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
 from app.models.schedule_model import Schedule
-from app.models.audit_log_model import AuditLog
 from app.models.sensor_history_model import SensorHistory
 from app.models.sensor_value_label_model import SensorValueLabel
 from app.models.event_template_model import EventTemplate
@@ -60,6 +59,50 @@ def create_tables():
             logger.info("Adding missing column 'email' to 'users' table...")
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(100)"))
+
+    # 檢查並動態遷移 setting_logs 指令追蹤欄位 (command_id / status 等，與雲端 setting_logs 對應)
+    if "setting_logs" in inspector.get_table_names():
+        log_cols = [col["name"] for col in inspector.get_columns("setting_logs")]
+        new_log_cols = {
+            "command_id": "VARCHAR(36) DEFAULT NULL",
+            "status": "VARCHAR(20) DEFAULT NULL",
+            "error_message": "VARCHAR(500) DEFAULT NULL",
+            "acked_at": "DATETIME DEFAULT NULL",
+            "finished_at": "DATETIME DEFAULT NULL",
+        }
+        for col_name, col_def in new_log_cols.items():
+            if col_name not in log_cols:
+                logger.info(f"Adding missing column '{col_name}' to 'setting_logs' table...")
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE setting_logs ADD COLUMN {col_name} {col_def}"))
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_setting_logs_command_id ON setting_logs (command_id)"))
+
+    # 檢查並動態遷移 setting_logs 審計欄位，並將舊 audit_logs 資料併入後移除該表
+    if "setting_logs" in inspector.get_table_names():
+        log_cols = [col["name"] for col in inspector.get_columns("setting_logs")]
+        new_audit_cols = {
+            "audit_category": "VARCHAR(50) DEFAULT NULL",
+            "action": "VARCHAR(100) DEFAULT NULL",
+            "ip_address": "VARCHAR(50) DEFAULT NULL",
+            "detail": "VARCHAR(1000) DEFAULT NULL",
+        }
+        for col_name, col_def in new_audit_cols.items():
+            if col_name not in log_cols:
+                logger.info(f"Adding missing column '{col_name}' to 'setting_logs' table...")
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE setting_logs ADD COLUMN {col_name} {col_def}"))
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_setting_logs_audit_category ON setting_logs (audit_category)"))
+
+        if "audit_logs" in inspector.get_table_names():
+            logger.info("Merging legacy 'audit_logs' into 'setting_logs'...")
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "INSERT INTO setting_logs (setting_type, audit_category, action, status, operator, ip_address, detail, is_notified, recorded_at) "
+                    "SELECT SUBSTR(action, 1, 50), audit_category, action, status, operator, ip_address, detail, 0, timestamp FROM audit_logs"
+                ))
+                conn.execute(text("DROP TABLE audit_logs"))
 
     # 建立/確保感測器歷史紀錄之複合降序索引存在 (顯著加速 PFC200 查詢)
     if "sensor_histories" in inspector.get_table_names():

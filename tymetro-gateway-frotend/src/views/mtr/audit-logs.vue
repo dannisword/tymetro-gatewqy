@@ -14,7 +14,7 @@ import {
 
 import AgGridView2 from '@/components/AgGridView2.vue';
 import { GridOptions } from 'ag-grid-community';
-import { getAuditLogs, getEnums } from '@/utils/api';
+import { getSettingLogs, getEnums } from '@/utils/api';
 
 const { TLError } = useAlert();
 
@@ -44,7 +44,7 @@ const pagination = ref({
 const gridColumns = ref([
   {
     headerName: '時間',
-    field: 'timestamp',
+    field: 'recordedAt',
     flex: 1.2,
     maxWidth: 180,
     format: 'datetime'
@@ -55,13 +55,14 @@ const gridColumns = ref([
     flex: 0.9,
     maxWidth: 140,
     cellRenderer: (p: any) => {
-      const label = categoryMap.value[p.value] || p.value || '';
+      const label = categoryMap.value[p.value || 'setting'] || p.value || '設定控制';
       return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">${label}</span>`;
     }
   },
   {
     headerName: '詳細資訊',
     field: 'detail',
+    valueGetter: (p: any) => p.data?.detail || p.data?.value || '',
     flex: 2.2,
     minWidth: 300,
     wrapText: true,
@@ -79,10 +80,14 @@ const gridColumns = ref([
     flex: 0.7,
     maxWidth: 80,
     cellRenderer: (p: any) => {
-      const isSuccess = p.value === 'success';
-      return isSuccess
-        ? `<span class="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">成功</span>`
-        : `<span class="px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100">失敗</span>`;
+      const status = String(p.value || '').toLowerCase();
+      if (status === 'acked') {
+        return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">處理中</span>`;
+      }
+      if (status === 'success' || !status) {
+        return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">成功</span>`;
+      }
+      return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100">失敗</span>`;
     }
   },
   {
@@ -114,7 +119,7 @@ const fetchLogs = async () => {
     const params: Record<string, any> = {
       pageIndex: pagination.value.number,
       pageSize: pagination.value.size,
-      propertyName: 'timestamp',
+      propertyName: 'recordedAt',
       order: 'DESC'
     };
     if (filterCategory.value) {
@@ -127,7 +132,7 @@ const fetchLogs = async () => {
       params.operator = filterOperator.value.trim();
     }
 
-    const res = await getAuditLogs(params);
+    const res = await getSettingLogs(params);
     if (res && res.data) {
       logs.value = res.data.source || [];
       const totalCount = res.data.total || 0;
