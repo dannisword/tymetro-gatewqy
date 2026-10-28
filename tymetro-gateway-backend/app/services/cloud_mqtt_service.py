@@ -7,6 +7,7 @@ import aiomqtt
 from app.core.logger import logger
 from app.core.config_yaml import yaml_settings
 from app.database.db_config_repo import db_config_repo
+from app.utils.datetime_util import get_local_now
 
 class CloudMQTTService:
     """
@@ -311,6 +312,7 @@ class CloudMQTTService:
                     value=val_str,
                     operator=operator,
                     isNotified=False,
+                    recordedAt=get_local_now(),
                     topic=topic,
                     payload=payload_str,
                     commandId=command_id,

@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.setting_log_model import SettingLog
 from app.schemas.setting_log_schema import SettingLogCreate, SettingLogUpdate
@@ -34,7 +35,11 @@ class SettingLogService(BaseService[SettingLog, SettingLogCreate, SettingLogUpda
         if auditCategory:
             expressions.append(lambda x: x.auditCategory == auditCategory)
         if status:
-            expressions.append(lambda x: x.status == status)
+            # 不分大小寫比對；本地審計紀錄的 failure 視同 FAILED
+            status_values = {"FAILURE": ("FAILED", "FAILURE"), "FAILED": ("FAILED", "FAILURE")}.get(
+                status.strip().upper(), (status.strip().upper(),)
+            )
+            expressions.append(lambda x: func.upper(x.status).in_(status_values))
         if operator:
             expressions.append(lambda x: x.operator.like(f"%{operator}%"))
         if isNotified is not None:

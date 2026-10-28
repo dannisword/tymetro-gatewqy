@@ -64,6 +64,8 @@ def create_tables():
     if "setting_logs" in inspector.get_table_names():
         log_cols = [col["name"] for col in inspector.get_columns("setting_logs")]
         new_log_cols = {
+            "topic": "VARCHAR(255) DEFAULT NULL",
+            "payload": "TEXT DEFAULT NULL",
             "command_id": "VARCHAR(36) DEFAULT NULL",
             "status": "VARCHAR(20) DEFAULT NULL",
             "error_message": "VARCHAR(500) DEFAULT NULL",

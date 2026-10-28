@@ -6,7 +6,7 @@ import BaseIcon from '@/components/BaseIcon.vue';
 import { useAlert } from '@/composables/TLAlter';
 import {
   mdiRefresh,
-  mdiShieldCheckOutline,
+  mdiClipboardListOutline,
   mdiMagnify,
   mdiClose,
   mdiChevronDown
@@ -14,18 +14,15 @@ import {
 
 import AgGridView2 from '@/components/AgGridView2.vue';
 import { GridOptions } from 'ag-grid-community';
-import { getSettingLogs, getEnums } from '@/utils/api';
+import { getSettingLogs } from '@/utils/api';
 
 const { TLError } = useAlert();
 
 const breadcrumbItems = [
   { label: '首頁', to: '/dashboard' },
   { label: '功能選單', to: '/mtr/tile-menus' },
-  { label: '審計日誌' }
+  { label: '設定紀錄' }
 ];
-
-const categoryOptions = ref<{ value: string; label: string }[]>([]);
-const categoryMap = ref<Record<string, string>>({});
 
 const gridOptions: GridOptions = {
   rowSelection: 'single',
@@ -50,30 +47,17 @@ const gridColumns = ref([
     format: 'datetime'
   },
   {
-    headerName: '審計類別',
-    field: 'auditCategory',
-    flex: 0.9,
-    maxWidth: 140,
-    cellRenderer: (p: any) => {
-      const label = categoryMap.value[p.value || 'setting'] || p.value || '設定控制';
-      return `<span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">${label}</span>`;
-    }
+    headerName: '設定項目',
+    field: 'settingType',
+    flex: 1.2,
+    minWidth: 160
   },
   {
-    headerName: '詳細資訊',
-    field: 'detail',
-    valueGetter: (p: any) => p.data?.detail || p.data?.value || '',
-    flex: 2.2,
-    minWidth: 300,
-    wrapText: true,
-    autoHeight: true
+    headerName: '設定值',
+    field: 'value',
+    flex: 0.8,
+    maxWidth: 140
   },
-  // {
-  //   headerName: '動作',
-  //   field: 'action',
-  //   flex: 1.2,
-  //   minWidth: 140
-  // },
   {
     headerName: '狀態',
     field: 'status',
@@ -96,6 +80,15 @@ const gridColumns = ref([
     flex: 0.9,
     maxWidth: 120
   },
+  {
+    headerName: '失敗原因',
+    field: 'errorMessage',
+    valueGetter: (p: any) => p.data?.errorMessage || p.data?.detail || '',
+    flex: 1.6,
+    minWidth: 200,
+    wrapText: true,
+    autoHeight: true
+  },
   // {
   //   headerName: 'IP 位址',
   //   field: 'ipAddress',
@@ -109,7 +102,7 @@ const total = ref(0);
 const loading = ref(false);
 
 // Filters
-const filterCategory = ref('');
+const filterSettingType = ref('');
 const filterStatus = ref('');
 const filterOperator = ref('');
 
@@ -122,8 +115,8 @@ const fetchLogs = async () => {
       propertyName: 'recordedAt',
       order: 'DESC'
     };
-    if (filterCategory.value) {
-      params.auditCategory = filterCategory.value;
+    if (filterSettingType.value.trim()) {
+      params.settingType = filterSettingType.value.trim();
     }
     if (filterStatus.value) {
       params.status = filterStatus.value;
@@ -141,31 +134,14 @@ const fetchLogs = async () => {
       pagination.value.totalPages = Math.ceil(totalCount / pagination.value.size);
     }
   } catch (error) {
-    console.error('Fetch audit logs error:', error);
-    TLError('載入審計日誌失敗');
+    console.error('Fetch setting logs error:', error);
+    TLError('載入設定紀錄失敗');
   } finally {
     loading.value = false;
   }
 };
 
-const loadEnums = async () => {
-  try {
-    const enumsRes = await getEnums();
-    if (enumsRes?.success && enumsRes.data) {
-      if (enumsRes.data.auditCategory) {
-        categoryOptions.value = enumsRes.data.auditCategory;
-      }
-      if (enumsRes.data.categoryMap) {
-        categoryMap.value = enumsRes.data.categoryMap;
-      }
-    }
-  } catch (error) {
-    console.error('Fetch enums error:', error);
-  }
-};
-
 onMounted(async () => {
-  await loadEnums();
   await fetchLogs();
 });
 
@@ -180,7 +156,7 @@ const handleClearOperator = () => {
 };
 
 const handleReset = () => {
-  filterCategory.value = '';
+  filterSettingType.value = '';
   filterStatus.value = '';
   filterOperator.value = '';
   pagination.value.number = 0;
@@ -212,29 +188,23 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
         <div class="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3 sm:gap-4 bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs">
           <!-- 表格頂端標題 -->
           <h3 class="text-slate-800 font-extrabold text-base sm:text-lg flex items-center gap-2 mb-0 shrink-0">
-            <BaseIcon :path="mdiShieldCheckOutline" w="20" h="20" size="20" class="text-[#2a7eb5]" />
-            審計日誌列表
+            <BaseIcon :path="mdiClipboardListOutline" w="20" h="20" size="20" class="text-[#2a7eb5]" />
+            設定紀錄列表
           </h3>
 
           <!-- 搜尋與按鈕 -->
           <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3 w-full xl:w-auto justify-end">
-            <!-- 類別過濾 -->
+            <!-- 設定項目過濾 -->
             <div class="flex items-center gap-2 w-full sm:w-auto flex-1 min-w-0">
-              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">類別</label>
-              <div class="relative flex-1 sm:w-36 min-w-0">
-                <select 
-                  v-model="filterCategory"
-                  class="w-full pl-3 pr-8 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none bg-white transition-all appearance-none text-sm truncate cursor-pointer"
-                  @change="handleSearch"
-                >
-                  <option value="">全部</option>
-                  <option v-for="cat in categoryOptions" :key="cat.value" :value="cat.value">
-                    {{ cat.label }}
-                  </option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-                  <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />
-                </div>
+              <label class="text-xs font-bold text-slate-500 shrink-0 mb-0 whitespace-nowrap">設定項目</label>
+              <div class="relative flex-1 sm:w-44 min-w-0">
+                <input 
+                  v-model="filterSettingType"
+                  type="text"
+                  placeholder="輸入設定項目關鍵字"
+                  class="w-full pl-3 pr-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 font-medium focus:border-[#2a7eb5] focus:ring-2 focus:ring-[#2a7eb5]/10 outline-none transition-all text-sm"
+                  @keyup.enter="handleSearch"
+                />
               </div>
             </div>
 
@@ -248,8 +218,9 @@ const handlePaginationChange = ({ page, pageSize }: { page: number; pageSize: nu
                   @change="handleSearch"
                 >
                   <option value="">全部</option>
-                  <option value="success">成功</option>
-                  <option value="failure">失敗</option>
+                  <option value="ACKED">處理中</option>
+                  <option value="SUCCESS">成功</option>
+                  <option value="FAILED">失敗</option>
                 </select>
                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
                   <BaseIcon :path="mdiChevronDown" w="16" h="16" size="16" />

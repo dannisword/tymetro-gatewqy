@@ -139,9 +139,9 @@
     },
     {
       "id": 4,
-      "title": "審計日誌",
-      "icon": "mdiShieldCheckOutline",
-      "route": "/mtr/audit-logs"
+      "title": "設定紀錄",
+      "icon": "mdiClipboardListOutline",
+      "route": "/mtr/setting-logs"
     },
     {
       "id": 5,

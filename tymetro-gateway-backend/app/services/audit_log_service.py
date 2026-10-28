@@ -14,35 +14,6 @@ class AuditLogService(BaseService[SettingLog, AuditLogCreate, AuditLogUpdate]):
         super().__init__(db)
         self.repo = SettingLogRepository(db)
 
-    def get_audit_logs(
-        self, 
-        auditCategory: Optional[str] = None,
-        status: Optional[str] = None,
-        operator: Optional[str] = None,
-        pageIndex: int = 0, 
-        pageSize: int = 50, 
-        propertyName: str = "timestamp",
-        order: str = "DESC"
-    ):
-        """根據參數過濾審計日誌列表 (含總數)"""
-        expressions = [lambda x: x.auditCategory.isnot(None)]
-        if auditCategory:
-            expressions.append(lambda x: x.auditCategory == auditCategory)
-        if status:
-            expressions.append(lambda x: x.status == status)
-        if operator:
-            expressions.append(lambda x: x.operator.like(f"%{operator}%"))
-            
-        logs, total = self.filter_with_pageable(
-            *expressions,
-            pageIndex=pageIndex,
-            pageSize=pageSize,
-            propertyName=propertyName,
-            order=order
-        )
-            
-        return logs, total
-
     def create(self, obj_in: AuditLogCreate) -> SettingLog:  # type: ignore[override]
         """新增審計紀錄 (寫入 setting_logs，設定類型沿用 action)"""
         entry = SettingLog(

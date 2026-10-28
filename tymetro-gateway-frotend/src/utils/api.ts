@@ -69,10 +69,6 @@ export const getHealthStatus = async (): Promise<any> => {
     return await httpOperations.get('/api/v1/health/status', undefined, { meta: { loading: false, silent: true } })
 }
 
-export const getAuditLogs = async (params?: any): Promise<any> => {
-    return await httpOperations.get('/api/v1/audit-logs', params)
-}
-
 export const getSettingLogs = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/setting-logs', params)
 }
