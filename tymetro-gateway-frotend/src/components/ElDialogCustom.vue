@@ -10,6 +10,7 @@ const props = defineProps({
   showAction: { type: Boolean, default: true, required: false },
   width: { type: String, default: '50%', required: false },
   minHeight: { type: String, default: '300px', required: false },
+  appendTo: { type: [String, Object], default: 'body', required: false },
 })
 
 const dialogRef = reactive({
@@ -56,6 +57,7 @@ const afterClosed = (val: boolean) => {
     :before-close="handleClose"
     :close-on-click-modal="false"
     class="custom-dialog-wrapper"
+    :append-to="(props.appendTo as any)"
     append-to-body
     destroy-on-close
   >

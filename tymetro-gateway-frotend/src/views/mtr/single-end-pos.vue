@@ -595,6 +595,11 @@ const setTargetTemp = async () => {
 
 // 2D 圖標記點擊 (clickAction 為 detail 時開啟詳細視窗，與 tymetro 一致)
 const showMarkerModal = ref(false);
+// 全螢幕時 dialog 必須掛在全螢幕元素內才看得到(任一全螢幕容器皆適用)
+const markerDialogTarget = (visible: boolean): HTMLElement | string =>
+  (visible && (document.fullscreenElement as HTMLElement | null)) || 'body';
+// ElMessageBox 同理,需掛在全螢幕元素內
+const msgBoxTarget = (): HTMLElement => (document.fullscreenElement as HTMLElement | null) || document.body;
 const activeMarker = ref<any>(null);
 
 // 標記點位對應的設定指令，key 為 點位代碼:bit (暫時寫死，之後再改由標記資料帶入)；dataType 為 bitmap 的標記以 ON / OFF 切換，寫入 onValue / offValue
@@ -643,6 +648,7 @@ const handleMarkerDialogClose = async (res: any) => {
 const resetCompressorHours = async (id: number) => {
   try {
     await ElMessageBox.confirm(`確定要重置壓縮機 ${id} 的運轉時數嗎？此操作無法復原。`, '確認重置時數', {
+      appendTo: msgBoxTarget(),
       type: 'warning',
       confirmButtonText: '確定重置',
       cancelButtonText: '取消'
@@ -665,6 +671,7 @@ const executeMarkerCommand = async () => {
   const name = `${activeMarker.value?.label || activeMarker.value?.code}：${stateText}`;
   try {
     await ElMessageBox.confirm(`確定要將「${activeMarker.value?.label || activeMarker.value?.code}」設為 ${stateText} 嗎？`, '確認設定', {
+      appendTo: msgBoxTarget(),
       type: 'warning',
       confirmButtonText: '確定',
       cancelButtonText: '取消'
@@ -804,6 +811,7 @@ const onReload = () => {
 
 const handlePlcReset = () => {
   ElMessageBox.confirm("確定要發送重置復歸指令給此端點的 PLC 嗎？", "重置復歸", {
+    appendTo: msgBoxTarget(),
     type: "warning",
     confirmButtonText: "確定",
     cancelButtonText: "取消"
@@ -818,6 +826,7 @@ const handlePlcReset = () => {
 
 const handleClearAcHours = () => {
   ElMessageBox.confirm("確定要清除此端點的空調運轉時數嗎？此操作無法復原。", "空調時數重置", {
+    appendTo: msgBoxTarget(),
     type: "warning",
     confirmButtonText: "確定",
     cancelButtonText: "取消"
@@ -1880,6 +1889,7 @@ onUnmounted(() => {
     <!-- 標記詳細資訊 Modal -->
     <ElDialogCustom
       v-model:visible="showMarkerModal"
+      :append-to="markerDialogTarget(showMarkerModal)"
       :title="activeMarker?.label"
       width="448px"
       minHeight="0px"
