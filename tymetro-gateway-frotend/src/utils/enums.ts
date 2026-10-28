@@ -22,6 +22,22 @@ export const SYSTEM_MODE_MAP = {
 
 export type SystemModeKey = keyof typeof SYSTEM_MODE_MAP;
 
+export enum FreshAirDamper {
+  Closed = 0,
+  Pos25 = 25,
+  Pos50 = 50,
+  Pos75 = 75,
+  Pos100 = 100,
+}
+
+export const FRESH_AIR_DAMPER_LABEL: Record<FreshAirDamper, string> = {
+  [FreshAirDamper.Closed]: "關閉",
+  [FreshAirDamper.Pos25]: "25%",
+  [FreshAirDamper.Pos50]: "50%",
+  [FreshAirDamper.Pos75]: "75%",
+  [FreshAirDamper.Pos100]: "100%",
+};
+
 export enum CompressorStatus {
   ON = "ON",
   OFF = "OFF",

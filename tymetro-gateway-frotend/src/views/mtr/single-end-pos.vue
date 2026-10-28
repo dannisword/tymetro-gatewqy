@@ -11,7 +11,7 @@ import ElDialogCustom from '@/components/ElDialogCustom.vue';
 import { useMQTT } from '@/store/useMQTT';
 import { useAlert } from "@/composables/TLAlter";
 import { ElMessageBox, ElLoading } from 'element-plus';
-import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus, CompressorHealth, SettingTypeEnum } from '@/utils/enums';
+import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus, CompressorHealth, SettingTypeEnum, FreshAirDamper, FRESH_AIR_DAMPER_LABEL } from '@/utils/enums';
 import type { 
   TrainCarStatus, 
   EndpointStatus, 
@@ -155,13 +155,11 @@ const freshAirDamperPos = ref<number>(0);
 // 緊急供氣擋板 (設定觸發: D40214, 顯示完成: D40215): 1=否, 2=是
 const emergAirDamper = ref<number>(1);
 
-const freshAirDamperOptions = ref<{ value: number; label: string }[]>([
-  { value: 0, label: '關閉' },
-  { value: 25, label: '25%' },
-  { value: 50, label: '50%' },
-  { value: 75, label: '75%' },
-  { value: 100, label: '100%' }
-]);
+const freshAirDamperOptions = ref<{ value: number; label: string }[]>(
+  Object.values(FreshAirDamper)
+    .filter((v): v is FreshAirDamper => typeof v === 'number')
+    .map(value => ({ value, label: FRESH_AIR_DAMPER_LABEL[value] }))
+);
 const operationModes = ref<{ value: string; label: string; icon: string; activeClass: string }[]>([]);
 
 // ==========================================

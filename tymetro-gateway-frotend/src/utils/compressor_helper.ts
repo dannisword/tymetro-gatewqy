@@ -12,6 +12,7 @@ export const updateCompressorStatus = (
       health: any;
       highPress: number;
       lowPress: number;
+      runHours?: number;
     }>;
   },
   reg: Record<string, any>
@@ -70,6 +71,12 @@ export const updateCompressorStatus = (
     if (highP2 !== undefined && !isNaN(highP2)) targetEp.compressors[1].highPress = Math.round(highP2);
     if (lowP2 !== undefined && !isNaN(lowP2)) targetEp.compressors[1].lowPress = Math.round(lowP2);
   }
+
+  // 轉換壓縮機累計運轉時數 (D40030: 壓縮機1 / D40031: 壓縮機2)
+  [reg.D40030, reg.D40031].forEach((val, i) => {
+    const hours = (val !== undefined && val !== null) ? Number(val) : NaN;
+    if (targetEp.compressors[i] && !isNaN(hours)) targetEp.compressors[i].runHours = Math.round(hours);
+  });
 };
 
 /**

@@ -40,7 +40,7 @@ export function useAlert() {
   const TLWarning = (
     message: string,
     position: AlertPosition = "bottom-center",
-    timeout = 0
+    timeout = 10000
   ) => {
     showAlert(message, "warning", position, timeout);
   };
