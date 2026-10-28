@@ -1262,7 +1262,7 @@ onUnmounted(() => {
       <!-- 核心狀態監控網格 -->
       <div v-if="activeTab === 'dashboard'" class="grid grid-cols-1 lg:grid-cols-12 gap-3">
         <!-- 溫度與模式控制面版 (左側佔 7 欄) -->
-        <div class="lg:col-span-7 bg-white rounded-2xl p-4 border border-slate-200/60 shadow-sm flex flex-col justify-between space-y-4">
+        <div class="lg:col-span-7 bg-white rounded-2xl p-4 border border-slate-200/60 shadow-sm flex flex-col justify-start gap-4">
           <div class="flex justify-between items-center pb-2 border-b border-slate-100">
             <h2 class="text-lg font-black text-slate-800 flex items-center gap-2">
               <BaseIcon :path="mdiGauge" class="text-primary-600" w="w-8" h="h-8" size="28" />
@@ -1302,7 +1302,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1">
             <!-- 圓形回風溫度儀表板 -->
             <div class="flex flex-col items-center justify-center p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <span class="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">目前回風溫度 (RETURN AIR)</span>

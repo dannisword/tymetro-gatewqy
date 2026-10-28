@@ -12,6 +12,24 @@ class CloudMQTTService:
     桃捷雲 Cloud MQTT Forwarder Service:
     - 專責連線至「桃捷雲」 Cloud MQTT Broker
     - 接收內存 Queue 佇列中由 PFC200 送進來的 telemetry 數據，並拋轉 (Publish) 至桃捷雲 Topic
+
+    上行 (Gateway -> Cloud):
+    - push_telemetry() 將資料放入 asyncio.Queue，由 _publish_loop 內的 send_worker 逐筆發送
+    - 佇列滿 (max_queue_size) 時丟棄最舊資料；封包排隊超過 max_ttl_seconds 亦直接丟棄，只保留最新狀態
+    - 發送失敗 (MqttError) 時，未過期且佇列未滿的封包會放回佇列，並觸發重連
+    - Topic = {cloud_topic_prefix}/{topic_suffix}；未指定 suffix 則使用 prefix
+
+    下行 (Cloud -> Gateway):
+    - 訂閱 {cloud_topic_prefix}/+/+，只處理最後一層以 'R' 結尾的控制指令 (如 '1R')，其餘忽略
+    - 指令會先寫入 SettingLog (operator='Cloud')，再轉換 Topic 後轉發至本地 MQTT：
+      雲端 MQT/TRA/OTR/TRC/102/1102/1R -> 本地 TYMC/AIR/SET/102/1102/1
+    - 5 秒內相同 (topic, payload) 視為重複並略過，避免 Local 與 Cloud 為同一 Broker 時的 Echo 無窮迴圈
+
+    連線與設定:
+    - 設定來自 DB (cloud_mqtt.*)，reload_config() 重新讀取；restart() = stop + start，套用新設定
+    - 斷線或例外時，等待 reconnect_delay_sec 秒後自動重連
+    - is_connected 反映目前與雲端 Broker 的連線狀態
+    - 全域單例：cloud_mqtt_service
     """
     def __init__(self):
         self._max_queue_size = 50
