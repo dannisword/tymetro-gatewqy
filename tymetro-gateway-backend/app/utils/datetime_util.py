@@ -8,6 +8,12 @@ def get_local_now() -> datetime:
     """取得當前本地當地時間 (naive datetime)"""
     return datetime.now(LOCAL_TZ).replace(tzinfo=None)
 
+def to_utc_naive(dt: datetime) -> datetime:
+    """帶時區的時間轉成 UTC naive (資料庫統一存 UTC)；無時區視為 UTC"""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 def get_active_season_by_date(dt: datetime) -> str:
     """
     根據給定的日期 (月份與天數) 自動判斷並回傳對應的季節模式代碼。

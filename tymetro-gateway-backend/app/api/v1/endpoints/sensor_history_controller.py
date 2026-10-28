@@ -8,6 +8,7 @@ from app.models.user_model import User
 from app.schemas.response_schema import ResponseBase, ResponseList
 from app.schemas.sensor_history_schema import SensorHistoryResponse
 from app.repositories.sensor_history_repository import sensor_history_repo
+from app.utils.datetime_util import to_utc_naive
 from app.utils.response_util import ResponseUtil
 
 router = APIRouter()
@@ -34,9 +35,9 @@ def get_sensor_trend(
         query = query.filter(SensorHistory.endPos == endPos)
 
     if startTime:
-        query = query.filter(SensorHistory.recordedAt >= startTime)
+        query = query.filter(SensorHistory.recordedAt >= to_utc_naive(startTime))
     if endTime:
-        query = query.filter(SensorHistory.recordedAt <= endTime)
+        query = query.filter(SensorHistory.recordedAt <= to_utc_naive(endTime))
 
     # 取最新的 limit 筆，所以照 recordedAt.desc() 取，之後再反轉
     records = query.order_by(SensorHistory.recordedAt.desc()).limit(limit).all()

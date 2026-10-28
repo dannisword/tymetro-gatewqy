@@ -5,6 +5,8 @@ from app.repositories.base_repository import BaseRepository
 from app.models.sensor_history_model import SensorHistory
 from app.database.session import SessionLocal
 from app.core.logger import logger
+from app.utils.datetime_util import to_utc_naive
+
 
 class SensorHistoryRepository(BaseRepository[SensorHistory]):
     """感測器歷史資料 Repository"""
@@ -23,7 +25,7 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
             for item in items:
                 rec_at = item.get("recorded_at") or item.get("timestamp")
                 if isinstance(rec_at, (int, float)):
-                    rec_at = datetime.fromtimestamp(rec_at)
+                    rec_at = datetime.utcfromtimestamp(rec_at)
                 elif not isinstance(rec_at, datetime):
                     rec_at = datetime.utcnow()
 
@@ -83,9 +85,9 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
                 query = query.filter(SensorHistory.endPos == end_pos)
 
             if start_time:
-                query = query.filter(SensorHistory.recordedAt >= start_time)
+                query = query.filter(SensorHistory.recordedAt >= to_utc_naive(start_time))
             if end_time:
-                query = query.filter(SensorHistory.recordedAt <= end_time)
+                query = query.filter(SensorHistory.recordedAt <= to_utc_naive(end_time))
 
             # COUNT 在大表上需掃描全部符合列，允許呼叫端略過 (total 回傳 -1)
             total = query.count() if include_total else -1

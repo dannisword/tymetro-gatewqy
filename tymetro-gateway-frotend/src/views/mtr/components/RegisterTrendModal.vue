@@ -62,9 +62,8 @@ const dialogTitle = computed(() => {
   if (!props.register) return '趨勢圖';
   const car = props.register.carNo ?? props.carNo;
   const carLabel = car ? `${car} 車廂 ` : '';
-  const plcAddr = 40001 + props.register.address;
-  const desc = props.register.sensorName || props.register.sensorCode;
-  return `趨勢圖 — ${carLabel}${plcAddr} ${desc}`;
+  //const desc = props.register.sensorName || props.register.sensorCode;
+  return `趨勢圖 — ${carLabel}端點 ${props.endPos}`;
 });
 
 // ─── ECLineChart 顏色 ────────────────────────────────────────────────────────
@@ -108,12 +107,13 @@ const loadHistory = async () => {
 
       const formattedTimes = sortedRaw.map(item => {
         const dt = new Date(item.timestamp);
+        const yyyy = dt.getFullYear();
         const mm = String(dt.getMonth() + 1).padStart(2, '0');
         const dd = String(dt.getDate()).padStart(2, '0');
         const hh = String(dt.getHours()).padStart(2, '0');
         const min = String(dt.getMinutes()).padStart(2, '0');
         const ss = String(dt.getSeconds()).padStart(2, '0');
-        return `${mm}/${dd} ${hh}:${min}:${ss}`;
+        return `${yyyy}/${mm}/${dd} ${hh}:${min}:${ss}`;
       });
 
       const values = sortedRaw.map(item => Number(item.value));
