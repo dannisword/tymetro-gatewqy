@@ -183,7 +183,7 @@ class GatewayMQTTService:
 
             # 6. 更新 SQLite 即時點位與寫入 Queue 佇列
             if sensor_values:
-                await loop.run_in_executor(None, db_config_repo.update_sensor_values, sensor_values)
+                await loop.run_in_executor(None, db_config_repo.update_sensor_values, eq_id, sensor_values)
 
             if history_items:
                 await sqlite_writer.push_many(history_items)

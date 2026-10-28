@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import AuditCategory, PlcEvent, SettingType
 from app.core.logger import logger
+from app.database.db_config_repo import db_config_repo
 from app.models.car_model import Car
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
@@ -345,6 +346,10 @@ class PlcCommandService:
     def _read_sensor_value(self, car: Car, equipment: Equipment, code: Optional[str]) -> Optional[float]:
         if not code:
             return None
+        # 優先讀 MQTT 剛收到的記憶體最新值 (DB 為批次寫入，會延遲數秒)
+        live = db_config_repo.get_live_sensor_value(equipment.id, code)
+        if live is not None:
+            return live
         # 結束目前交易以讀到 MQTT 寫入的最新值
         self.db.rollback()
         value = (

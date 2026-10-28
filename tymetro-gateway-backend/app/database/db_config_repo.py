@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import threading
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from app.models.config_model import SystemConfig
 from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
@@ -18,7 +18,9 @@ class DbConfigRepository:
         # 記憶體快取 (RAM Cache): (car_vin, end_pos) -> eq_info (O(1) 超高效能對照)
         self._equipment_cache: Dict[Any, Dict[str, Any]] = {}
         # 記憶體快取 (即時狀態暫存區) 用於批次寫入
-        self._pending_sensor_updates: Dict[str, float] = {}
+        self._pending_sensor_updates: Dict[Tuple[str, str], float] = {}
+        # 最新值快取 (不隨 flush 清空)，key: (eq_id, sensor_code)，供指令完成判斷即時讀取
+        self._live_sensor_values: Dict[Tuple[str, str], float] = {}
         self._lock = threading.Lock()
 
     def clear_cache(self):
@@ -104,12 +106,19 @@ class DbConfigRepository:
         finally:
             db.close()
 
-    def update_sensor_values(self, updates: Dict[str, float]):
+    def update_sensor_values(self, eq_id: str, updates: Dict[str, float]):
         """暫存感測器即時數值更新至記憶體快取，不立即執行資料庫寫入"""
         if not updates:
             return
+        keyed = {(str(eq_id), code): val for code, val in updates.items()}
         with self._lock:
-            self._pending_sensor_updates.update(updates)
+            self._pending_sensor_updates.update(keyed)
+            self._live_sensor_values.update(keyed)
+
+    def get_live_sensor_value(self, eq_id: Any, code: str) -> Optional[float]:
+        """讀取 MQTT 最新收到的點位值 (尚未 flush 至 DB 也可讀到)，沒有則回傳 None"""
+        with self._lock:
+            return self._live_sensor_values.get((str(eq_id), code))
 
     def flush_sensor_values(self):
         """將記憶體快取中暫存的最新數值，一次性寫入 SQLite 資料庫 (單一 Transaction)"""
@@ -121,11 +130,11 @@ class DbConfigRepository:
 
         db = SessionLocal()
         try:
-            for code, val in to_update.items():
-                db.query(Sensor).filter(Sensor.sensorCode == code).update(
-                    {Sensor.sensorValue: val},
-                    synchronize_session=False
-                )
+            for (eq_id, code), val in to_update.items():
+                query = db.query(Sensor).filter(Sensor.sensorCode == code)
+                if eq_id.isdigit():
+                    query = query.filter(Sensor.equipmentId == int(eq_id))
+                query.update({Sensor.sensorValue: val}, synchronize_session=False)
             db.commit()
             #logger.debug(f"[DbConfigRepository] Flushed {len(to_update)} sensor values to SQLite successfully.")
         except Exception as e:
