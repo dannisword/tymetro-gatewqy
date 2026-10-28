@@ -22,3 +22,5 @@ class PlcCommandResponse(BaseModel):
     # 需完成確認的指令：True 已完成 / False 逾時未完成 / None 無需或無法確認
     confirmed: Optional[bool] = None
     confirmMessage: Optional[str] = None
+    # 確認結束時觸發點位與完成點位的最新值，如 {"D40200": 0, "D40201": 25}
+    plcValues: Optional[dict] = None

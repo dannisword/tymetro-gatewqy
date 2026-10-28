@@ -54,8 +54,9 @@ class DbConfigRepository:
                 regs = []
                 for s in sensors:
                     addr = 0
-                    if s.sensorCode and s.sensorCode.startswith("D") and s.sensorCode[1:].isdigit():
-                        addr = int(s.sensorCode[1:])
+                    code = str(s.sensorCode) if s.sensorCode else ""
+                    if code.startswith("D") and code[1:].isdigit():
+                        addr = int(code[1:])
                     
                     regs.append({
                         "code": s.sensorCode,

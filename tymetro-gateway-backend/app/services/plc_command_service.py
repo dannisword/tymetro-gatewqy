@@ -172,6 +172,7 @@ class BatchTargetResult:
     endPos: int
     confirmed: Optional[bool] = None
     message: Optional[str] = None
+    plcValues: Optional[Dict[str, Optional[float]]] = None
     error: Optional[str] = None
     settingLogId: Optional[int] = None
 
@@ -187,6 +188,8 @@ class BatchTargetResult:
 class PlcCommandService:
     def __init__(self, db: Session):
         self.db = db
+        # 最近一次 _wait_done 結束時的點位值 (觸發點位、完成點位)
+        self.last_plc_values: Optional[Dict[str, Optional[float]]] = None
         self.audit_log_service = AuditLogService(db)
 
     def _resolve_target(self, req: PlcCommandRequest) -> tuple[Car, Equipment]:
@@ -317,6 +320,7 @@ class PlcCommandService:
             settingLogId=setting_log_id,
             confirmed=confirmed,
             confirmMessage=confirm_message,
+            plcValues=self.last_plc_values if confirmed is not None else None,
         )
 
     @staticmethod
@@ -390,6 +394,14 @@ class PlcCommandService:
             return f"PLC 已回填 {w.done_register} 但 {w.trigger_register} 未在時限內清空 ({values})"
         return f"PLC 未在時限內回報完成 ({values})"
 
+    @staticmethod
+    def _plc_values(w: _DoneWatcher) -> Dict[str, Optional[float]]:
+        values: Dict[str, Optional[float]] = {}
+        if w.trigger_register:
+            values[w.trigger_register] = w.trigger_value
+        values[w.done_register] = w.done_value
+        return values
+
     async def _wait_done(
         self,
         car: Car,
@@ -407,7 +419,9 @@ class PlcCommandService:
         while time.monotonic() < deadline:
             await asyncio.sleep(CONFIRM_INTERVAL_SEC)
             if self._poll_done(watcher):
+                self.last_plc_values = self._plc_values(watcher)
                 return True, self._done_message(watcher, True, timeout)
+        self.last_plc_values = self._plc_values(watcher)
         return False, self._done_message(watcher, False, timeout)
 
     async def execute_batch(
@@ -497,6 +511,7 @@ class PlcCommandService:
         for i, w in watchers.items():
             is_confirmed = i not in pending
             results[i].confirmed = is_confirmed
+            results[i].plcValues = self._plc_values(w)
             results[i].message = self._done_message(w, is_confirmed, attempt_timeout)
 
         for i, result in enumerate(results):

@@ -438,6 +438,7 @@ class CloudMQTTService:
         error: Optional[str] = None,
         confirmed: Optional[bool] = None,
         message: Optional[str] = None,
+        plc: Optional[Dict[str, Any]] = None,
     ):
         """將指令狀態回報至雲端 (指令 Topic 的 R 改為 A)"""
         if status in ("SUCCESS", "FAILED"):
@@ -450,6 +451,7 @@ class CloudMQTTService:
             "registers": registers,
             "confirmed": confirmed,
             "message": message,
+            "plc": plc,
             "ts": int(time.time()),
         }
         try:
@@ -495,7 +497,7 @@ class CloudMQTTService:
             ok, message = await service.wait_cloud_confirmation(confirmation)
             await self._report_command(
                 client, topic, command_id, "SUCCESS" if ok else "FAILED", registers,
-                error=None if ok else message, confirmed=ok, message=message,
+                error=None if ok else message, confirmed=ok, message=message, plc=service.last_plc_values,
             )
         except Exception as e:
             logger.error(f"[CloudMQTTService] Tracked command {command_id} failed: {e}")
@@ -519,10 +521,10 @@ class CloudMQTTService:
             from app.database.session import SessionLocal
 
             db = SessionLocal()
-            ok, confirmed, message = await self._execute_setting_command(db, cmd, command_id)
+            ok, confirmed, message, plc = await self._execute_setting_command(db, cmd, command_id)
         except Exception as e:
             logger.error(f"[CloudMQTTService] Setting command {command_id or topic} failed: {e}")
-            ok, confirmed, message = False, None, f"Gateway 處理失敗: {e}"
+            ok, confirmed, message, plc = False, None, f"Gateway 處理失敗: {e}", None
         finally:
             if db is not None:
                 db.close()
@@ -530,14 +532,14 @@ class CloudMQTTService:
         if command_id:
             await self._report_command(
                 client, topic, command_id, "SUCCESS" if ok else "FAILED", registers,
-                error=None if ok else message, confirmed=confirmed, message=message,
+                error=None if ok else message, confirmed=confirmed, message=message, plc=plc,
             )
         elif not ok:
             logger.error(f"[CloudMQTTService] Setting command {topic} failed: {message}")
 
     @staticmethod
     async def _execute_setting_command(db, cmd: Dict[str, Any], command_id: Optional[str]) -> tuple:
-        """透過 PlcCommandService 執行 (與 Gateway 前端共用)，回傳 (是否成功, 是否經 PLC 確認, 訊息)"""
+        """透過 PlcCommandService 執行 (與 Gateway 前端共用)，回傳 (是否成功, 是否經 PLC 確認, 訊息, PLC 點位值)"""
         from app.schemas.plc_command_schema import PlcCommandRequest
         from app.services.plc_command_service import PlcCommandError, PlcCommandService
 
@@ -556,10 +558,13 @@ class CloudMQTTService:
                 event=cmd["event"],
             )
         except PlcCommandError as e:
-            return False, None, str(e)
+            return False, None, str(e), None
         if result.confirmed is False:
-            return False, False, result.confirmMessage
-        return True, result.confirmed is True, result.confirmMessage or "已轉發至本地 MQTT，此指令無完成暫存器可確認"
+            return False, False, result.confirmMessage, result.plcValues
+        return (
+            True, result.confirmed is True,
+            result.confirmMessage or "已轉發至本地 MQTT，此指令無完成暫存器可確認", result.plcValues,
+        )
 
     async def _forward_to_local_mqtt(self, topic: str, payload_str: str, parts: list) -> bool:
         """將雲端指令轉換主題格式並發送至 Gateway 本地 MQTT，回傳是否成功發布"""
