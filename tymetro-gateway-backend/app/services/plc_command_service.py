@@ -142,6 +142,10 @@ DONE_REGISTER_BY_REGISTER: Dict[str, str] = {
 }
 
 
+def _fmt(value: Optional[float]) -> str:
+    return "無資料" if value is None else f"{value:g}"
+
+
 @dataclass
 class _DoneWatcher:
     """單一目標的完成確認狀態 (execute 與 execute_batch 共用)"""
@@ -154,6 +158,7 @@ class _DoneWatcher:
     trigger_register: Optional[str] = None
     seen_reset: bool = field(init=False)
     done_value: Optional[float] = None
+    trigger_value: Optional[float] = None
     filled: bool = False
 
     def __post_init__(self):
@@ -357,6 +362,7 @@ class PlcCommandService:
         - 有 trigger_register 時，另需其值為 0 (讀不到該點位時不阻擋)
         """
         w.done_value = self._read_sensor_value(w.car, w.equipment, w.done_register)
+        w.trigger_value = self._read_sensor_value(w.car, w.equipment, w.trigger_register)
         if w.mode == "match":
             w.filled = w.done_value is not None and w.expected is not None and abs(w.done_value - w.expected) < 0.1
         elif w.done_value != 1:
@@ -366,17 +372,18 @@ class PlcCommandService:
             w.filled = w.seen_reset
         if not w.filled:
             return False
-        trigger_value = self._read_sensor_value(w.car, w.equipment, w.trigger_register)
-        return trigger_value is None or trigger_value == 0
+        return w.trigger_value is None or w.trigger_value == 0
 
     @staticmethod
     def _done_message(w: _DoneWatcher, ok: bool, timeout: float) -> str:
+        values = f"{w.done_register}={_fmt(w.done_value)}"
+        if w.trigger_register:
+            values += f", {w.trigger_register}={_fmt(w.trigger_value)}"
         if ok:
-            suffix = f"，{w.trigger_register} 已清空)" if w.trigger_register else ")"
-            return f"PLC 已完成 ({w.done_register}={w.done_value:g}{suffix}"
+            return f"PLC 已完成 ({values})"
         if w.filled and w.trigger_register:
-            return f"PLC 已回填 {w.done_register} 但 {w.trigger_register} 未於 {timeout:g} 秒內清空"
-        return f"PLC 未於 {timeout:g} 秒內回報完成 ({w.done_register})"
+            return f"PLC 已回填 {w.done_register} 但 {w.trigger_register} 未在時限內清空 ({values})"
+        return f"PLC 未在時限內回報完成 ({values})"
 
     async def _wait_done(
         self,
@@ -483,8 +490,9 @@ class PlcCommandService:
             logger.warning(f"[PlcCommand] 批次 {command} 第 {attempt}/{attempts} 次仍有 {len(pending)} 台未確認")
 
         for i, w in watchers.items():
-            results[i].confirmed = i not in pending
-            results[i].message = self._done_message(w, results[i].confirmed, attempt_timeout)
+            is_confirmed = i not in pending
+            results[i].confirmed = is_confirmed
+            results[i].message = self._done_message(w, is_confirmed, attempt_timeout)
 
         for i, result in enumerate(results):
             failure = result.error or (result.message if result.confirmed is False else None)
