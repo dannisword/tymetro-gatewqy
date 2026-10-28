@@ -38,21 +38,3 @@ class EquipmentResponse(EquipmentBase, AuditBase):
     lastSeenAt: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-
-class TemperatureSetRequest(BaseModel):
-    trainCode: Optional[str] = Field("101", description="車組代碼")
-    carNo: int = Field(..., description="車廂編號 (如 1101)")
-    endPos: int = Field(..., description="端點 (1 或 2)")
-    targetTemperature: float = Field(..., ge=16.0, le=30.0, description="目標溫度 (°C)")
-
-class TemperatureBatchSetRequest(BaseModel):
-    trainCode: Optional[str] = Field("101", description="車組代碼")
-    targetTemperature: float = Field(..., ge=16.0, le=30.0, description="目標溫度 (°C)")
-    targets: Optional[List[dict]] = Field(None, description="指定目標清單 [{carNo, endPos}]，未指定則預設全部 8 端點")
-
-class TemperatureSetResult(BaseModel):
-    success: bool
-    message: str
-    targetTemperature: float
-    confirmedCount: int
-    failedTargets: List[str] = []

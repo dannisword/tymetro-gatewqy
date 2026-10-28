@@ -28,8 +28,8 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
         cursor.execute("PRAGMA temp_store = MEMORY;")
         # 5. 開啟 64MB 記憶體映射 I/O，加速唯讀查詢
         cursor.execute("PRAGMA mmap_size = 67108864;")
-        # 6. 設定鎖定等待時間 (5秒)，防止 database is locked 拋出異常
-        cursor.execute("PRAGMA busy_timeout = 5000;")
+        # 6. 設定鎖定等待時間 (30秒，與 connect_args timeout 一致)，防止批次設定/背景採集同時寫入時 database is locked 拋出異常
+        cursor.execute("PRAGMA busy_timeout = 30000;")
         cursor.close()
 else:
     engine = create_engine(

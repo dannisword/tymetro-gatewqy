@@ -497,16 +497,22 @@ class PlcCommandService:
         pending = [i for i in messages if i in watchers]
         attempts = max(1, spec.retries) if spec.done_mode == "match" else 1
         attempt_timeout = CONFIRM_TIMEOUT_SEC / attempts
-        for attempt in range(1, attempts + 1):
-            if attempt > 1:
-                await gateway_mqtt_service.publish_messages([messages[i] for i in pending])
-            deadline = time.monotonic() + attempt_timeout
-            while pending and time.monotonic() < deadline:
-                await asyncio.sleep(CONFIRM_INTERVAL_SEC)
-                pending = [i for i in pending if not self._poll_done(watchers[i])]
-            if not pending:
-                break
-            logger.warning(f"[PlcCommand] 批次 {command} 第 {attempt}/{attempts} 次仍有 {len(pending)} 台未確認")
+        # 等待期間請求被中斷 (連線斷開、服務重載) 時，仍要把設定紀錄寫入後再往上拋出
+        interrupted: Optional[BaseException] = None
+        try:
+            for attempt in range(1, attempts + 1):
+                if attempt > 1:
+                    await gateway_mqtt_service.publish_messages([messages[i] for i in pending])
+                deadline = time.monotonic() + attempt_timeout
+                while pending and time.monotonic() < deadline:
+                    await asyncio.sleep(CONFIRM_INTERVAL_SEC)
+                    pending = [i for i in pending if not self._poll_done(watchers[i])]
+                if not pending:
+                    break
+                logger.warning(f"[PlcCommand] 批次 {command} 第 {attempt}/{attempts} 次仍有 {len(pending)} 台未確認")
+        except BaseException as e:
+            interrupted = e
+            logger.warning(f"[PlcCommand] 批次 {command} 等待確認時被中斷 ({type(e).__name__})，先寫入設定紀錄")
 
         for i, w in watchers.items():
             is_confirmed = i not in pending
@@ -514,14 +520,18 @@ class PlcCommandService:
             results[i].plcValues = self._plc_values(w)
             results[i].message = self._done_message(w, is_confirmed, attempt_timeout)
 
+        log_rows: Dict[int, Dict[str, Any]] = {}
         for i, result in enumerate(results):
             failure = result.error or (result.message if result.confirmed is False else None)
             if i in messages:
                 value_text = f"{log_value} | {result.message}" if result.message else log_value
-                result.settingLogId = self._write_setting_log(
-                    command, operator, value_text, messages[i]["topic"], messages[i]["_payload"],
+                log_rows[i] = dict(
+                    command=command, operator=operator, log_value=value_text,
+                    topic=messages[i]["topic"], payload=messages[i]["_payload"],
                     status="FAILED" if failure else "SUCCESS", error_message=failure,
                 )
+        for i, log_id in self._write_setting_logs(log_rows).items():
+            results[i].settingLogId = log_id
 
         failed = [r for r in results if not r.ok]
         elapsed_ms = int((time.perf_counter() - started) * 1000)
@@ -543,7 +553,50 @@ class PlcCommandService:
         except Exception as e:
             self.db.rollback()
             logger.error(f"[PlcCommand] 寫入稽核紀錄失敗: {e}")
+        if interrupted is not None:
+            raise interrupted
         return results
+
+    def _build_setting_log(
+        self,
+        command: str,
+        operator: str,
+        log_value: Optional[str],
+        topic: str,
+        payload: Dict[str, Any],
+        command_id: Optional[str] = None,
+        status: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> SettingLog:
+        now = get_local_now()
+        return SettingLog(
+            settingType=command,
+            value=log_value,
+            operator=operator,
+            isNotified=True,
+            recordedAt=now,
+            topic=topic,
+            payload=json.dumps(payload, ensure_ascii=False),
+            commandId=command_id,
+            status="ACKED" if command_id else status,
+            errorMessage=error_message[:500] if error_message else None,
+            ackedAt=now if command_id else None,
+            finishedAt=now if status and not command_id else None,
+        )
+
+    def _write_setting_logs(self, rows: Dict[int, Dict[str, Any]]) -> Dict[int, Optional[int]]:
+        """批次寫入多筆設定紀錄 (單一 commit)；回傳 {索引: 紀錄 id}，失敗時全部為 None"""
+        if not rows:
+            return {}
+        try:
+            logs = {i: self._build_setting_log(**kw) for i, kw in rows.items()}
+            self.db.add_all(logs.values())
+            self.db.commit()
+            return {i: int(log.id) for i, log in logs.items()}  # type: ignore[arg-type]
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"[PlcCommand] 批次寫入設定紀錄失敗: {e}")
+            return {i: None for i in rows}
 
     def _write_setting_log(
         self,

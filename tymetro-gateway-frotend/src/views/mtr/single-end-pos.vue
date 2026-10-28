@@ -61,20 +61,6 @@ const withLockDelay = (lockRef: { value: boolean }, delayMs = 2000) => {
   }, delayMs);
 };
 
-/**
- * 畫面通用全螢幕 loading 2 秒
- * @param delayMs 延遲時間 (毫秒)，預設 2000ms
- */
-const triggerActionLoading = (delayMs = 2000) => {
-  const loadingInstance = ElLoading.service({
-    lock: true,
-    text: '載入中...',
-    background: 'rgba(0, 0, 0, 0.8)'
-  });
-  setTimeout(() => {
-    loadingInstance.close();
-  }, delayMs);
-};
 // ==========================================
 // 1. Hook & Utilities
 // ==========================================
@@ -106,7 +92,7 @@ const trainNo = computed(() => carType.value * 100 + (carNo.value % 100));
 // ==========================================
 // 3. MQTT Connection & Heartbeat Tracker State
 // ==========================================
-const { isConnected: isMqttConnected, connect, subscribe, publish } = useMQTT();
+const { isConnected: isMqttConnected, connect, subscribe } = useMQTT();
 const isDeviceConnected = ref(false);
 const isTempSettingLocked = ref(false);
 const isDamperSettingLocked = ref(false);
@@ -566,20 +552,21 @@ const setTargetTemp = async () => {
   });
 
   try {
-    const res = await httpOperations.post('/api/v1/equipments/set-temperature', {
+    const res = await httpOperations.post('/api/v1/plc-control/execute', {
+      command: SettingTypeEnum.TEMPERATURE,
       trainCode: String(trainNo.value),
       carNo: Number(carNo.value),
       endPos: Number(endPosId.value),
-      targetTemperature: targetTemperature
+      value: targetTemperature
     }, { meta: { loading: false } });
 
-    const isSuccess = Boolean(res?.success && (res?.data === undefined || res?.data?.success !== false));
+    const isSuccess = Boolean(res?.success && res?.data?.confirmed !== false);
 
     if (isSuccess) {
       TLSuccess(`溫度設定成功！目標溫度：${targetTemperature}°C (PLC 已確認)`);
       syncStatusToRegisters();
     } else {
-      TLWarning(res?.message || res?.data?.message || '溫度指令已送出，但 PLC 尚未確認');
+      TLWarning(res?.message || res?.data?.confirmMessage || '溫度指令已送出，但 PLC 尚未確認');
     }
   } catch (err: any) {
     console.error('Failed to set temperature via backend API:', err);
@@ -719,29 +706,41 @@ const executePlcCommand = async (command: SettingTypeEnum, value?: number): Prom
 const setFreshAirDamper = async (val: number) => {
   if (isDamperSettingLocked.value) return;
   freshAirDamperPos.value = val;
-  if (await executePlcCommand(SettingTypeEnum.FRESH_AIR_DAMPER, val)) {
-    TLSuccess(`新鮮空氣擋板指令已發送：${freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`}`);
+  const label = freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`;
+  isDamperSettingLocked.value = true;
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: `正在設定新鮮空氣擋板 (${label}) 並等待 PLC 確認...`,
+    background: 'rgba(0, 0, 0, 0.7)'
+  });
+  try {
+    if (await executePlcCommand(SettingTypeEnum.FRESH_AIR_DAMPER, val)) {
+      TLSuccess(`新鮮空氣擋板設定成功：${label} (PLC 已確認)`);
+    }
+  } finally {
+    loadingInstance.close();
+    withLockDelay(isDamperSettingLocked, 1500);
   }
-
-  // 畫面全螢幕 loading 2 秒
-  triggerActionLoading();
-
-  // 執行後，畫面延遲 2 秒避免連續重複點擊
-  withLockDelay(isDamperSettingLocked);
 };
 
 const setEmergAirDamper = async (val: number) => {
   if (isDamperSettingLocked.value) return;
   emergAirDamper.value = val;
-  if (await executePlcCommand(SettingTypeEnum.EMERGENCY_AIR_SUPPLY, val)) {
-    TLSuccess(`緊急供氣擋板指令已發送：${val === 2 ? '開啟' : '關閉'}`);
+  const label = val === 2 ? '開啟' : '關閉';
+  isDamperSettingLocked.value = true;
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: `正在設定緊急供氣擋板 (${label}) 並等待 PLC 確認...`,
+    background: 'rgba(0, 0, 0, 0.7)'
+  });
+  try {
+    if (await executePlcCommand(SettingTypeEnum.EMERGENCY_AIR_SUPPLY, val)) {
+      TLSuccess(`緊急供氣擋板設定成功：${label} (PLC 已確認)`);
+    }
+  } finally {
+    loadingInstance.close();
+    withLockDelay(isDamperSettingLocked, 1500);
   }
-
-  // 畫面全螢幕 loading 2 秒
-  triggerActionLoading();
-
-  // 執行後，畫面延遲 2 秒避免連續重複點擊
-  withLockDelay(isDamperSettingLocked);
 };
 
 const syncStatusToRegisters = () => {
@@ -882,9 +881,10 @@ const handleBatchTempSubmit = async () => {
 
     try {
       // 直接向後端發送 8 端點批次溫度命令 (由後端自動從 DB 載入 8 台設備並執行閉環驗證)
-      const res = await httpOperations.post('/api/v1/equipments/batch-set-temperature', {
+      const res = await httpOperations.post('/api/v1/plc-control/batch-execute', {
+        command: SettingTypeEnum.TEMPERATURE,
         trainCode: String(currentTrainNo),
-        targetTemperature: targetTemperature
+        value: targetTemperature
       }, { meta: { loading: false } });
 
       const resData = res?.data;
@@ -907,80 +907,48 @@ const handleBatchTempSubmit = async () => {
     return;
   }
 
-  // 整理 8 個端點供擋板類設定使用 (4 車廂 × 2 端點)
-  const targets: { carNo: number; endPos: number }[] = [];
-  for (let c = 1; c <= 4; c++) {
-    const cNo = carType.value * 1000 + c * 100 + (currentTrainNo % 100);
-    targets.push({ carNo: cNo, endPos: 1 });
-    targets.push({ carNo: cNo, endPos: 2 });
-  }
-
-  let registersPayload: Record<string, number> = {};
-  let successMsg = '';
-  let logValue = '';
-  let settingTypeEnum = SettingTypeEnum.FRESH_AIR_DAMPER;
-
+  // 擋板類：由後端對 8 端點發布 MQTT、逐台確認 PLC (逾時重發最多 3 次) 並寫入設定紀錄
+  let command = SettingTypeEnum.FRESH_AIR_DAMPER;
+  let value = batchFreshAirDamperPos.value;
+  let label = '';
   if (batchSettingType.value === 'freshAir') {
-    const damperVal = batchFreshAirDamperPos.value;
-    registersPayload = {
-      D40212: damperVal
-    };
-    const label = freshAirDamperOptions.value.find(o => o.value === damperVal)?.label || `${damperVal}%`;
-    successMsg = `8 個端點新鮮空氣擋板開度指令已發送：${label}`;
-    logValue = `8端點批次設定新鮮空氣擋板: ${label} (D40212: ${damperVal})`;
-    settingTypeEnum = SettingTypeEnum.FRESH_AIR_DAMPER;
-    freshAirDamperPos.value = damperVal;
-  } else if (batchSettingType.value === 'emergAir') {
-    const emergVal = batchEmergAirDamper.value;
-    registersPayload = {
-      D40214: emergVal
-    };
-    const stateText = emergVal === 2 ? '開啟' : '關閉';
-    successMsg = `8 個端點緊急供氣擋板指令已發送：${stateText}`;
-    logValue = `8端點批次設定緊急供氣擋板: ${stateText} (D40214: ${emergVal})`;
-    settingTypeEnum = SettingTypeEnum.EMERGENCY_AIR_SUPPLY;
-    emergAirDamper.value = emergVal;
+    label = freshAirDamperOptions.value.find(o => o.value === value)?.label || `${value}%`;
+    label = `新鮮空氣擋板 ${label}`;
+  } else {
+    command = SettingTypeEnum.EMERGENCY_AIR_SUPPLY;
+    value = batchEmergAirDamper.value;
+    label = `緊急供氣擋板 ${value === 2 ? '開啟' : '關閉'}`;
   }
 
-  // 逐一發送 MQTT 指令至 8 個端點 (擋板類)
-  targets.forEach(({ carNo: cNo, endPos: ep }) => {
-    const topic = `TYMC/AIR/SET/${currentTrainNo}/${cNo}/${ep}`;
-    const payload = {
-      events: 'set_value',
+  isBatchSettingLocked.value = true;
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: `正在批次設定 8 端點${label} 並等待 PLC 確認...`,
+    background: 'rgba(0, 0, 0, 0.7)'
+  });
+
+  try {
+    const res = await httpOperations.post('/api/v1/plc-control/batch-execute', {
+      command,
       trainCode: String(currentTrainNo),
-      carNo: cNo,
-      endPos: ep,
-      register: registersPayload
-    };
-    publish(topic, payload);
-  });
+      value
+    }, { meta: { loading: false } });
 
-  // 更新當前頁面的暫存器
-  syncStatusToRegisters();
-  TLSuccess(successMsg);
-
-  // 記錄 setting log
-  httpOperations.post('/api/v1/setting-logs', {
-    settingType: settingTypeEnum,
-    train: String(currentTrainNo),
-    carNo: Number(carNo.value),
-    value: logValue,
-    topic: `TYMC/AIR/SET/${currentTrainNo}/+/+`,
-    payload: JSON.stringify({
-      settingType: batchSettingType.value,
-      registers: registersPayload,
-      endpointsCount: targets.length,
-      targets
-    })
-  }).catch(err => {
-    console.error('Failed to log batch setting:', err);
-  });
-
-  // 畫面全螢幕 loading 2 秒
-  triggerActionLoading();
-
-  // 送出後鎖定 2 秒延遲，避免連續重複送出
-  withLockDelay(isBatchSettingLocked);
+    if (res?.success && res?.data?.success) {
+      TLSuccess(`8 個端點${label}設定成功 (全數 PLC 已確認)`);
+      if (command === SettingTypeEnum.FRESH_AIR_DAMPER) freshAirDamperPos.value = value;
+      else emergAirDamper.value = value;
+      syncStatusToRegisters();
+    } else {
+      TLWarning(res?.message || res?.data?.message || '部分端點 PLC 尚未確認，請查看設定紀錄');
+    }
+  } catch (err: any) {
+    console.error('Failed to batch execute PLC command:', err);
+    TLError(err?.message || '批次設定請求失敗');
+  } finally {
+    loadingInstance.close();
+    withLockDelay(isBatchSettingLocked, 2000);
+  }
 };
 
 const openTrend = (reg: ModbusRegisterRow) => {

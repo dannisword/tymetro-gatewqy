@@ -64,7 +64,7 @@ export enum AuditCategory {
  * 註解標示的暫存器為 (觸發；完成回報)，後端目前僅確認 D40219 / D40221 / D40223
  */
 export enum SettingTypeEnum {
-  TEMPERATURE = "TEMPERATURE",                        // 目標溫度 (D40200，另由 /equipments/set-temperature 處理)
+  TEMPERATURE = "TEMPERATURE",                        // 目標溫度 (D40200)
   FRESH_AIR_DAMPER = "FRESH_AIR_DAMPER",              // 新鮮空氣擋板開度 (D40212；0 / 25 / 50 / 75 / 100)
   EMERGENCY_AIR_SUPPLY = "EMERGENCY_AIR_SUPPLY",      // 緊急供氣擋板 (D40214；1 關閉 / 2 開啟)
   RESET_ALL = "RESET_ALL",                            // 重置復歸 (D40130，觸發)
