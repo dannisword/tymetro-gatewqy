@@ -365,23 +365,17 @@ class PlcCommandService:
 
     def _poll_done(self, w: _DoneWatcher) -> bool:
         """
-        PC 寫入觸發點位後，PLC 完成時會「清空觸發點位」並「回填完成點位」，兩者皆成立才視為完成：
-        - flag：完成點位為 1；發送前已為 1 時，須先看到歸零再回到 1，避免把舊值當成完成
-        - match：完成點位與寫入值 (expected) 相同 (設定同一個值為冪等，不需歸零)
-        - 有 trigger_register 時，另需其值為 0 (讀不到該點位時不阻擋)
+        完成點位回填即視為完成，不檢查觸發點位是否已清空、也不要求先歸零：
+        - flag：完成點位為 1
+        - match：完成點位與寫入值 (expected) 相同
         """
         w.done_value = self._read_sensor_value(w.car, w.equipment, w.done_register)
         w.trigger_value = self._read_sensor_value(w.car, w.equipment, w.trigger_register)
         if w.mode == "match":
             w.filled = w.done_value is not None and w.expected is not None and abs(w.done_value - w.expected) < 0.1
-        elif w.done_value != 1:
-            w.seen_reset = True
-            w.filled = False
         else:
-            w.filled = w.seen_reset
-        if not w.filled:
-            return False
-        return w.trigger_value is None or w.trigger_value == 0
+            w.filled = w.done_value == 1
+        return w.filled
 
     @staticmethod
     def _done_message(w: _DoneWatcher, ok: bool, timeout: float) -> str:
@@ -390,8 +384,6 @@ class PlcCommandService:
             values += f", {w.trigger_register}={_fmt(w.trigger_value)}"
         if ok:
             return f"PLC 已完成 ({values})"
-        if w.filled and w.trigger_register:
-            return f"PLC 已回填 {w.done_register} 但 {w.trigger_register} 未在時限內清空 ({values})"
         return f"PLC 未在時限內回報完成 ({values})"
 
     @staticmethod
