@@ -105,8 +105,6 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
         to_register_value=_emergency_air,
         to_log_value=lambda v, reg: str(reg),
         done_register="D40215",
-        done_mode="match",
-        retries=5,
     ),
     SettingType.RESET_ALL.value: _trigger("D40130", "重置復歸", done_register="D40131"),
     SettingType.INITIAL_VALUE.value: _trigger("D40216", "初始值", done_register="D40217"),
@@ -366,7 +364,7 @@ class PlcCommandService:
     def _poll_done(self, w: _DoneWatcher) -> bool:
         """
         完成點位回填即視為完成，不檢查觸發點位是否已清空、也不要求先歸零：
-        - flag：完成點位為 1
+        - flag：完成點位 >= 1 (完成值可能大於 1)
         - match：完成點位與寫入值 (expected) 相同
         """
         w.done_value = self._read_sensor_value(w.car, w.equipment, w.done_register)
@@ -374,7 +372,7 @@ class PlcCommandService:
         if w.mode == "match":
             w.filled = w.done_value is not None and w.expected is not None and abs(w.done_value - w.expected) < 0.1
         else:
-            w.filled = w.done_value == 1
+            w.filled = w.done_value is not None and w.done_value >= 1
         return w.filled
 
     @staticmethod
