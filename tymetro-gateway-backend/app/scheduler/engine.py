@@ -26,10 +26,9 @@ from app.models.sensor_model import Sensor
 from app.models.setting_log_model import SettingLog
 from app.models.car_model import Car
 from app.models.equipment_model import Equipment
-from app.core.enums import PlcEvent, PlcRegister
+from app.core.enums import PlcRegister, SettingType
 from app.services.audit_log_service import AuditLogService
-from app.services.gateway_mqtt_service import gateway_mqtt_service
-from app.services.equipment_manager import equipment_manager
+from app.services.plc_command_service import PlcCommandService
 from app.utils.datetime_util import get_active_season_by_date, get_local_now, LOCAL_TZ
 
 
@@ -368,7 +367,7 @@ class SchedulerEngine:
 
             logger.info(f"[SchedulerEngine Task] Successfully updated {updated_count} sensor(s) to target temp {target_val}°C.")
 
-            # 8. 丟給 8 台 PLC 並執行非同步閉環驗證與重試
+            # 8. 丟給 8 台 PLC：與手動批次設定共用 PlcCommandService.execute_batch (逐台確認 D40201、逾時重發、各端點設定紀錄)
             try:
                 active_equipments = (
                     db.query(Equipment, Car)
@@ -387,111 +386,39 @@ class SchedulerEngine:
                         action="dispatch_plc_temperature"
                     )
                 else:
-                    pending_targets = []
-                    for eq, car in active_equipments:
-                        train_code = car.trainCode or "101"
-                        car_vin = car.carVin or str(car.carNo)
-                        car_no_val = int(car.carVin) if car.carVin and car.carVin.isdigit() else (car.carNo or 0)
-                        pending_targets.append({
-                            "eq_id": str(eq.id),
-                            "train_code": train_code,
-                            "car_vin": car_vin,
-                            "car_no": car_no_val,
-                            "end_pos": eq.endPos,
-                            "name": eq.equipmentName
-                        })
-
-                    max_retries = 3
-                    retry_interval = 2.5  # 等待 PLC 週期性上報及清零
-
-                    for attempt in range(1, max_retries + 1):
-                        # 1. 僅針對尚未確認完成的設備發送 MQTT 指令
-                        mqtt_messages = []
-                        for item in pending_targets:
-                            topic = f"TYMC/AIR/SET/{item['train_code']}/{item['car_vin']}/{item['end_pos']}"
-                            payload = {
-                                "events": PlcEvent.SET_VALUE.value,
-                                "trainCode": str(item['train_code']),
-                                "carNo": item['car_no'],
-                                "endPos": item['end_pos'],
-                                "register": {
-                                    PlcRegister.TEMP_SETTING_CMD.value: scaled_temp
-                                }
-                            }
-                            mqtt_messages.append({
-                                "topic": topic,
-                                "payload": json.dumps(payload, ensure_ascii=False),
-                                "qos": 1,
-                                "retain": True
-                            })
-
-                        await gateway_mqtt_service.publish_messages(mqtt_messages)
-                        logger.info(
-                            f"[SchedulerEngine Task] Attempt {attempt}/{max_retries}: Dispatched write_temperature "
-                            f"(targetTemp={target_val}°C, scaled={scaled_temp}) to {len(pending_targets)} PLC(s)."
-                        )
-
-                        # 2. 等待 PLC 處理並上報回讀數據
-                        await asyncio.sleep(retry_interval)
-
-                        # 3. 檢查即時設備快取 (D40200 是否已被 PLC 執行並清零)
-                        still_pending = []
-                        for item in pending_targets:
-                            eq_state = equipment_manager.get_equipment_state(item["eq_id"])
-                            sensors = eq_state.get("sensors", {}) if eq_state else {}
-
-                            d40200_val = sensors.get(PlcRegister.TEMP_SETTING_CMD.value)
-                            d40201_val = sensors.get(PlcRegister.TEMP_SETTING_FEEDBACK.value)
-                            d40121_val = sensors.get(PlcRegister.TEMP_SETTING_DISPLAY.value)
-
-                            # 判定成功：
-                            # 1. D40200 被 PLC 執行後清零 (== 0)
-                            # 2. 或 D40201 (設定反饋) 吻合目標設定溫度
-                            # 3. 或 顯示點位 D40121 已同步為目標溫度
-                            d40201_matched = False
-                            if d40201_val is not None:
-                                try:
-                                    f_val = float(d40201_val)
-                                    if abs(f_val - scaled_temp) < 0.1 or abs((f_val / 10.0) - target_val) < 0.1 or abs(f_val - target_val) < 0.1:
-                                        d40201_matched = True
-                                except (ValueError, TypeError):
-                                    pass
-
-                            is_completed = (
-                                (d40200_val == 0 or d40200_val == 0.0) or
-                                d40201_matched or
-                                (d40121_val is not None and abs(float(d40121_val) - target_val) < 0.1)
-                            )
-
-                            if not is_completed:
-                                still_pending.append(item)
-
-                        pending_targets = still_pending
-                        if not pending_targets:
-                            logger.info(f"[SchedulerEngine Task] All PLCs successfully verified at attempt {attempt}!")
-                            break
-
-                    first_train_code = active_equipments[0][1].trainCode if active_equipments else "101"
-                    if not pending_targets:
+                    targets = [
+                        {
+                            "carNo": int(car.carVin) if car.carVin and car.carVin.isdigit() else (car.carNo or 0),
+                            "endPos": eq.endPos,
+                        }
+                        for eq, car in active_equipments
+                    ]
+                    results = await PlcCommandService(db).execute_batch(
+                        command=SettingType.TEMPERATURE.value,
+                        value=target_val,
+                        targets=targets,
+                        operator="system_scheduler",
+                        ip_address=None,
+                    )
+                    failed_names = [r.name for r in results if not r.ok]
+                    if not failed_names:
                         self._record_audit_log(
                             db,
                             status="success",
                             detail=(
-                                f"已成功派送排程溫度至 {len(active_equipments)} 台 PLC 並確認設定完成 "
-                                f"(D40200 全數清零, 目標溫度: {target_val}°C, "
-                                f"主題範例: TYMC/AIR/SET/{first_train_code}/+/+)"
+                                f"已成功派送排程溫度至 {len(results)} 台 PLC 並確認設定完成 "
+                                f"(D40201 全數吻合, 目標溫度: {target_val}°C)"
                             ),
                             action="dispatch_plc_temperature"
                         )
                     else:
-                        failed_names = [f"{p['car_vin']}-{p['end_pos']}端" for p in pending_targets]
                         logger.warning(f"[SchedulerEngine Task] Temperature sync failed on PLCs after retries: {failed_names}")
                         self._record_audit_log(
                             db,
                             status="warning",
                             detail=(
-                                f"排程溫度部分 PLC 未確認清零 (失敗設備: {', '.join(failed_names)}, "
-                                f"目標溫度: {target_val}°C, 嘗試次數: {max_retries})"
+                                f"排程溫度部分 PLC 未確認 (失敗設備: {', '.join(failed_names)}, "
+                                f"目標溫度: {target_val}°C)"
                             ),
                             action="dispatch_plc_temperature"
                         )
@@ -504,7 +431,6 @@ class SchedulerEngine:
                     detail=f"PLC 溫度控制指令派送失敗: {mqtt_err}",
                     action="dispatch_plc_temperature"
                 )
-
 
 
         except Exception as e:

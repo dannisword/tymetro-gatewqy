@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from typing import Optional
 from datetime import datetime
+from app.core.enums import get_setting_type_label
 
 class SettingLogBase(BaseModel):
     settingType: str = Field(..., description="設定類型 (如: 溫度, 新鮮空氣擋板開度, 開啟緊急供氣擋板, 重置2/3)")
@@ -37,5 +38,10 @@ class SettingLogUpdate(BaseModel):
 class SettingLogResponse(SettingLogBase):
     id: int
     recordedAt: datetime = Field(..., description="操作時間")
+
+    @computed_field(description="設定項目中文名稱")
+    @property
+    def settingTypeName(self) -> Optional[str]:
+        return get_setting_type_label(self.settingType)
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

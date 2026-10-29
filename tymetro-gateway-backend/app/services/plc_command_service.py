@@ -87,7 +87,7 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
         to_log_value=lambda v, reg: f"{reg / 10:g}°C",
         done_register="D40201",
         done_mode="match",
-        retries=3,
+        retries=5,
         from_register_value=lambda raw: raw / 10.0,
     ),
     SettingType.FRESH_AIR_DAMPER.value: PlcCommandSpec(
@@ -97,7 +97,7 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
         to_log_value=lambda v, reg: "關閉" if reg == 0 else f"{reg}%",
         done_register="D40213",
         done_mode="match",
-        retries=3,
+        retries=5,
     ),
     SettingType.EMERGENCY_AIR_SUPPLY.value: PlcCommandSpec(
         event=PlcEvent.SET_VALUE.value,
@@ -106,7 +106,7 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
         to_log_value=lambda v, reg: str(reg),
         done_register="D40215",
         done_mode="match",
-        retries=3,
+        retries=5,
     ),
     SettingType.RESET_ALL.value: _trigger("D40130", "重置復歸", done_register="D40131"),
     SettingType.INITIAL_VALUE.value: _trigger("D40216", "初始值", done_register="D40217"),

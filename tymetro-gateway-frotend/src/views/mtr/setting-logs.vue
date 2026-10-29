@@ -48,7 +48,8 @@ const gridColumns = ref([
   },
   {
     headerName: '設定項目',
-    field: 'settingType',
+    field: 'settingTypeName',
+    valueGetter: (p: any) => p.data?.settingTypeName || p.data?.settingType || '',
     flex: 1.2,
     minWidth: 160
   },

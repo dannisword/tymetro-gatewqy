@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 class LabeledEnum(Enum):
@@ -100,6 +100,28 @@ class SettingType(LabeledEnum):
 
 # 相容別名
 SettingTypeEnum = SettingType
+
+# 非 PLC 指令的稽核動作名稱
+_ACTION_LABELS: Dict[str, str] = {
+    "sync_schedule_config": "排程同步設定",
+    "dispatch_plc_temperature": "排程派送溫度",
+}
+
+
+def get_setting_type_label(raw: Optional[str]) -> Optional[str]:
+    """將設定紀錄的 settingType/action (如 plc_fresh_air_damper) 轉為中文名稱，查無對應則回傳原值"""
+    if not raw:
+        return raw
+    key = raw.lower()
+    if key in _ACTION_LABELS:
+        return _ACTION_LABELS[key]
+    labels = {item.value.lower(): item.label for item in SettingType}
+    if key.startswith("plc_batch_"):
+        label = labels.get(key[len("plc_batch_"):])
+        return f"批次{label}" if label else raw
+    if key.startswith("plc_"):
+        return labels.get(key[len("plc_"):], raw)
+    return labels.get(key, raw)
 
 
 def get_all_enums() -> Dict[str, Any]:
