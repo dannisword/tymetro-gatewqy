@@ -53,6 +53,7 @@ declare module 'vue' {
     EndpointCard: typeof import('./components/EndpointCard.vue')['default']
     LoadingOverlay: typeof import('./components/LoadingOverlay.vue')['default']
     MapEditor: typeof import('./components/MapEditor.vue')['default']
+    MessageBox: typeof import('./components/MessageBox.vue')['default']
     PageHeader: typeof import('./components/PageHeader.vue')['default']
     RoomBedMap: typeof import('./components/RoomBedMap.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

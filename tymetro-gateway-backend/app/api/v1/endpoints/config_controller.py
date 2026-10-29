@@ -23,7 +23,8 @@ from app.utils.http_util import HttpUtil
 from app.database.init_db import sync_yaml_to_db
 from app.core.config_yaml import reload_gateway_yaml_config
 from app.services.gateway_mqtt_service import gateway_mqtt_service
-from app.services.cloud_mqtt_service import cloud_mqtt_service
+from app.services.cloud_mqtt_service import cloud_mqtt_service, is_cloud_mqtt_enabled, set_cloud_mqtt_enabled
+from pydantic import BaseModel
 from app.core.enums import get_all_enums
 from app.services.equipment_event_service import equipment_event_service
 
@@ -33,6 +34,28 @@ router = APIRouter()
 def get_enums():
     """回傳前端所需的各類列舉選項 (label/value 列表)"""
     return ResponseUtil.success(data=get_all_enums())
+
+class CloudMqttSwitch(BaseModel):
+    enabled: bool
+
+@router.get("/cloud-mqtt", response_model=ResponseBase, summary="取得 Cloud MQTT 開關狀態")
+def get_cloud_mqtt_switch():
+    return ResponseUtil.success(data={"enabled": is_cloud_mqtt_enabled(), "connected": cloud_mqtt_service.is_connected})
+
+@router.post("/cloud-mqtt", response_model=ResponseBase, summary="開啟/關閉 Cloud MQTT (全域開關)")
+async def set_cloud_mqtt_switch(request: CloudMqttSwitch, current_user: User = Depends(get_current_user)):
+    try:
+        set_cloud_mqtt_enabled(request.enabled)
+        if request.enabled:
+            await cloud_mqtt_service.restart()
+        else:
+            await cloud_mqtt_service.stop()
+        return ResponseUtil.success(
+            data={"enabled": is_cloud_mqtt_enabled(), "connected": cloud_mqtt_service.is_connected},
+            message="Cloud MQTT 已開啟" if request.enabled else "Cloud MQTT 已關閉"
+        )
+    except Exception as e:
+        return ResponseUtil.error(message=f"切換 Cloud MQTT 失敗: {e}")
 
 @router.post("/reload", response_model=ResponseBase, summary="觸發熱重載內存快取與 gateway.yaml 設定並同步資料庫與 MQTT 服務")
 async def reload_config(db: Session = Depends(get_db)):

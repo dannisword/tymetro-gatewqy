@@ -9,6 +9,16 @@ from app.core.config_yaml import yaml_settings
 from app.database.db_config_repo import db_config_repo
 from app.utils.datetime_util import get_local_now
 
+# 全域開關：是否啟用 Cloud MQTT (執行期變數，服務重啟後恢復為 True)
+cloud_mqtt_enabled: bool = True
+
+def is_cloud_mqtt_enabled() -> bool:
+    return cloud_mqtt_enabled
+
+def set_cloud_mqtt_enabled(value: bool):
+    global cloud_mqtt_enabled
+    cloud_mqtt_enabled = bool(value)
+
 class CloudMQTTService:
     """
     桃捷雲 Cloud MQTT Forwarder Service:
@@ -83,6 +93,9 @@ class CloudMQTTService:
 
     async def start(self):
         """啟動桃捷雲 MQTT 拋轉任務"""
+        if not cloud_mqtt_enabled:
+            logger.info("[CloudMQTTService] Cloud MQTT is disabled by global switch, skip start.")
+            return
         self.reload_config()
         self._running = True
         self._worker_task = asyncio.create_task(self._publish_loop())

@@ -135,3 +135,11 @@ export const downloadSensorMaps = async (templateCode: string = 'HVAC_STANDARD')
     return await httpOperations.post(url)
 }
 
+
+export const getCloudMqttSwitch = async (): Promise<any> => {
+    return await httpOperations.get('/api/v1/configs/cloud-mqtt')
+}
+
+export const setCloudMqttSwitch = async (enabled: boolean): Promise<any> => {
+    return await httpOperations.post('/api/v1/configs/cloud-mqtt', { enabled })
+}

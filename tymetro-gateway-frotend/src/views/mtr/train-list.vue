@@ -17,9 +17,10 @@ import PageHeader from '@/components/PageHeader.vue';
 import StatsCard from '@/components/StatsCard.vue';
 import EndpointCard from '@/components/EndpointCard.vue';
 import { logger, updateEndpointData, frontendVersionInfo } from '@/utils';
-import { getHealthStatus, getSchedulesList } from '@/utils/api';
+import { getHealthStatus, getSchedulesList, getCloudMqttSwitch, setCloudMqttSwitch } from '@/utils/api';
 
 import dayjs from 'dayjs';
+import { ElMessageBox } from 'element-plus';
 
 // 麵包屑設定
 const breadcrumbItems = [
@@ -82,6 +83,45 @@ const fetchSyncScheduleStatus = async () => {
   } catch (err) {
     logger.warn('[train-list] Failed to fetch sync schedule status:', err);
     syncScheduleActive.value = null;
+  }
+};
+
+// 遠端控制 (Cloud MQTT) 開關 (null = 尚未取得)
+const cloudMqttEnabled = ref<boolean | null>(null);
+const cloudMqttBusy = ref(false);
+
+const fetchCloudMqttSwitch = async () => {
+  try {
+    const res = await getCloudMqttSwitch();
+    cloudMqttEnabled.value = res?.success ? !!res.data?.enabled : null;
+  } catch (err) {
+    logger.warn('[train-list] Failed to fetch cloud mqtt switch:', err);
+    cloudMqttEnabled.value = null;
+  }
+};
+
+const toggleCloudMqtt = async () => {
+  if (cloudMqttEnabled.value === null || cloudMqttBusy.value) return;
+  const next = !cloudMqttEnabled.value;
+  try {
+    await ElMessageBox.confirm(
+      next ? '確定開啟遠端控制 (Cloud MQTT)？' : '確定關閉遠端控制 (Cloud MQTT)？關閉後將停止上傳資料並忽略雲端指令。',
+      next ? '開啟遠端控制' : '關閉遠端控制',
+      { confirmButtonText: '確定', cancelButtonText: '取消', type: 'warning' }
+    );
+  } catch {
+    return;
+  }
+  cloudMqttBusy.value = true;
+  try {
+    const res = await setCloudMqttSwitch(next);
+    if (res?.success) cloudMqttEnabled.value = !!res.data?.enabled;
+    else window.alert(res?.message || '切換失敗');
+  } catch (err) {
+    logger.warn('[train-list] Failed to set cloud mqtt switch:', err);
+    window.alert('切換遠端控制失敗');
+  } finally {
+    cloudMqttBusy.value = false;
   }
 };
 
@@ -288,9 +328,11 @@ onMounted(async() => {
   // 取得後端健康狀態與版本資訊，每 60 秒輪詢確認一次
   fetchBackendHealth();
   fetchSyncScheduleStatus();
+  fetchCloudMqttSwitch();
   backendHealthInterval = setInterval(() => {
     fetchBackendHealth();
     fetchSyncScheduleStatus();
+    fetchCloudMqttSwitch();
   }, 600000);
 
   // 啟動端點超時檢測：每 5 秒檢查各端點是否超過 60 秒未收到 MQTT 訊息
@@ -359,6 +401,26 @@ onUnmounted(() => {
             ></span>
             同步時段溫度設定：{{ syncScheduleActive === null ? '未知' : syncScheduleActive ? '啟用' : '停用' }}
           </span>
+          <BaseButton
+            circle
+            size="sm"
+            class="ml-2"
+            :colorClass="'!h-auto !px-2.5 !py-1 text-xs font-bold normal-case tracking-normal border transition-all disabled:opacity-50 ' + (cloudMqttEnabled === null
+              ? 'bg-slate-50 text-slate-400 border-slate-200'
+              : cloudMqttEnabled
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70 hover:bg-emerald-100'
+                : 'bg-rose-50 text-rose-700 border-rose-200/70 hover:bg-rose-100')"
+            :disabled="cloudMqttEnabled === null || cloudMqttBusy"
+            @click="toggleCloudMqtt"
+          >
+            <span class="inline-flex items-center gap-1.5">
+              <span
+                class="w-1.5 h-1.5 rounded-full"
+                :class="cloudMqttEnabled === null ? 'bg-slate-400' : cloudMqttEnabled ? 'bg-emerald-500' : 'bg-rose-500'"
+              ></span>
+              遠端控制：{{ cloudMqttEnabled === null ? '未知' : cloudMqttEnabled ? '開啟' : '關閉' }}
+            </span>
+          </BaseButton>
         </template>
       </PageHeader>
 
