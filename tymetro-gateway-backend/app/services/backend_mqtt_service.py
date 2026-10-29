@@ -9,30 +9,32 @@ from app.core.config_yaml import yaml_settings
 from app.database.db_config_repo import db_config_repo
 from app.utils.datetime_util import get_local_now
 
-# 全域開關：是否啟用 Cloud MQTT (執行期變數，服務重啟後恢復為 True)
-cloud_mqtt_enabled: bool = True
+# 全域開關：是否接受雲端下行指令 (Cloud -> Gateway)。關閉時仍維持連線與上行，收到指令直接回報 FAILED (執行期變數，服務重啟後恢復為 True)
+backend_mqtt_enabled: bool = True
 
-def is_cloud_mqtt_enabled() -> bool:
-    return cloud_mqtt_enabled
+def is_backend_mqtt_enabled() -> bool:
+    return backend_mqtt_enabled
 
-def set_cloud_mqtt_enabled(value: bool):
-    global cloud_mqtt_enabled
-    cloud_mqtt_enabled = bool(value)
+def set_backend_mqtt_enabled(value: bool):
+    global backend_mqtt_enabled
+    backend_mqtt_enabled = bool(value)
 
-class CloudMQTTService:
+class BackendMQTTService:
     """
-    桃捷雲 Cloud MQTT Forwarder Service:
-    - 專責連線至「桃捷雲」 Cloud MQTT Broker
-    - 接收內存 Queue 佇列中由 PFC200 送進來的 telemetry 數據，並拋轉 (Publish) 至桃捷雲 Topic
+    Backend MQTT Forwarder Service:
+    - 專責連線至Backend MQTT Broker
+    - 接收內存 Queue 佇列中由 PFC200 送進來的 telemetry 數據，並拋轉 (Publish) 至Backend Topic
 
     上行 (Gateway -> Cloud):
     - push_telemetry() 將資料放入 asyncio.Queue，由 _publish_loop 內的 send_worker 逐筆發送
     - 佇列滿 (max_queue_size) 時丟棄最舊資料；封包排隊超過 max_ttl_seconds 亦直接丟棄，只保留最新狀態
     - 發送失敗 (MqttError) 時，未過期且佇列未滿的封包會放回佇列，並觸發重連
-    - Topic = {cloud_topic_prefix}/{topic_suffix}；未指定 suffix 則使用 prefix
+    - Topic = {backend_topic_prefix}/{topic_suffix}；未指定 suffix 則使用 prefix
 
     下行 (Cloud -> Gateway):
-    - 訂閱 {cloud_topic_prefix}/+/+，只處理最後一層以 'R' 結尾的控制指令 (如 '1R')，其餘忽略
+    - 下行開關 (backend_mqtt_enabled) 只能由 Gateway 本地設定 (config API)，雲端無法修改；關閉時仍維持連線與上行，
+      收到任何指令 (有無 commandId 皆同) 都不執行，直接回報 FAILED；所有回報皆帶 enabled，雲端可由回覆確認開關狀態
+    - 訂閱 {backend_topic_prefix}/+/+，只處理最後一層以 'R' 結尾的控制指令 (如 '1R')，其餘忽略
     - 指令會先寫入 SettingLog (operator='Cloud')，再轉換 Topic 後轉發至本地 MQTT：
       雲端 MQT/TRA/OTR/TRC/102/1102/1R -> 本地 TYMC/AIR/SET/102/1102/1
     - 僅寫入單一暫存器、且為 PlcCommandService.COMMANDS 已定義的指令 (溫度、擋板、重置、強制開啟等)，改走 PlcCommandService.execute：
@@ -49,10 +51,10 @@ class CloudMQTTService:
     - 沒有 commandId 的指令維持原行為，不回報
 
     連線與設定:
-    - 設定來自 DB (cloud_mqtt.*)，reload_config() 重新讀取；restart() = stop + start，套用新設定
+    - 設定來自 DB (backend_mqtt.*)，reload_config() 重新讀取；restart() = stop + start，套用新設定
     - 斷線或例外時，等待 reconnect_delay_sec 秒後自動重連
     - is_connected 反映目前與雲端 Broker 的連線狀態
-    - 全域單例：cloud_mqtt_service
+    - 全域單例：backend_mqtt_service
     """
     def __init__(self):
         self._max_queue_size = 50
@@ -69,43 +71,40 @@ class CloudMQTTService:
 
     def reload_config(self):
         """重新讀取 DB 最新 Cloud MQTT 設定"""
-        self.cloud_host = db_config_repo.get_system_config("cloud_mqtt.broker_host") or "127.0.0.1"
-        self.cloud_port = int(db_config_repo.get_system_config("cloud_mqtt.broker_port") or 1883)
-        self.username = db_config_repo.get_system_config("cloud_mqtt.username") or None
-        self.password = db_config_repo.get_system_config("cloud_mqtt.password") or None
-        self.client_id = db_config_repo.get_system_config("cloud_mqtt.client_id") or "GW-TAU-01-CLOUD"
-        self.cloud_topic_prefix = db_config_repo.get_system_config("cloud_mqtt.cloud_topic_prefix") or "TYMC/CLOUD/101"
-        self.qos = int(db_config_repo.get_system_config("cloud_mqtt.qos") or 0)
-        self.reconnect_delay_sec = int(db_config_repo.get_system_config("cloud_mqtt.reconnect_delay_sec") or 5)
-        self.keepalive = int(db_config_repo.get_system_config("cloud_mqtt.keepalive") or 20)
+        self.backend_host = db_config_repo.get_system_config("backend_mqtt.broker_host") or "127.0.0.1"
+        self.backend_port = int(db_config_repo.get_system_config("backend_mqtt.broker_port") or 1883)
+        self.username = db_config_repo.get_system_config("backend_mqtt.username") or None
+        self.password = db_config_repo.get_system_config("backend_mqtt.password") or None
+        self.client_id = db_config_repo.get_system_config("backend_mqtt.client_id") or "GW-TAU-01-CLOUD"
+        self.backend_topic_prefix = db_config_repo.get_system_config("backend_mqtt.backend_topic_prefix") or "TYMC/CLOUD/101"
+        self.qos = int(db_config_repo.get_system_config("backend_mqtt.qos") or 0)
+        self.reconnect_delay_sec = int(db_config_repo.get_system_config("backend_mqtt.reconnect_delay_sec") or 5)
+        self.keepalive = int(db_config_repo.get_system_config("backend_mqtt.keepalive") or 20)
         
         # 佇列大小與過期時間設定 (避免斷線或延遲造成舊封包大量積壓)
-        self._max_queue_size = int(db_config_repo.get_system_config("cloud_mqtt.max_queue_size") or 50)
-        self._max_ttl_seconds = float(db_config_repo.get_system_config("cloud_mqtt.max_ttl_seconds") or 30.0)
+        self._max_queue_size = int(db_config_repo.get_system_config("backend_mqtt.max_queue_size") or 50)
+        self._max_ttl_seconds = float(db_config_repo.get_system_config("backend_mqtt.max_ttl_seconds") or 30.0)
 
-        db_clean = db_config_repo.get_system_config("cloud_mqtt.clean_session")
+        db_clean = db_config_repo.get_system_config("backend_mqtt.clean_session")
         if db_clean is not None:
             self.clean_session = str(db_clean).lower() in ("true", "1")
         else:
             self.clean_session = True
 
-        logger.info(f"[CloudMQTTService] Config reloaded: Host={self.cloud_host}:{self.cloud_port}, Topic='{self.cloud_topic_prefix}', ClientID='{self.client_id}', MaxQueue={self._max_queue_size}, MaxTTL={self._max_ttl_seconds}s, Keepalive={self.keepalive}, CleanSession={self.clean_session}")
+        logger.info(f"[BackendMQTTService] Config reloaded: Host={self.backend_host}:{self.backend_port}, Topic='{self.backend_topic_prefix}', ClientID='{self.client_id}', MaxQueue={self._max_queue_size}, MaxTTL={self._max_ttl_seconds}s, Keepalive={self.keepalive}, CleanSession={self.clean_session}")
 
     async def start(self):
-        """啟動桃捷雲 MQTT 拋轉任務"""
-        if not cloud_mqtt_enabled:
-            logger.info("[CloudMQTTService] Cloud MQTT is disabled by global switch, skip start.")
-            return
+        """啟動Backend MQTT 拋轉任務"""
         self.reload_config()
         self._running = True
         self._worker_task = asyncio.create_task(self._publish_loop())
         logger.info(
-            f"[CloudMQTTService] Cloud MQTT Forwarder started. "
-            f"Target Cloud Broker: {self.cloud_host}:{self.cloud_port}, Topic Prefix: '{self.cloud_topic_prefix}', CleanSession: {self.clean_session}"
+            f"[BackendMQTTService] Cloud MQTT Forwarder started. "
+            f"Target Cloud Broker: {self.backend_host}:{self.backend_port}, Topic Prefix: '{self.backend_topic_prefix}', CleanSession: {self.clean_session}"
         )
 
     async def stop(self):
-        """停止桃捷雲 MQTT 拋轉"""
+        """停止Backend MQTT 拋轉"""
         self._running = False
         self.is_connected = False
         if self._worker_task:
@@ -122,17 +121,17 @@ class CloudMQTTService:
                 self._queue.task_done()
             except (asyncio.QueueEmpty, ValueError):
                 break
-        logger.info("[CloudMQTTService] Cloud MQTT Forwarder stopped.")
+        logger.info("[BackendMQTTService] Cloud MQTT Forwarder stopped.")
 
     async def restart(self):
         """重載設定並重新連線 Cloud MQTT 拋轉"""
-        logger.info("[CloudMQTTService] Restarting Cloud MQTT Service with updated configuration...")
+        logger.info("[BackendMQTTService] Restarting Cloud MQTT Service with updated configuration...")
         await self.stop()
         await self.start()
 
     async def push_telemetry(self, payload: Dict[str, Any], topic_suffix: Optional[str] = None):
         """
-        將 PFC200 點位資料寫入佇列準備拋轉至桃捷雲
+        將 PFC200 點位資料寫入佇列準備拋轉至 Backend MQTT
         - 佇列滿時自動丟棄最舊資料 (Drop Oldest)，確保永遠只轉發最新狀態
         :param payload: JSON 點位封包
         :param topic_suffix: 子 Topic 訊息，如 'MQT/TRA/OTR/TRC/102/1102'
@@ -158,11 +157,11 @@ class CloudMQTTService:
         """Cloud MQTT 連線與批次拋轉 Loop (含自動重連)"""
         while self._running:
             try:
-                logger.info(f"[CloudMQTTService] Connecting to Cloud MQTT Broker at {self.cloud_host}:{self.cloud_port}...")
+                logger.info(f"[BackendMQTTService] Connecting to Cloud MQTT Broker at {self.backend_host}:{self.backend_port}...")
                 
                 client_kwargs: Dict[str, Any] = {
-                    "hostname": self.cloud_host,
-                    "port": self.cloud_port,
+                    "hostname": self.backend_host,
+                    "port": self.backend_port,
                     "identifier": self.client_id,
                     "keepalive": self.keepalive,
                     "clean_session": self.clean_session
@@ -174,11 +173,11 @@ class CloudMQTTService:
  
                 async with aiomqtt.Client(**client_kwargs) as client:
                     self.is_connected = True
-                    logger.info(f"[CloudMQTTService] Successfully connected to Cloud MQTT Broker ({self.cloud_host}:{self.cloud_port})!")
+                    logger.info(f"[BackendMQTTService] Successfully connected to Cloud MQTT Broker ({self.backend_host}:{self.backend_port})!")
                     
-                    sub_topic = f"{self.cloud_topic_prefix}/+/+"
+                    sub_topic = f"{self.backend_topic_prefix}/+/+"
                     await client.subscribe(sub_topic)
-                    logger.info(f"[CloudMQTTService] Subscribed to cloud command topic: '{sub_topic}'")
+                    logger.info(f"[BackendMQTTService] Subscribed to cloud command topic: '{sub_topic}'")
 
                     # gateway 發送任務
                     async def send_worker():
@@ -191,28 +190,28 @@ class CloudMQTTService:
                                 # 檢查封包是否過期 (超過 max_ttl_seconds 則丟棄，優先發送最新即時數據)
                                 if (now - enqueued_at) > self._max_ttl_seconds:
                                     logger.warning(
-                                        f"[CloudMQTTService] Dropping stale telemetry for cloud (queued {now - enqueued_at:.1f}s ago > TTL {self._max_ttl_seconds}s)"
+                                        f"[BackendMQTTService] Dropping stale telemetry for cloud (queued {now - enqueued_at:.1f}s ago > TTL {self._max_ttl_seconds}s)"
                                     )
                                     continue
 
                                 payload = item["payload"]
                                 suffix = item.get("topic_suffix")
                                 if suffix:
-                                    topic = f"{self.cloud_topic_prefix}/{suffix}".strip("/")
+                                    topic = f"{self.backend_topic_prefix}/{suffix}".strip("/")
                                 else:
-                                    topic = self.cloud_topic_prefix
+                                    topic = self.backend_topic_prefix
 
                                 payload_str = json.dumps(payload, ensure_ascii=False)
                                 await client.publish(topic, payload_str, qos=self.qos)
                             except aiomqtt.MqttError as mqtt_err:
-                                logger.error(f"[CloudMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
+                                logger.error(f"[BackendMQTTService] Connection lost while publishing to Cloud MQTT: {mqtt_err}")
                                 # 若尚未過期且佇列未滿，才放回佇列
                                 if (time.time() - item.get("enqueued_at", 0)) <= self._max_ttl_seconds:
                                     if self._queue.qsize() < self._max_queue_size:
                                         await self._queue.put(item)
                                 raise mqtt_err
                             except Exception as pub_err:
-                                logger.error(f"[CloudMQTTService] Error publishing to Cloud MQTT: {pub_err}")
+                                logger.error(f"[BackendMQTTService] Error publishing to Cloud MQTT: {pub_err}")
                             finally:
                                 self._queue.task_done()
 
@@ -226,15 +225,15 @@ class CloudMQTTService:
             except ExceptionGroup as eg:
                 mqtt_errs, others = eg.split(aiomqtt.MqttError)
                 if others is None and mqtt_errs is not None:
-                    logger.warning(f"[CloudMQTTService] Cloud MQTT Connection error: {mqtt_errs.exceptions[0]}. Reconnecting in {self.reconnect_delay_sec}s...")
+                    logger.warning(f"[BackendMQTTService] Cloud MQTT Connection error: {mqtt_errs.exceptions[0]}. Reconnecting in {self.reconnect_delay_sec}s...")
                 elif others is not None:
-                    logger.error(f"[CloudMQTTService] Unexpected error in Cloud MQTT loop: {others.exceptions[0]}. Reconnecting in {self.reconnect_delay_sec}s...")
+                    logger.error(f"[BackendMQTTService] Unexpected error in Cloud MQTT loop: {others.exceptions[0]}. Reconnecting in {self.reconnect_delay_sec}s...")
                 await asyncio.sleep(self.reconnect_delay_sec)
             except aiomqtt.MqttError as err:
-                logger.warning(f"[CloudMQTTService] Cloud MQTT Connection error: {err}. Reconnecting in {self.reconnect_delay_sec}s...")
+                logger.warning(f"[BackendMQTTService] Cloud MQTT Connection error: {err}. Reconnecting in {self.reconnect_delay_sec}s...")
                 await asyncio.sleep(self.reconnect_delay_sec)
             except Exception as e:
-                logger.error(f"[CloudMQTTService] Unexpected error in Cloud MQTT loop: {e}. Reconnecting in {self.reconnect_delay_sec}s...")
+                logger.error(f"[BackendMQTTService] Unexpected error in Cloud MQTT loop: {e}. Reconnecting in {self.reconnect_delay_sec}s...")
                 await asyncio.sleep(self.reconnect_delay_sec)
             finally:
                 self.is_connected = False
@@ -260,11 +259,24 @@ class CloudMQTTService:
                     # 檢查主題格式是否符合控制指令 (最後一層是否以 R 結尾，例如 1R)
                     parts = topic.split("/")
                     if len(parts) >= 2 and parts[-1].endswith("R"):
-                        logger.debug(f"[CloudMQTTService] Received cloud command on topic '{topic}': {payload_str}")
+                        logger.debug(f"[BackendMQTTService] Received cloud command on topic '{topic}': {payload_str}")
                         
                         command = self._parse_tracked_command(payload_str)
+
+                        # 下行已關閉 (Gateway 本地設定)：不寫入、不轉發，一律直接回報 FAILED，雲端送任何指令即可確認狀態
+                        # 不記入已處理 commandId，重新開啟後可重送
+                        if not backend_mqtt_enabled:
+                            logger.warning(f"[BackendMQTTService] Cloud downlink disabled, command rejected on '{topic}'")
+                            registers = command["data"].get("register") if command else None
+                            await self._report_command(
+                                client, topic, command["commandId"] if command else None, "FAILED",
+                                registers if isinstance(registers, dict) else {},
+                                error="Gateway 已關閉遠端控制", message="Gateway 已關閉遠端控制",
+                            )
+                            continue
+
                         if command and self._is_duplicate_command_id(command["commandId"]):
-                            logger.warning(f"[CloudMQTTService] Duplicate commandId ignored: {command['commandId']}")
+                            logger.warning(f"[BackendMQTTService] Duplicate commandId ignored: {command['commandId']}")
                             continue
 
                         # PlcCommandService 已定義的設定指令 (含溫度)，與 Gateway 前端共用同一套流程
@@ -290,11 +302,11 @@ class CloudMQTTService:
                         # 忽略非指令主題
                         pass
                 except Exception as msg_err:
-                    logger.error(f"[CloudMQTTService] Error processing message: {msg_err}")
+                    logger.error(f"[BackendMQTTService] Error processing message: {msg_err}")
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.error(f"[CloudMQTTService] Error in cloud message listener: {e}")
+            logger.error(f"[BackendMQTTService] Error in cloud message listener: {e}")
             raise
 
     def _save_setting_log(self, topic: str, payload_str: str, command_id: Optional[str] = None):
@@ -334,7 +346,7 @@ class CloudMQTTService:
                     finally:
                         db.close()
             except Exception as json_err:
-                logger.debug(f"[CloudMQTTService] Payload not parsed as json or register dict: {json_err}")
+                logger.debug(f"[BackendMQTTService] Payload not parsed as json or register dict: {json_err}")
             
             db = SessionLocal()
             try:
@@ -352,14 +364,14 @@ class CloudMQTTService:
                 )
                 db.add(log_entry)
                 db.commit()
-                logger.info(f"[CloudMQTTService] Saved setting log: type={setting_type}, value={val_str}")
+                logger.info(f"[BackendMQTTService] Saved setting log: type={setting_type}, value={val_str}")
             except Exception as db_err:
                 db.rollback()
-                logger.error(f"[CloudMQTTService] Error saving setting log: {db_err}")
+                logger.error(f"[BackendMQTTService] Error saving setting log: {db_err}")
             finally:
                 db.close()
         except Exception as log_err:
-            logger.error(f"[CloudMQTTService] General error writing setting log: {log_err}")
+            logger.error(f"[BackendMQTTService] General error writing setting log: {log_err}")
 
     @staticmethod
     def _parse_tracked_command(payload_str: str) -> Optional[Dict[str, Any]]:
@@ -441,17 +453,17 @@ class CloudMQTTService:
                 db.commit()
             except Exception as db_err:
                 db.rollback()
-                logger.error(f"[CloudMQTTService] Error updating setting log status: {db_err}")
+                logger.error(f"[BackendMQTTService] Error updating setting log status: {db_err}")
             finally:
                 db.close()
         except Exception as e:
-            logger.error(f"[CloudMQTTService] General error updating setting log status: {e}")
+            logger.error(f"[BackendMQTTService] General error updating setting log status: {e}")
 
     async def _report_command(
         self,
         client: aiomqtt.Client,
         topic: str,
-        command_id: str,
+        command_id: Optional[str],
         status: str,
         registers: Dict[str, Any],
         error: Optional[str] = None,
@@ -460,7 +472,7 @@ class CloudMQTTService:
         plc: Optional[Dict[str, Any]] = None,
     ):
         """將指令狀態回報至雲端 (指令 Topic 的 R 改為 A)"""
-        if status in ("SUCCESS", "FAILED"):
+        if command_id and status in ("SUCCESS", "FAILED"):
             self._update_setting_log_status(command_id, status, error)
         result_topic = f"{topic[:-1]}A"
         body = {
@@ -471,13 +483,14 @@ class CloudMQTTService:
             "confirmed": confirmed,
             "message": message,
             "plc": plc,
+            "enabled": backend_mqtt_enabled,
             "ts": int(time.time()),
         }
         try:
             await client.publish(result_topic, json.dumps(body, ensure_ascii=False), qos=max(self.qos, 1))
-            logger.info(f"[CloudMQTTService] Reported command {command_id} -> {status} on '{result_topic}'")
+            logger.info(f"[BackendMQTTService] Reported command {command_id} -> {status} on '{result_topic}'")
         except Exception as e:
-            logger.error(f"[CloudMQTTService] Failed to report command {command_id} ({status}): {e}")
+            logger.error(f"[BackendMQTTService] Failed to report command {command_id} ({status}): {e}")
 
     async def _run_tracked_command(self, client: aiomqtt.Client, topic: str, parts: list, command: Dict[str, Any]):
         """帶 commandId 的雲端指令：回報 ACKED -> 轉發至本地 -> 以完成暫存器確認 -> 回報結果"""
@@ -519,7 +532,7 @@ class CloudMQTTService:
                 error=None if ok else message, confirmed=ok, message=message, plc=service.last_plc_values,
             )
         except Exception as e:
-            logger.error(f"[CloudMQTTService] Tracked command {command_id} failed: {e}")
+            logger.error(f"[BackendMQTTService] Tracked command {command_id} failed: {e}")
             await self._report_command(client, topic, command_id, "FAILED", registers, error=f"Gateway 處理失敗: {e}")
         finally:
             if db is not None:
@@ -542,7 +555,7 @@ class CloudMQTTService:
             db = SessionLocal()
             ok, confirmed, message, plc = await self._execute_setting_command(db, cmd, command_id)
         except Exception as e:
-            logger.error(f"[CloudMQTTService] Setting command {command_id or topic} failed: {e}")
+            logger.error(f"[BackendMQTTService] Setting command {command_id or topic} failed: {e}")
             ok, confirmed, message, plc = False, None, f"Gateway 處理失敗: {e}", None
         finally:
             if db is not None:
@@ -554,7 +567,7 @@ class CloudMQTTService:
                 error=None if ok else message, confirmed=confirmed, message=message, plc=plc,
             )
         elif not ok:
-            logger.error(f"[CloudMQTTService] Setting command {topic} failed: {message}")
+            logger.error(f"[BackendMQTTService] Setting command {topic} failed: {message}")
 
     @staticmethod
     async def _execute_setting_command(db, cmd: Dict[str, Any], command_id: Optional[str]) -> tuple:
@@ -600,15 +613,15 @@ class CloudMQTTService:
                 carVin = parts[5]        # 1102 車廂
                 endPos = parts[6].strip('R')        # 1 端點
                 gateway_topic = f"TYMC/AIR/SET/{trainNo}/{carVin}/{endPos}"
-                logger.debug(f"[CloudMQTTService] Routing cloud command to local topic: '{gateway_topic}' (original: '{topic}')")
+                logger.debug(f"[BackendMQTTService] Routing cloud command to local topic: '{gateway_topic}' (original: '{topic}')")
             else:
-                logger.error(f"[CloudMQTTService] Unexpected cloud command topic format: '{topic}'")
+                logger.error(f"[BackendMQTTService] Unexpected cloud command topic format: '{topic}'")
                 return False
 
             await gateway_mqtt_service.publish_message(gateway_topic, payload_str, raise_on_error=True)
             return True
         except Exception as e:
-            logger.error(f"[CloudMQTTService] Error forwarding message to local MQTT: {e}")
+            logger.error(f"[BackendMQTTService] Error forwarding message to local MQTT: {e}")
             return False
 
-cloud_mqtt_service = CloudMQTTService()
+backend_mqtt_service = BackendMQTTService()

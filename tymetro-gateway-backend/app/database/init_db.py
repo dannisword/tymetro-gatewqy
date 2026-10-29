@@ -149,9 +149,9 @@ def sync_yaml_to_db(db: Session, yaml_path: str = "gateway.yaml", force: bool = 
         for k, v in gateway_mqtt_cfg.items():
             upsert_config("network", f"gateway_mqtt.{k}", v)
 
-        cloud_mqtt_cfg = network_cfg.get("cloud_mqtt", {}) or {}
-        for k, v in cloud_mqtt_cfg.items():
-            upsert_config("network", f"cloud_mqtt.{k}", v)
+        backend_mqtt_cfg = network_cfg.get("backend_mqtt", {}) or {}
+        for k, v in backend_mqtt_cfg.items():
+            upsert_config("network", f"backend_mqtt.{k}", v)
 
         upsert_config("network", "ipc_socket_path", network_cfg.get("ipc_socket_path", "/tmp/hvac_ipc.sock"))
 

@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.config_yaml import yaml_settings
 from app.services.equipment_manager import equipment_manager
 from app.services.gateway_mqtt_service import gateway_mqtt_service
-from app.services.cloud_mqtt_service import cloud_mqtt_service
+from app.services.backend_mqtt_service import backend_mqtt_service
 from app.services.sqlite_writer import sqlite_writer
 from app.services.scheduler_service import scheduler_service
 from app.core.logger import logger
@@ -67,19 +67,19 @@ async def get_gateway_status():
         gw_mqtt_status = "stopped"
         gw_mqtt_msg = "服務已停止"
 
-    # 3. 桃捷雲 MQTT (Cloud MQTT Forwarder)
-    if not yaml_settings.network.cloud_mqtt.enabled:
-        cloud_mqtt_status = "stopped"
-        cloud_mqtt_msg = "服務未啟用 (gateway.yaml)"
-    elif getattr(cloud_mqtt_service, "is_connected", False):
-        cloud_mqtt_status = "connected"
-        cloud_mqtt_msg = f"已連線至桃捷雲 Broker ({cloud_mqtt_service.cloud_host}:{cloud_mqtt_service.cloud_port})"
-    elif getattr(cloud_mqtt_service, "_running", False):
-        cloud_mqtt_status = "disconnected"
-        cloud_mqtt_msg = f"連線中 / 嘗試重連至 {cloud_mqtt_service.cloud_host}:{cloud_mqtt_service.cloud_port}"
+    # 3. Backend MQTT (Cloud MQTT Forwarder)
+    if not yaml_settings.network.backend_mqtt.enabled:
+        backend_mqtt_status = "stopped"
+        backend_mqtt_msg = "服務未啟用 (gateway.yaml)"
+    elif getattr(backend_mqtt_service, "is_connected", False):
+        backend_mqtt_status = "connected"
+        backend_mqtt_msg = f"已連線至Backend Broker ({backend_mqtt_service.backend_host}:{backend_mqtt_service.backend_port})"
+    elif getattr(backend_mqtt_service, "_running", False):
+        backend_mqtt_status = "disconnected"
+        backend_mqtt_msg = f"連線中 / 嘗試重連至 {backend_mqtt_service.backend_host}:{backend_mqtt_service.backend_port}"
     else:
-        cloud_mqtt_status = "stopped"
-        cloud_mqtt_msg = "服務已停止"
+        backend_mqtt_status = "stopped"
+        backend_mqtt_msg = "服務已停止"
 
     # 4. 背景排程服務 (APScheduler)
     scheduler_running = scheduler_service.scheduler.running if hasattr(scheduler_service, "scheduler") else False
@@ -107,12 +107,12 @@ async def get_gateway_status():
             "port": getattr(gateway_mqtt_service, "port", yaml_settings.network.gateway_mqtt.broker_port),
             "message": gw_mqtt_msg
         },
-        "cloud_mqtt": {
-            "name": "桃捷雲 MQTT (Forwarder)",
-            "status": cloud_mqtt_status,
-            "host": getattr(cloud_mqtt_service, "cloud_host", yaml_settings.network.cloud_mqtt.broker_host),
-            "port": getattr(cloud_mqtt_service, "cloud_port", yaml_settings.network.cloud_mqtt.broker_port),
-            "message": cloud_mqtt_msg
+        "backend_mqtt": {
+            "name": "Backend MQTT (Forwarder)",
+            "status": backend_mqtt_status,
+            "host": getattr(backend_mqtt_service, "backend_host", yaml_settings.network.backend_mqtt.broker_host),
+            "port": getattr(backend_mqtt_service, "backend_port", yaml_settings.network.backend_mqtt.broker_port),
+            "message": backend_mqtt_msg
         },
         "scheduler": {
             "name": "排程服務 (Scheduler)",

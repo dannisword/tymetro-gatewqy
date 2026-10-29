@@ -118,14 +118,14 @@ network:
     broker_host: 220.133.144.73
     broker_port: 1883
     topic_prefix: "TYMC/AIR/101/#"
-  cloud_mqtt:
+  backend_mqtt:
     enabled: true
     broker_host: 220.133.144.73
     broker_port: 1883
     username: ""
     password: ""
     client_id: "GW-TAU-01-CLOUD"
-    cloud_topic_prefix: "TYMC/CLOUD/101"
+    backend_topic_prefix: "TYMC/CLOUD/101"
     qos: 0
     reconnect_delay_sec: 5
   ipc_socket_path: /tmp/hvac_ipc.sock

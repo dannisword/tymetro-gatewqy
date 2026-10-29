@@ -103,14 +103,14 @@ network:
     broker_port: 1883
     topic_prefix: "TYMC/AIR/106/#"  # 👈 3. 本地端接收該車組點位的 Topic 前綴
 
-  cloud_mqtt:                       # 桃捷雲 MQTT 拋轉服務
+  backend_mqtt:                       # Backend MQTT 拋轉服務
     enabled: true
     broker_host: 220.133.144.73
     broker_port: 1883
     username: ""
     password: ""
     client_id: "GW-TAU-106-CLOUD"   # 👈 4. 雲端連線 Client ID (例如 GW-TAU-106-CLOUD)
-    cloud_topic_prefix: "MQT/TRA/OTR/TRC/106" # 👈 5. 拋轉至雲端的 Topic 前綴
+    backend_topic_prefix: "MQT/TRA/OTR/TRC/106" # 👈 5. 拋轉至雲端的 Topic 前綴
     qos: 0
     reconnect_delay_sec: 5
 ```

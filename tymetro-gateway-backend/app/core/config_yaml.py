@@ -31,14 +31,14 @@ class GatewayMQTTConfig(BaseModel):
     topic_prefix: str = "MQT/TRA/OTR/TRC/+/+"
     clean_session: bool = True
 
-class CloudMQTTYamlConfig(BaseModel):
+class BackendMQTTYamlConfig(BaseModel):
     enabled: bool = True
     broker_host: str = "127.0.0.1"
     broker_port: int = 1883
     username: Optional[str] = None
     password: Optional[str] = None
     client_id: Optional[str] = "GW-TAU-01-CLOUD"
-    cloud_topic_prefix: str = "TYMC/CLOUD/101"
+    backend_topic_prefix: str = "TYMC/CLOUD/101"
     qos: int = 0
     reconnect_delay_sec: int = 5
     keepalive: int = 20
@@ -46,7 +46,7 @@ class CloudMQTTYamlConfig(BaseModel):
 
 class NetworkConfig(BaseModel):
     gateway_mqtt: GatewayMQTTConfig = Field(default_factory=GatewayMQTTConfig)
-    cloud_mqtt: CloudMQTTYamlConfig = CloudMQTTYamlConfig()
+    backend_mqtt: BackendMQTTYamlConfig = BackendMQTTYamlConfig()
     ipc_socket_path: str = "/tmp/hvac_ipc.sock"
 
     @property

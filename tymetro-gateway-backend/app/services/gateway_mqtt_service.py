@@ -7,7 +7,7 @@ import aiomqtt
 from app.core.logger import logger
 from app.services.equipment_manager import equipment_manager
 from app.services.sqlite_writer import sqlite_writer
-from app.services.cloud_mqtt_service import cloud_mqtt_service
+from app.services.backend_mqtt_service import backend_mqtt_service
 from app.services.equipment_event_service import equipment_event_service
 from app.database.db_config_repo import db_config_repo
 
@@ -195,10 +195,10 @@ class GatewayMQTTService:
                 if event_count > 0:
                     logger.info(f"[GatewayMQTTService] 成功記錄 {event_count} 筆設備狀態/警報變動事件 ({car_vin}/{end_pos})")
 
-            # 7. 拋轉 (Forward) 資料至桃捷雲 Cloud MQTT Broker
-            if yaml_settings.network.cloud_mqtt.enabled:
+            # 7. 拋轉 (Forward) 資料至Backend MQTT Broker
+            if yaml_settings.network.backend_mqtt.enabled:
                 topic_suffix = f"{car_vin}/{end_pos}" if car_vin and end_pos is not None else str(eq_id)
-                await cloud_mqtt_service.push_telemetry(data, topic_suffix=topic_suffix)
+                await backend_mqtt_service.push_telemetry(data, topic_suffix=topic_suffix)
 
             #logger.debug(f"[GatewayMQTTService] Received WAGO MQTT ({eq_id} | carVin:{car_vin} | endPos:{end_pos}): Queued {len(history_items)} registers.")
 

@@ -23,7 +23,7 @@ from app.utils.http_util import HttpUtil
 from app.database.init_db import sync_yaml_to_db
 from app.core.config_yaml import reload_gateway_yaml_config
 from app.services.gateway_mqtt_service import gateway_mqtt_service
-from app.services.cloud_mqtt_service import cloud_mqtt_service, is_cloud_mqtt_enabled, set_cloud_mqtt_enabled
+from app.services.backend_mqtt_service import backend_mqtt_service, is_backend_mqtt_enabled, set_backend_mqtt_enabled
 from pydantic import BaseModel
 from app.core.enums import get_all_enums
 from app.services.equipment_event_service import equipment_event_service
@@ -38,24 +38,20 @@ def get_enums():
 class CloudMqttSwitch(BaseModel):
     enabled: bool
 
-@router.get("/cloud-mqtt", response_model=ResponseBase, summary="取得 Cloud MQTT 開關狀態")
-def get_cloud_mqtt_switch():
-    return ResponseUtil.success(data={"enabled": is_cloud_mqtt_enabled(), "connected": cloud_mqtt_service.is_connected})
+def _backend_mqtt_state() -> dict:
+    return {"enabled": is_backend_mqtt_enabled(), "connected": backend_mqtt_service.is_connected}
 
-@router.post("/cloud-mqtt", response_model=ResponseBase, summary="開啟/關閉 Cloud MQTT (全域開關)")
-async def set_cloud_mqtt_switch(request: CloudMqttSwitch, current_user: User = Depends(get_current_user)):
-    try:
-        set_cloud_mqtt_enabled(request.enabled)
-        if request.enabled:
-            await cloud_mqtt_service.restart()
-        else:
-            await cloud_mqtt_service.stop()
-        return ResponseUtil.success(
-            data={"enabled": is_cloud_mqtt_enabled(), "connected": cloud_mqtt_service.is_connected},
-            message="Cloud MQTT 已開啟" if request.enabled else "Cloud MQTT 已關閉"
-        )
-    except Exception as e:
-        return ResponseUtil.error(message=f"切換 Cloud MQTT 失敗: {e}")
+@router.get("/cloud-mqtt", response_model=ResponseBase, summary="取得雲端遠端控制 (下行) 開關狀態")
+def get_backend_mqtt_switch():
+    return ResponseUtil.success(data=_backend_mqtt_state())
+
+@router.post("/cloud-mqtt", response_model=ResponseBase, summary="開啟/關閉雲端遠端控制 (下行)，關閉時維持連線並直接回報雲端 FAILED")
+async def set_backend_mqtt_switch(request: CloudMqttSwitch, current_user: User = Depends(get_current_user)):
+    set_backend_mqtt_enabled(request.enabled)
+    return ResponseUtil.success(
+        data=_backend_mqtt_state(),
+        message="雲端遠端控制已開啟" if request.enabled else "雲端遠端控制已關閉"
+    )
 
 @router.post("/reload", response_model=ResponseBase, summary="觸發熱重載內存快取與 gateway.yaml 設定並同步資料庫與 MQTT 服務")
 async def reload_config(db: Session = Depends(get_db)):
@@ -71,7 +67,7 @@ async def reload_config(db: Session = Depends(get_db)):
         equipment_event_service.reload_templates()
         # 4. 熱重載並重連 MQTT Subscriber 與 Publisher (Cloud MQTT)
         await gateway_mqtt_service.restart()
-        await cloud_mqtt_service.restart()
+        await backend_mqtt_service.restart()
         return ResponseUtil.success(message="gateway.yaml reloaded, synced to DB, MQTT services restarted, and RAM cache pre-warmed successfully.")
     except Exception as e:
         return ResponseUtil.error(message=f"Failed to reload config: {e}")
@@ -90,7 +86,7 @@ async def sync_yaml_configs(db: Session = Depends(get_db)):
         db_config_repo.get_all_equipments()
         # 5. 熱重載並重連 MQTT Subscriber 與 Publisher (Cloud MQTT)
         await gateway_mqtt_service.restart()
-        await cloud_mqtt_service.restart()
+        await backend_mqtt_service.restart()
         return ResponseUtil.success(message="Successfully re-synced system configs from gateway.yaml to DB, restarted MQTT services, and pre-warmed RAM cache.")
     except Exception as e:
         return ResponseUtil.error(message=f"Failed to sync configs from YAML: {e}")

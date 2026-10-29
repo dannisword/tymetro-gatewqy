@@ -1,6 +1,6 @@
 # HVAC Edge Gateway (PFC200 控制器邊緣閘道系統)
 
-本專案專為 **WAGO PFC200 控制器** 設計，提供 HVAC 邊緣感測數據收集、Modbus 輪詢、SQLite 批次儲存、桃捷雲 Cloud MQTT 抛轉與 Vue 3 監控網頁。
+本專案專為 **WAGO PFC200 控制器** 設計，提供 HVAC 邊緣感測數據收集、Modbus 輪詢、SQLite 批次儲存、Backend MQTT 抛轉與 Vue 3 監控網頁。
 
 ---
 

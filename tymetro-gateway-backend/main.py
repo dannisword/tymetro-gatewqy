@@ -15,7 +15,7 @@ from app.database.init_db import create_tables, init_mock_data
 from app.database.db_config_repo import db_config_repo
 from app.services.sqlite_writer import sqlite_writer
 from app.services.gateway_mqtt_service import gateway_mqtt_service
-from app.services.cloud_mqtt_service import cloud_mqtt_service
+from app.services.backend_mqtt_service import backend_mqtt_service
 from app.services.scheduler_service import scheduler_service
 from app.scheduler.engine import scheduler_engine
 import app.models
@@ -46,11 +46,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("[MQTTService] MQTT Service is disabled in gateway.yaml.")
 
-    # 3. 啟動 桃捷雲 Cloud MQTT 拋轉服務 (Cloud MQTT Forwarder Service)
-    if yaml_settings.network.cloud_mqtt.enabled:
-        await cloud_mqtt_service.start()
+    # 3. 啟動 Backend MQTT 拋轉服務 (Cloud MQTT Forwarder Service)
+    if yaml_settings.network.backend_mqtt.enabled:
+        await backend_mqtt_service.start()
     else:
-        logger.info("[CloudMQTTService] Cloud MQTT Forwarder is disabled in gateway.yaml.")
+        logger.info("[BackendMQTTService] Cloud MQTT Forwarder is disabled in gateway.yaml.")
 
     # 4. 啟動 APScheduler 背景定期排程 (Heartbeat Check & Daily Backup)
     scheduler_service.start()
@@ -74,8 +74,8 @@ async def lifespan(app: FastAPI):
     scheduler_engine.shutdown()
     scheduler_service.stop()
 
-    if yaml_settings.network.cloud_mqtt.enabled:
-        await cloud_mqtt_service.stop()
+    if yaml_settings.network.backend_mqtt.enabled:
+        await backend_mqtt_service.stop()
     if yaml_settings.network.gateway_mqtt.enabled:
         await gateway_mqtt_service.stop()
     await sqlite_writer.stop()
