@@ -39,7 +39,8 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
                     recordedAt=rec_at,
                     sensorName=item.get("sensor_name"),
                     sensorUnit=item.get("sensor_unit"),
-                    equipmentName=item.get("equipment_name")
+                    equipmentName=item.get("equipment_name"),
+                    isOffline=bool(item.get("is_offline", False))
                 )
                 history_objs.append(obj)
 
@@ -50,6 +51,47 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
             db.rollback()
             logger.error(f"Error adding batch sensor history: {e}")
             return False
+        finally:
+            if not self._external_db:
+                db.close()
+
+    def fetch_offline(self, limit: int = 5000) -> List[SensorHistory]:
+        """取出尚未補傳的離線紀錄 (依 id 由舊到新)"""
+        db = self.db if self._external_db else SessionLocal()
+        try:
+            rows = (
+                db.query(SensorHistory)
+                .filter(SensorHistory.isOffline == True)
+                .order_by(SensorHistory.id.asc())
+                .limit(limit)
+                .all()
+            )
+            db.expunge_all()
+            return rows
+        except Exception as e:
+            logger.error(f"Error fetching offline sensor history: {e}")
+            return []
+        finally:
+            if not self._external_db:
+                db.close()
+
+    def mark_uploaded(self, ids: List[int]) -> int:
+        """補傳成功後清除離線標記"""
+        if not ids:
+            return 0
+        db = self.db if self._external_db else SessionLocal()
+        try:
+            n = (
+                db.query(SensorHistory)
+                .filter(SensorHistory.id.in_(ids))
+                .update({SensorHistory.isOffline: False}, synchronize_session=False)
+            )
+            db.commit()
+            return n
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error marking sensor history as uploaded: {e}")
+            return 0
         finally:
             if not self._external_db:
                 db.close()

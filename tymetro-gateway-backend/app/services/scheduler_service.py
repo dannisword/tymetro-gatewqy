@@ -1,4 +1,5 @@
 import os
+from typing import cast
 import shutil
 from datetime import datetime, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -56,6 +57,15 @@ class SchedulerService:
             hour=3,
             minute=20,
             id='cleanup_old_sensor_histories',
+            replace_existing=True
+        )
+
+        # Job 5: 每小時上傳離線期間累積的感測器歷史資料到後端
+        self.scheduler.add_job(
+            self.job_upload_offline_sensor_histories,
+            'interval',
+            hours=1,
+            id='upload_offline_sensor_histories',
             replace_existing=True
         )
 
@@ -279,5 +289,60 @@ class SchedulerService:
                 logger.info(f"[SchedulerService] Expired sensor history cleanup completed: {deleted} records removed.")
         except Exception as e:
             logger.error(f"[SchedulerService] Error during expired sensor history cleanup: {e}")
+
+    async def job_upload_offline_sensor_histories(self):
+        """每小時將 is_offline=1 的感測器歷史批次上傳到中央後端 (POST /api/v1/sensor-histories/batch)"""
+        import asyncio
+        from app.services.backend_mqtt_service import backend_mqtt_service
+        from app.utils.http_util import HttpUtil
+
+        if not backend_mqtt_service.is_connected:
+            logger.info("[SchedulerService] Offline history upload skipped: cloud not connected.")
+            return
+
+        loop = asyncio.get_running_loop()
+        url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensor-histories/batch"
+        batch_size = 5000  # 後端單次上限 10000
+        total = 0
+        try:
+            for _ in range(200):  # 安全上限，避免無窮迴圈
+                rows = await loop.run_in_executor(None, sensor_history_repo.fetch_offline, batch_size)
+                if not rows:
+                    break
+                token = await loop.run_in_executor(None, HttpUtil.get_central_backend_token)
+                if not token:
+                    logger.warning("[SchedulerService] Offline history upload aborted: no backend token.")
+                    break
+                records = [{
+                    "carVin": r.carVin,
+                    "carNo": r.carNo,
+                    "endPos": r.endPos,
+                    "sensorCode": r.sensorCode,
+                    "sensorValue": r.sensorValue,
+                    # gateway 存 UTC naive，補上時區避免被後端當成臺灣時間
+                    "recordedAt": r.recordedAt.isoformat() + "Z",
+                } for r in rows if r.carVin]
+                skipped_ids = [cast(int, r.id) for r in rows if not r.carVin]
+                if records:
+                    resp = await loop.run_in_executor(
+                        None,
+                        lambda: HttpUtil.post(url, data={"records": records},
+                                              headers={"Authorization": f"Bearer {token}"}, timeout=30)
+                    )
+                    if not resp.get("success"):
+                        logger.warning(f"[SchedulerService] Offline history upload failed: {resp.get('message')}")
+                        break
+                # 後端已回應成功 (含其略過的筆數)；無 carVin 者無法被後端接受，一併清除標記避免卡住
+                ids = [cast(int, r.id) for r in rows]
+                await loop.run_in_executor(None, sensor_history_repo.mark_uploaded, ids)
+                total += len(records)
+                if skipped_ids:
+                    logger.warning(f"[SchedulerService] {len(skipped_ids)} offline records without car_vin were dropped from upload.")
+                if len(rows) < batch_size:
+                    break
+            if total:
+                logger.info(f"[SchedulerService] Offline sensor history upload completed: {total} records.")
+        except Exception as e:
+            logger.error(f"[SchedulerService] Error during offline sensor history upload: {e}")
 
 scheduler_service = SchedulerService()

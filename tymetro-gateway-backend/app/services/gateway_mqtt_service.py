@@ -143,6 +143,9 @@ class GatewayMQTTService:
             sensor_values: Dict[str, Any] = {}
             history_items: List[Dict[str, Any]] = []
 
+            # 判斷雲端連線狀態：Backend MQTT 啟用但未連線 → 此批歷史標記為離線，待每小時補傳
+            is_offline = bool(yaml_settings.network.backend_mqtt.enabled and not backend_mqtt_service.is_connected)
+
             for code, raw_val in register_dict.items():
                 try:
                     val = float(raw_val)
@@ -167,7 +170,8 @@ class GatewayMQTTService:
                         "recorded_at": timestamp,
                         "sensor_name": None,
                         "sensor_unit": None,
-                        "equipment_name": equipment_name
+                        "equipment_name": equipment_name,
+                        "is_offline": is_offline
                     })
 
             # 5. 更新 EquipmentManager 心跳與狀態

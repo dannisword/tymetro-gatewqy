@@ -35,6 +35,16 @@ def create_tables():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE configs ADD COLUMN version VARCHAR(50) DEFAULT '1.0.0'"))
 
+    # 檢查並動態遷移 sensor_histories.is_offline 欄位 (離線記錄標記，供每小時補傳使用)
+    if "sensor_histories" in inspector.get_table_names():
+        history_cols = [col["name"] for col in inspector.get_columns("sensor_histories")]
+        if "is_offline" not in history_cols:
+            logger.info("Adding missing column 'is_offline' to 'sensor_histories' table...")
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE sensor_histories ADD COLUMN is_offline BOOLEAN NOT NULL DEFAULT 0"))
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_offline ON sensor_histories (id) WHERE is_offline = 1"))
+
     # 檢查並動態遷移 sensors 新增欄位 (與雲端 PostgreSQL sensors 結構一致)
     if "sensors" in inspector.get_table_names():
         sensor_cols = [col["name"] for col in inspector.get_columns("sensors")]

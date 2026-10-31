@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, func, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, func, Index, text
 from app.models.base import IdType
 from app.database.session import Base
 
@@ -18,6 +18,7 @@ class SensorHistory(Base):
     sensorName = Column("sensor_name", String(100), nullable=True, comment="感測器名稱")
     sensorUnit = Column("sensor_unit", String(10), nullable=True, comment="感測器單位")
     equipmentName = Column("equipment_name", String(100), nullable=True, comment="設備名稱")
+    isOffline = Column("is_offline", Boolean, nullable=False, default=False, server_default=text("0"), comment="記錄當下與雲端離線 (True=待補傳，上傳成功後改回 False)")
 
     __table_args__ = (
         Index("ix_sensor_histories_recorded_at_desc", recordedAt.desc()),
@@ -25,4 +26,6 @@ class SensorHistory(Base):
         Index("ix_sensor_histories_code_car_time", sensorCode, carVin, recordedAt.desc()),
         Index("ix_sensor_histories_car_time", carVin, recordedAt.desc()),
         Index("ix_sensor_histories_equip_time", equipmentName, recordedAt.desc()),
+        # 部分索引：只索引待補傳資料，不增加一般寫入負擔
+        Index("ix_sensor_histories_offline", id, sqlite_where=text("is_offline = 1")),
     )
