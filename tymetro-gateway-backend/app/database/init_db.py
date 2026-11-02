@@ -18,6 +18,21 @@ from app.core.security import get_password_hash
 from app.database.session import engine, Base
 from app.core.config_yaml import parse_yaml_with_env
 
+def _add_missing_columns(inspector, spec: Dict[str, Dict[str, str]]):
+    """依 {table: {column: DDL}} 補齊缺少的欄位 (表不存在則略過)"""
+    from sqlalchemy import text
+    existing_tables = inspector.get_table_names()
+    for table, cols in spec.items():
+        if table not in existing_tables:
+            continue
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        for col_name, col_def in cols.items():
+            if col_name not in existing:
+                logger.info(f"Adding missing column '{col_name}' to '{table}' table...")
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}"))
+
+
 def create_tables():
     """初始化建立所有 SQLAlchemy ORM 資料表 (若尚不存在)"""
     Base.metadata.create_all(bind=engine)
@@ -25,53 +40,23 @@ def create_tables():
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
 
-    # 檢查並動態遷移 configs.version 欄位 (防止舊有 SQLite 資料庫因為缺少此欄位出錯)
-    if "configs" in inspector.get_table_names():
-        columns = [col["name"] for col in inspector.get_columns("configs")]
-        if "version" not in columns:
-            logger.info("Adding missing column 'version' to 'configs' table...")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE configs ADD COLUMN version VARCHAR(50) DEFAULT '1.0.0'"))
-
-    # 檢查並動態遷移 sensor_histories.is_offline 欄位 (離線記錄標記，供每小時補傳使用)
-    if "sensor_histories" in inspector.get_table_names():
-        history_cols = [col["name"] for col in inspector.get_columns("sensor_histories")]
-        if "is_offline" not in history_cols:
-            logger.info("Adding missing column 'is_offline' to 'sensor_histories' table...")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE sensor_histories ADD COLUMN is_offline BOOLEAN NOT NULL DEFAULT 0"))
-        with engine.begin() as conn:
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_offline ON sensor_histories (id) WHERE is_offline = 1"))
-
-    # 檢查並動態遷移 sensors 新增欄位 (與雲端 PostgreSQL sensors 結構一致)
-    if "sensors" in inspector.get_table_names():
-        sensor_cols = [col["name"] for col in inspector.get_columns("sensors")]
-        new_sensor_cols = {
+    # 動態補欄位遷移 (防止舊有 SQLite 資料庫缺少新欄位；結構與雲端 PostgreSQL 對應)
+    _add_missing_columns(inspector, {
+        "configs": {
+            "version": "VARCHAR(50) DEFAULT '1.0.0'",
+        },
+        "sensors": {
             "limit_mode": "VARCHAR(20) DEFAULT 'NONE'",
             "min_limit": "NUMERIC(10,2) DEFAULT NULL",
             "max_limit": "NUMERIC(10,2) DEFAULT NULL",
             "scale": "NUMERIC(6,4) NOT NULL DEFAULT 1.0",
             "data_type": "VARCHAR(50) NOT NULL DEFAULT 'int16'",
             "default_value": "NUMERIC(10,2) DEFAULT 0.00",
-        }
-        for col_name, col_def in new_sensor_cols.items():
-            if col_name not in sensor_cols:
-                logger.info(f"Adding missing column '{col_name}' to 'sensors' table...")
-                with engine.begin() as conn:
-                    conn.execute(text(f"ALTER TABLE sensors ADD COLUMN {col_name} {col_def}"))
-
-    # 檢查並動態遷移 users.email 欄位 (與雲端 PostgreSQL users 結構一致)
-    if "users" in inspector.get_table_names():
-        user_cols = [col["name"] for col in inspector.get_columns("users")]
-        if "email" not in user_cols:
-            logger.info("Adding missing column 'email' to 'users' table...")
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(100)"))
-
-    # 檢查並動態遷移 setting_logs 指令追蹤與審計日誌欄位，並將舊 audit_logs 資料併入後移除
-    if "setting_logs" in inspector.get_table_names():
-        log_cols = [col["name"] for col in inspector.get_columns("setting_logs")]
-        new_log_cols = {
+        },
+        "users": {
+            "email": "VARCHAR(100)",
+        },
+        "setting_logs": {
             # 指令追蹤欄位 (與雲端 setting_logs 對應)
             "topic": "VARCHAR(255) DEFAULT NULL",
             "payload": "TEXT DEFAULT NULL",
@@ -85,12 +70,15 @@ def create_tables():
             "action": "VARCHAR(100) DEFAULT NULL",
             "ip_address": "VARCHAR(50) DEFAULT NULL",
             "detail": "VARCHAR(1000) DEFAULT NULL",
-        }
-        for col_name, col_def in new_log_cols.items():
-            if col_name not in log_cols:
-                logger.info(f"Adding missing column '{col_name}' to 'setting_logs' table...")
-                with engine.begin() as conn:
-                    conn.execute(text(f"ALTER TABLE setting_logs ADD COLUMN {col_name} {col_def}"))
+        },
+        "sensor_histories": {
+            # 離線記錄標記，供每小時補傳使用
+            "is_offline": "BOOLEAN NOT NULL DEFAULT 0",
+        },
+    })
+
+    # setting_logs 索引，並將舊 audit_logs 資料併入後移除
+    if "setting_logs" in inspector.get_table_names():
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_setting_logs_command_id ON setting_logs (command_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_setting_logs_audit_category ON setting_logs (audit_category)"))
@@ -105,16 +93,20 @@ def create_tables():
                 ))
                 conn.execute(text("DROP TABLE audit_logs"))
 
-    # 建立/確保感測器歷史紀錄之複合降序索引存在 (顯著加速 PFC200 查詢)
+    # sensor_histories 索引 (加速 PFC200 查詢)
     if "sensor_histories" in inspector.get_table_names():
         with engine.begin() as conn:
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_recorded_at_desc ON sensor_histories (recorded_at DESC)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_time ON sensor_histories (sensor_code, recorded_at DESC)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_car_time ON sensor_histories (sensor_code, car_vin, recorded_at DESC)"))
             conn.execute(text("DROP INDEX IF EXISTS ix_sensor_histories_recorded_at"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_car_time ON sensor_histories (car_vin, recorded_at DESC)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensor_histories_equip_time ON sensor_histories (equipment_name, recorded_at DESC)"))
-                
+            for ddl in (
+                "CREATE INDEX IF NOT EXISTS ix_sensor_histories_recorded_at_desc ON sensor_histories (recorded_at DESC)",
+                "CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_time ON sensor_histories (sensor_code, recorded_at DESC)",
+                "CREATE INDEX IF NOT EXISTS ix_sensor_histories_code_car_time ON sensor_histories (sensor_code, car_vin, recorded_at DESC)",
+                "CREATE INDEX IF NOT EXISTS ix_sensor_histories_car_time ON sensor_histories (car_vin, recorded_at DESC)",
+                "CREATE INDEX IF NOT EXISTS ix_sensor_histories_equip_time ON sensor_histories (equipment_name, recorded_at DESC)",
+                "CREATE INDEX IF NOT EXISTS ix_sensor_histories_offline ON sensor_histories (id) WHERE is_offline = 1",
+            ):
+                conn.execute(text(ddl))
+
     logger.info("Database tables verified/created successfully via ORM Metadata.")
 
 
