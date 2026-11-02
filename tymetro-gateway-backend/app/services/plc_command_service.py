@@ -302,7 +302,10 @@ class PlcCommandService:
             )
 
         elapsed_ms = int((time.perf_counter() - started) * 1000)
-        self._write_audit(req, operator, ip_address, label, log_value, topic, payload, error, elapsed_ms)
+        self._write_audit(
+            req, operator, ip_address, label, log_value, topic, payload,
+            error or (confirm_message if confirmed is False else None), elapsed_ms,
+        )
 
         if error:
             raise PlcCommandError(error)

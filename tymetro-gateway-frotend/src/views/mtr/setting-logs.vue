@@ -38,6 +38,20 @@ const pagination = ref({
   totalPages: 0,
 });
 
+// 由 topic 解析目的：本地 TYMC/AIR/SET/{trainNo}/{carVin}/{endPos}，雲端 .../{trainNo}/{carVin}/{endPos}R
+// 稽核紀錄沒有 topic 欄位，改從 detail 內的 "topic=..." 取得
+const parseTarget = (data: any): string => {
+  if (!data) return '';
+  const topic: string =
+    data.topic || (String(data.detail || '').match(/topic=(\S+)/)?.[1] ?? '');
+  const parts = topic.split('/');
+  if (parts.length < 3) return '';
+  const [trainNo, carVin, endRaw] = parts.slice(-3);
+  const endPos = (endRaw || '').replace(/R$/, '');
+  if (!/^\d+$/.test(carVin) || !/^\d+$/.test(endPos)) return '';
+  return `${trainNo} / ${carVin} / ${endPos}端`;
+};
+
 const gridColumns = ref([
   {
     headerName: '時間',
@@ -52,6 +66,20 @@ const gridColumns = ref([
     valueGetter: (p: any) => p.data?.settingTypeName || p.data?.settingType || '',
     flex: 1.2,
     minWidth: 160
+  },
+  {
+    headerName: '目的 (車組/車廂/端)',
+    field: 'target',
+    valueGetter: (p: any) => parseTarget(p.data),
+    flex: 1,
+    minWidth: 150
+  },
+  {
+    headerName: '類別',
+    field: 'auditCategory',
+    valueGetter: (p: any) => (p.data?.auditCategory ? '稽核' : '設定'),
+    flex: 0.5,
+    maxWidth: 70
   },
   {
     headerName: '設定值',
