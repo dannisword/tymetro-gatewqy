@@ -7,6 +7,7 @@ from app.core.logger import logger
 from app.core.config import settings
 from app.services.equipment_manager import equipment_manager
 from app.repositories.sensor_history_repository import sensor_history_repo
+from app.repositories.setting_log_repository import setting_log_repo
 
 class SchedulerService:
     """
@@ -15,6 +16,8 @@ class SchedulerService:
     - 每日 03:00：自動備份 SQLite gateway.db 資料庫
     - 每日 03:10：自動清理 10 天前的舊日誌檔案
     - 每日 03:20：自動清理過期感測器歷史資料 (防止 SQLite 膨脹)
+    - 每日 03:30：自動清理過期設定與審計紀錄 (setting_logs)
+    - 每小時第 10 分鐘：批次上傳離線感測器歷史資料
     """
     def __init__(self):
         self.scheduler = AsyncIOScheduler()
@@ -60,17 +63,27 @@ class SchedulerService:
             replace_existing=True
         )
 
-        # Job 5: 每小時上傳離線期間累積的感測器歷史資料到後端
+        # Job 5: 每日 03:30 執行過期設定與審計紀錄清理 (setting_logs)
+        self.scheduler.add_job(
+            self.job_cleanup_old_setting_logs,
+            'cron',
+            hour=3,
+            minute=30,
+            id='cleanup_old_setting_logs',
+            replace_existing=True
+        )
+
+        # Job 6: 每小時第 10 分鐘上傳離線期間累積的感測器歷史資料到後端 (例如: 01:10, 02:10...)
         self.scheduler.add_job(
             self.job_upload_offline_sensor_histories,
-            'interval',
-            hours=1,
+            'cron',
+            minute=10,
             id='upload_offline_sensor_histories',
             replace_existing=True
         )
 
         self.scheduler.start()
-        logger.info("[SchedulerService] APScheduler started successfully with Heartbeat Check, Daily Backup, Log Cleanup & Sensor History Retention Jobs.")
+        logger.info("[SchedulerService] APScheduler started successfully with Heartbeat Check, Daily Backup, Log Cleanup, Retention & Offline Upload Jobs.")
 
         # 開機/啟動時非同步檢查（若今日 03:00 尚未開機執行備份，自動補備份並清理過期檔）
         try:
@@ -231,17 +244,18 @@ class SchedulerService:
                 # 清理可能過期的舊備份
                 self._cleanup_expired_backups(backup_dir)
 
-            # 開機時同步執行日誌與過期感測歷史清理 (防止夜間關機錯過 03:10 / 03:20 排程)
+            # 開機時同步執行日誌、過期感測歷史與設定/審計日誌清理 (防止夜間關機錯過 03:10 / 03:20 / 03:30 排程)
             await self.job_cleanup_old_logs()
             await self.job_cleanup_old_sensor_histories()
+            await self.job_cleanup_old_setting_logs()
 
         except Exception as e:
             logger.error(f"[SchedulerService] Error in check_and_run_startup_backup: {e}")
 
     async def job_cleanup_old_logs(self):
-        """每日自動清理 10 天前的舊日誌檔案 (包含舊動態格式與滾動壓縮檔)"""
+        """每日自動清理過期的舊日誌檔案 (依 LOG_RETENTION_DAYS 天數，包含舊動態格式與滾動壓縮檔)"""
         try:
-            log_path_env = os.getenv("LOG_PATH", "logs/gateway.log")
+            log_path_env = settings.LOG_PATH or os.getenv("LOG_PATH", "logs/gateway.log")
             log_dir = os.path.dirname(log_path_env) or "logs"
             
             if not os.path.exists(log_dir):
@@ -249,7 +263,7 @@ class SchedulerService:
                 return
 
             now = datetime.now()
-            limit_days = 10
+            limit_days = max(1, settings.LOG_RETENTION_DAYS)
             cleaned_count = 0
 
             for file_name in os.listdir(log_dir):
@@ -275,7 +289,7 @@ class SchedulerService:
             logger.error(f"[SchedulerService] Error cleaning up logs: {e}")
 
     async def job_cleanup_old_sensor_histories(self):
-        """每日自動清理過期的感測器歷史紀錄 (以 SENSOR_HISTORY_RETENTION_DAYS 為基準，預設 30 天)"""
+        """每日自動清理過期的感測器歷史紀錄 (以 SENSOR_HISTORY_RETENTION_DAYS 為基準，預設 60 天)"""
         try:
             import asyncio
             retention_days = settings.SENSOR_HISTORY_RETENTION_DAYS
@@ -289,6 +303,22 @@ class SchedulerService:
                 logger.info(f"[SchedulerService] Expired sensor history cleanup completed: {deleted} records removed.")
         except Exception as e:
             logger.error(f"[SchedulerService] Error during expired sensor history cleanup: {e}")
+
+    async def job_cleanup_old_setting_logs(self):
+        """每日自動清理過期的設定與審計紀錄 (以 SETTING_LOG_RETENTION_DAYS 為基準，預設 60 天)"""
+        try:
+            import asyncio
+            retention_days = settings.SETTING_LOG_RETENTION_DAYS
+            loop = asyncio.get_running_loop()
+            deleted = await loop.run_in_executor(
+                None,
+                setting_log_repo.delete_records_older_than,
+                retention_days
+            )
+            if deleted > 0:
+                logger.info(f"[SchedulerService] Expired setting/audit logs cleanup completed: {deleted} records removed.")
+        except Exception as e:
+            logger.error(f"[SchedulerService] Error during expired setting/audit logs cleanup: {e}")
 
     async def job_upload_offline_sensor_histories(self):
         """每小時將 is_offline=1 的感測器歷史批次上傳到中央後端 (POST /api/v1/sensor-histories/batch)"""
