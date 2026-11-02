@@ -70,10 +70,11 @@ def create_tables():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(100)"))
 
-    # 檢查並動態遷移 setting_logs 指令追蹤欄位 (command_id / status 等，與雲端 setting_logs 對應)
+    # 檢查並動態遷移 setting_logs 指令追蹤與審計日誌欄位，並將舊 audit_logs 資料併入後移除
     if "setting_logs" in inspector.get_table_names():
         log_cols = [col["name"] for col in inspector.get_columns("setting_logs")]
         new_log_cols = {
+            # 指令追蹤欄位 (與雲端 setting_logs 對應)
             "topic": "VARCHAR(255) DEFAULT NULL",
             "payload": "TEXT DEFAULT NULL",
             "command_id": "VARCHAR(36) DEFAULT NULL",
@@ -81,6 +82,11 @@ def create_tables():
             "error_message": "VARCHAR(500) DEFAULT NULL",
             "acked_at": "DATETIME DEFAULT NULL",
             "finished_at": "DATETIME DEFAULT NULL",
+            # 審計欄位 (合併舊 audit_logs 用)
+            "audit_category": "VARCHAR(50) DEFAULT NULL",
+            "action": "VARCHAR(100) DEFAULT NULL",
+            "ip_address": "VARCHAR(50) DEFAULT NULL",
+            "detail": "VARCHAR(1000) DEFAULT NULL",
         }
         for col_name, col_def in new_log_cols.items():
             if col_name not in log_cols:
@@ -89,24 +95,9 @@ def create_tables():
                     conn.execute(text(f"ALTER TABLE setting_logs ADD COLUMN {col_name} {col_def}"))
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_setting_logs_command_id ON setting_logs (command_id)"))
-
-    # 檢查並動態遷移 setting_logs 審計欄位，並將舊 audit_logs 資料併入後移除該表
-    if "setting_logs" in inspector.get_table_names():
-        log_cols = [col["name"] for col in inspector.get_columns("setting_logs")]
-        new_audit_cols = {
-            "audit_category": "VARCHAR(50) DEFAULT NULL",
-            "action": "VARCHAR(100) DEFAULT NULL",
-            "ip_address": "VARCHAR(50) DEFAULT NULL",
-            "detail": "VARCHAR(1000) DEFAULT NULL",
-        }
-        for col_name, col_def in new_audit_cols.items():
-            if col_name not in log_cols:
-                logger.info(f"Adding missing column '{col_name}' to 'setting_logs' table...")
-                with engine.begin() as conn:
-                    conn.execute(text(f"ALTER TABLE setting_logs ADD COLUMN {col_name} {col_def}"))
-        with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_setting_logs_audit_category ON setting_logs (audit_category)"))
 
+        # 若存在舊 audit_logs，則匯入資料並刪除舊表
         if "audit_logs" in inspector.get_table_names():
             logger.info("Merging legacy 'audit_logs' into 'setting_logs'...")
             with engine.begin() as conn:

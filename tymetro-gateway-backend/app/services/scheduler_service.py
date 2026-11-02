@@ -302,7 +302,7 @@ class SchedulerService:
 
         loop = asyncio.get_running_loop()
         url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensor-histories/batch"
-        batch_size = 5000  # 後端單次上限 10000
+        batch_size = 1000  # 後端單次上限 10000
         total = 0
         try:
             for _ in range(200):  # 安全上限，避免無窮迴圈

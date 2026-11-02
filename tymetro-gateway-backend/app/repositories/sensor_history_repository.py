@@ -1,3 +1,4 @@
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -80,13 +81,21 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
         if not ids:
             return 0
         db = self.db if self._external_db else SessionLocal()
+        t0 = time.perf_counter()
         try:
             n = (
                 db.query(SensorHistory)
                 .filter(SensorHistory.id.in_(ids))
                 .update({SensorHistory.isOffline: False}, synchronize_session=False)
             )
+            t1 = time.perf_counter()
             db.commit()
+            t2 = time.perf_counter()
+            logger.info(
+                f"[SensorHistoryRepository] mark_uploaded: ids={len(ids)}, updated={n}, "
+                f"update={(t1 - t0) * 1000:.1f}ms, commit={(t2 - t1) * 1000:.1f}ms, "
+                f"total={(t2 - t0) * 1000:.1f}ms"
+            )
             return n
         except Exception as e:
             db.rollback()
