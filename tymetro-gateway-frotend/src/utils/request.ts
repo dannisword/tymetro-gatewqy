@@ -10,6 +10,8 @@ declare module "axios" {
       loading?: boolean;
       /** true 則不彈錯誤提示 */
       silent?: boolean;
+      /** 指定的 HTTP status 不彈錯誤提示，例如 [500] */
+      silentStatus?: number[];
     };
     loadingId?: number; // 內部使用：追蹤這筆請求的 id
   }

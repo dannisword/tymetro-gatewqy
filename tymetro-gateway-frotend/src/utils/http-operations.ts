@@ -11,7 +11,7 @@ interface ErrorResponse {
 }
 
 const handleError = (e: any, config?: AxiosRequestConfig): ErrorResponse | void => {
-  if (config?.meta?.silent) {
+  if (config?.meta?.silent || (e.status && config?.meta?.silentStatus?.includes(Number(e.status)))) {
     return {
       success: false,
       message: e.message || "error",

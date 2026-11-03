@@ -55,6 +55,9 @@ const backendGit = ref<{
   version?: string;
 }>({});
 
+// 雲端 (Backend MQTT) 連線狀態：connected / disconnected / stopped (null = 尚未取得)
+const cloudStatus = ref<string | null>(null);
+
 const fetchBackendHealth = async () => {
   try {
     const res = await getHealthStatus();
@@ -62,12 +65,15 @@ const fetchBackendHealth = async () => {
       backendVersion.value = res.data.version || '';
       backendGit.value = res.data.git_version || {};
       backendStatus.value = res.data.status || 'online';
+      cloudStatus.value = res.data.services?.backend_mqtt?.status ?? null;
     } else {
       backendStatus.value = 'offline';
+      cloudStatus.value = null;
     }
   } catch (err) {
     logger.warn('[train-list] Failed to fetch backend health status:', err);
     backendStatus.value = 'offline';
+    cloudStatus.value = null;
   }
 };
 
@@ -333,7 +339,7 @@ onMounted(async() => {
     fetchBackendHealth();
     fetchSyncScheduleStatus();
     fetchCloudMqttSwitch();
-  }, 600000);
+  }, 30000);
 
   // 啟動端點超時檢測：每 5 秒檢查各端點是否超過 60 秒未收到 MQTT 訊息
   endpointTimeoutInterval = setInterval(() => {
@@ -538,7 +544,25 @@ onUnmounted(() => {
               :class="isSdsReady ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"
             ></span>
             <span>{{ isSdsReady ? 'SDS Ready' : 'SDS Offline' }}</span>
+            <!-- 雲端 (Backend MQTT) 連線狀態，與 SDS 同一顆膠囊 -->
+            <span class="w-px h-3 bg-current opacity-20"></span>
+            <span
+              class="inline-flex items-center gap-1.5"
+              :class="cloudStatus === 'disconnected' ? 'text-rose-600' : ''"
+              :title="cloudStatus === 'connected'
+                ? '已連線至雲端'
+                : cloudStatus === 'disconnected'
+                  ? '雲端離線：歷史資料將標記為離線，待連線後每小時補傳'
+                  : cloudStatus === 'stopped' ? '雲端服務未啟用' : '狀態未知'"
+            >
+              <span
+                class="w-1.5 h-1.5 rounded-full transition-colors"
+                :class="cloudStatus === 'connected' ? 'bg-emerald-500' : cloudStatus === 'disconnected' ? 'bg-rose-500 animate-pulse' : 'bg-slate-400'"
+              ></span>
+              {{ cloudStatus === 'connected' ? '雲端連線' : cloudStatus === 'disconnected' ? '雲端離線' : cloudStatus === 'stopped' ? '雲端未啟用' : '雲端未知' }}
+            </span>
           </span>
+
         </div>
       </footer>
 
