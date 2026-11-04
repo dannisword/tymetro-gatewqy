@@ -107,6 +107,24 @@ class DbConfigRepository:
         finally:
             db.close()
 
+    def set_system_config(self, key: str, value: Any, category: str = "gateway", description: Optional[str] = None) -> bool:
+        """寫入(新增或更新)單一 SystemConfig，value 一律以字串儲存"""
+        db = SessionLocal()
+        try:
+            cfg = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+            if cfg:
+                setattr(cfg, "value", str(value))
+            else:
+                db.add(SystemConfig(category=category, key=key, value=str(value), description=description))
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error saving config key {key} to DB: {e}")
+            return False
+        finally:
+            db.close()
+
     def update_sensor_values(self, eq_id: str, updates: Dict[str, float]):
         """暫存感測器即時數值更新至記憶體快取，不立即執行資料庫寫入"""
         if not updates:

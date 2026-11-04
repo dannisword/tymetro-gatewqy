@@ -9,15 +9,28 @@ from app.core.config_yaml import yaml_settings
 from app.database.db_config_repo import db_config_repo
 from app.utils.datetime_util import get_local_now
 
-# 全域開關：是否接受雲端下行指令 (Cloud -> Gateway)。關閉時仍維持連線與上行，收到指令直接回報 FAILED (執行期變數，服務重啟後恢復為 True)
+# 全域開關：是否接受雲端下行指令 (Cloud -> Gateway)。關閉時仍維持連線與上行，收到指令直接回報 FAILED (持久化於 system_configs，服務啟動時載入；DB 無紀錄則預設 True)
 backend_mqtt_enabled: bool = True
 
 def is_backend_mqtt_enabled() -> bool:
     return backend_mqtt_enabled
 
+BACKEND_MQTT_ENABLED_KEY = "backend_mqtt_enabled"
+
 def set_backend_mqtt_enabled(value: bool):
     global backend_mqtt_enabled
     backend_mqtt_enabled = bool(value)
+    db_config_repo.set_system_config(
+        BACKEND_MQTT_ENABLED_KEY, "true" if backend_mqtt_enabled else "false",
+        category="gateway", description="是否接受雲端下行指令"
+    )
+
+def load_backend_mqtt_enabled():
+    """啟動時自 system_configs 載入下行開關，無紀錄則維持預設 True"""
+    global backend_mqtt_enabled
+    val = db_config_repo.get_system_config(BACKEND_MQTT_ENABLED_KEY, None)
+    if val is not None:
+        backend_mqtt_enabled = str(val).strip().lower() in ("true", "1", "yes")
 
 class BackendMQTTService:
     """
@@ -95,6 +108,7 @@ class BackendMQTTService:
 
     async def start(self):
         """啟動Backend MQTT 拋轉任務"""
+        load_backend_mqtt_enabled()
         self.reload_config()
         self._running = True
         self._worker_task = asyncio.create_task(self._publish_loop())

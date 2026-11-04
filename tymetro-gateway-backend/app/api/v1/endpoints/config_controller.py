@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
+from app.core.logger import logger
 from datetime import datetime, date
 from sqlalchemy.orm import Session
 from typing import Optional, Any
@@ -45,11 +47,31 @@ def _backend_mqtt_state() -> dict:
 def get_backend_mqtt_switch():
     return ResponseUtil.success(data=_backend_mqtt_state())
 
-@router.post("/cloud-mqtt", response_model=ResponseBase, summary="開啟/關閉雲端遠端控制 (下行)，關閉時維持連線並直接回報雲端 FAILED")
-async def set_backend_mqtt_switch(request: CloudMqttSwitch, current_user: User = Depends(get_current_user)):
+def _sync_cars_remote_control(db: Session, enabled: bool) -> dict:
+    """呼叫中心端 PUT /api/v1/cars/{id}，將本機所有車廂的 isRemoteControl 更新為 enabled；失敗不丟例外，回傳結果摘要"""
+    token = HttpUtil.get_central_backend_token()
+    if not token:
+        return {"synced": 0, "failed": [], "error": "無法登入中心後端取得 Token"}
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    base = settings.TYMETRO_BACKEND_URL.rstrip("/")
+    synced, failed = 0, []
+    for (car_id,) in db.query(Car.id).all():
+        resp = HttpUtil.put(f"{base}/api/v1/cars/{car_id}", data={"isRemoteControl": enabled}, headers=headers)
+        if resp.get("success"):
+            synced += 1
+        else:
+            failed.append({"carId": car_id, "message": resp.get("message")})
+    return {"synced": synced, "failed": failed}
+
+@router.post("/cloud-mqtt", response_model=ResponseBase, summary="開啟/關閉雲端遠端控制 (下行)，關閉時維持連線並直接回報雲端 FAILED，並同步中心端 cars.isRemoteControl")
+async def set_backend_mqtt_switch(request: CloudMqttSwitch, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     set_backend_mqtt_enabled(request.enabled)
+    # HttpUtil 為同步阻塞呼叫，放到 thread 執行避免卡住 event loop
+    sync_result = await run_in_threadpool(_sync_cars_remote_control, db, request.enabled)
+    if sync_result.get("error") or sync_result["failed"]:
+        logger.warning(f"[cloud-mqtt] 同步中心端 cars.isRemoteControl 未完全成功: {sync_result}")
     return ResponseUtil.success(
-        data=_backend_mqtt_state(),
+        data={**_backend_mqtt_state(), "centralSync": sync_result},
         message="雲端遠端控制已開啟" if request.enabled else "雲端遠端控制已關閉"
     )
 
