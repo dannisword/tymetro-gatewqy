@@ -66,7 +66,9 @@ async def lifespan(app: FastAPI):
             logger.info(f"[Startup] Initial values published to {init_res.get('count', 0)} PLC(s) successfully.")
         except Exception as e:
             logger.error(f"[Startup] Failed to publish initial values on startup: {e}")
-    
+
+    logger.info("[Startup] Gateway Application startup completed. 開機執行完成。")
+
     yield
 
     # 【關閉階段】
