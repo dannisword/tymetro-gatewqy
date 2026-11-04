@@ -11,8 +11,7 @@ router = APIRouter()
 
 @router.get("", response_model=ResponseBase, summary="獲取本機數值對照文字 (自中心端下載)")
 def get_value_labels(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     rows = db.query(SensorValueLabel).order_by(SensorValueLabel.sensorCode, SensorValueLabel.bitMask).all()
     data = [

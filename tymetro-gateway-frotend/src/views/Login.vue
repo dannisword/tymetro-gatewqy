@@ -63,7 +63,7 @@ async function login() {
               <input
                 v-model="form.username"
                 type="text"
-                placeholder="admin or test"
+                placeholder="請輸入"
                 class="w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:bg-primary-500"
               />
             </div>
@@ -73,12 +73,12 @@ async function login() {
               <input
                 v-model="form.password"
                 type="password"
-                placeholder="admin or test"
+                placeholder="請輸入"
                 class="w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:bg-primary-500"
               />
             </div>
 
-            <div class="flex items-center justify-between">
+            <!-- <div class="flex items-center justify-between">
               <label
                 class="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300"
               >
@@ -90,7 +90,7 @@ async function login() {
                 Remember me
               </label>
               <a href="#" class="text-sm text-primary-600 hover:underline">forget password</a>
-            </div>
+            </div> -->
 
             <button
               type="submit"

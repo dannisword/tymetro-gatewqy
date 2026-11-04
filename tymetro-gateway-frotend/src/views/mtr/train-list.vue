@@ -24,7 +24,7 @@ import { ElMessageBox } from 'element-plus';
 
 // 麵包屑設定
 const breadcrumbItems = [
-  { label: '首頁', to: '/dashboard' },
+  { label: '首頁', to: '/mtr/train-list' },
   { label: '列車狀態列表' }
 ];
 

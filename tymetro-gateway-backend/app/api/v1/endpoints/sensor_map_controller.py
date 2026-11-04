@@ -34,8 +34,7 @@ class SensorMapMarker(BaseModel):
 @router.get("/template/{template_code}", response_model=ResponseBase[List[SensorMapMarker]], summary="根據模板編號獲取感測器圖配置")
 def get_sensor_map_template(
     template_code: str,
-    service: ConfigService = Depends(get_config_service),
-    current_user: User = Depends(get_current_user)
+    service: ConfigService = Depends(get_config_service)
 ):
     try:
         config_type = f"SENSOR_MAP_{template_code}"

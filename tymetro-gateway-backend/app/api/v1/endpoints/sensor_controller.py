@@ -54,8 +54,7 @@ def get_sensors(
 @router.get("/by-group", response_model=ResponseList[SensorResponse], summary="根據暫存器群組獲取感測器清單")
 def get_sensors_by_group(
     registerGroup: str,
-    service: SensorService = Depends(get_sensor_service),
-    current_user: User = Depends(get_current_user)
+    service: SensorService = Depends(get_sensor_service)
 ):
     group_map = {
         "initial": "INITIAL",

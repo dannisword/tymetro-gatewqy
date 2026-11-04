@@ -33,8 +33,7 @@ def get_schedules(
     order: str = "DESC",
     scheduleType: Optional[str] = None,
     isActive: Optional[bool] = None,
-    service: ScheduleService = Depends(get_schedule_service),
-    current_user: User = Depends(get_current_user)
+    service: ScheduleService = Depends(get_schedule_service)
 ):
     schedules, total = service.get_schedules(
         scheduleType=scheduleType, 

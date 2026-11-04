@@ -24,6 +24,15 @@ export function injectGuard(router: Router) {
       });
     }
 
+    // 維修模式：必須以 admin 帳號登入
+    if (to.meta.maintenance === true && isAuthed) {
+      const account = String(store.user?.account ?? store.user?.userName ?? "").toLowerCase();
+      if (account !== "admin") {
+        authStore.clearToken();
+        return next({ name: "Login", query: { redirect: to.fullPath }, replace: true });
+      }
+    }
+
     // 2. 已登入又進入 Login：直接回首頁
     if (isAuthed && String(to.name) === "Login") {
       return next({ path: "/", replace: true });
