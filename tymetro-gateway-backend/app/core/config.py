@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # JWT 認證密鑰
     SECRET_KEY: str = os.getenv("SECRET_KEY", "2sXk8QvJ4mYwN7eLcP5gZh9RuTf3BaD1KiVx6EnWq0MoHy8CrSjL4UpGbNz7FdAeI")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8  # 8 hours
 
     # 外部中央後端連線設定 (支援帳密或固定 SECRET_KEY 兩種驗證方式)
     TYMETRO_BACKEND_URL: str = os.getenv("TYMETRO_BACKEND_URL", "http://220.133.144.73:8901")
