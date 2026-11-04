@@ -25,8 +25,7 @@ def get_sensors(
     endPos: Optional[str] = None,
     showOnDashboard: Optional[bool] = None,
     isActive: Optional[bool] = None,
-    service: SensorService = Depends(get_sensor_service),
-    current_user: User = Depends(get_current_user)
+    service: SensorService = Depends(get_sensor_service)
 ):
     items, total = service.get_sensors(
         carId=carId,

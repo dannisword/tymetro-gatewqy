@@ -21,8 +21,7 @@ def get_cars(
     carType: Optional[str] = None,
     carStatus: Optional[str] = None,
     isActive: Optional[bool] = None,
-    service: CarService = Depends(get_car_service),
-    current_user: User = Depends(get_current_user)
+    service: CarService = Depends(get_car_service)
 ):
     items, total = service.get_cars(
         trainCode=trainCode,

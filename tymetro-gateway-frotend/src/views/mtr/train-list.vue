@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
 import { useMtrStore } from '@/store/useMtrStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useMQTT } from '@/store/useMQTT';
 import { CompressorStatus } from '@/utils/enums';
 import { MetroConfig } from '@/utils/types';
@@ -93,6 +94,7 @@ const fetchSyncScheduleStatus = async () => {
 };
 
 // 遠端控制 (Cloud MQTT) 開關 (null = 尚未取得)
+const authStore = useAuthStore();
 const cloudMqttEnabled = ref<boolean | null>(null);
 const cloudMqttBusy = ref(false);
 
@@ -107,7 +109,7 @@ const fetchCloudMqttSwitch = async () => {
 };
 
 const toggleCloudMqtt = async () => {
-  if (cloudMqttEnabled.value === null || cloudMqttBusy.value) return;
+  if (!authStore.isAuthenticated || cloudMqttEnabled.value === null || cloudMqttBusy.value) return;
   const next = !cloudMqttEnabled.value;
   try {
     await ElMessageBox.confirm(
@@ -416,7 +418,8 @@ onUnmounted(() => {
               : cloudMqttEnabled
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70 hover:bg-emerald-100'
                 : 'bg-rose-50 text-rose-700 border-rose-200/70 hover:bg-rose-100')"
-            :disabled="cloudMqttEnabled === null || cloudMqttBusy"
+            :disabled="!authStore.isAuthenticated || cloudMqttEnabled === null || cloudMqttBusy"
+            :title="authStore.isAuthenticated ? '' : '請先登入（維修模式）才能切換遠端控制'"
             @click="toggleCloudMqtt"
           >
             <span class="inline-flex items-center gap-1.5">

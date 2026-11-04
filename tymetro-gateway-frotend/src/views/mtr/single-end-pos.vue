@@ -9,6 +9,7 @@ import BaseRangeSlider from '@/components/BaseRangeSlider.vue';
 import RegisterTrendModal from '@/views/mtr/components/RegisterTrendModal.vue';
 import ElDialogCustom from '@/components/ElDialogCustom.vue';
 import { useMQTT } from '@/store/useMQTT';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useAlert } from "@/composables/TLAlter";
 import { ElMessageBox, ElLoading } from 'element-plus';
 import { SYSTEM_MODE_MAP, SystemModeKey, CompressorStatus, CompressorHealth, SettingTypeEnum, FreshAirDamper, FRESH_AIR_DAMPER_LABEL } from '@/utils/enums';
@@ -67,6 +68,13 @@ const withLockDelay = (lockRef: { value: boolean }, delayMs = 2000) => {
 const route = useRoute();
 const router = useRouter();
 const { TLError, TLWarning, TLInfo, TLSuccess } = useAlert();
+const authStore = useAuthStore();
+// 一般模式可瀏覽；設定/控制屬維修模式，需登入
+const requireLogin = (): boolean => {
+  if (authStore.isAuthenticated) return true;
+  TLWarning('請先登入（維修模式）才能進行設定');
+  return false;
+};
 
 // ==========================================
 // 2. Core Route State & Derived Computeds
@@ -531,6 +539,7 @@ const fetchMapConfig = async () => {
 
 // HVAC 與 PLC 控制
 const handleTempAdjust = (amount: number) => {
+  if (!requireLogin()) return;
   if (setTemp.value === null || isTempSettingLocked.value) return;
   const newTemp = parseFloat((setTemp.value + amount).toFixed(1));
   if (newTemp >= 16 && newTemp <= 30) {
@@ -679,6 +688,7 @@ const executeMarkerCommand = async () => {
 
 // 呼叫後端執行設定 API (後端負責發布 MQTT、寫入稽核與設定紀錄)
 const executePlcCommand = async (command: SettingTypeEnum, value?: number): Promise<boolean> => {
+  if (!requireLogin()) return false;
   try {
     const res = await httpOperations.post('/api/v1/plc-control/execute', {
       command,
@@ -864,6 +874,7 @@ const handleBatchTempDialogClose = async (res: any) => {
 };
 
 const handleBatchTempSubmit = async () => {
+  if (!requireLogin()) return;
   if (isBatchSettingLocked.value) return;
 
   const currentTrainNo = trainNo.value;
