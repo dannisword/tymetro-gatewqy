@@ -32,18 +32,19 @@ const hours = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '
 
 interface ModeOption {
   code: string;
+  range: string;
   label: string;
 }
 
 const modeOptions: ModeOption[] = [
-  { code: 'spring1', label: '春1模式' },
-  { code: 'spring2', label: '春2模式' },
-  { code: 'summer1', label: '夏1模式' },
-  { code: 'summer2', label: '夏2模式' },
-  { code: 'autumn1', label: '秋1模式' },
-  { code: 'autumn2', label: '秋2模式' },
-  { code: 'winter1', label: '冬1模式' },
-  { code: 'winter2', label: '冬2模式' }
+  { code: 'spring1', range: '03/01 ~ 04/15', label: '春1模式' },
+  { code: 'spring2', range: '04/16 ~ 05/31', label: '春2模式' },
+  { code: 'summer1', range: '06/01 ~ 07/15', label: '夏1模式' },
+  { code: 'summer2', range: '07/16 ~ 08/31', label: '夏2模式' },
+  { code: 'autumn1', range: '09/01 ~ 10/15', label: '秋1模式' },
+  { code: 'autumn2', range: '10/16 ~ 11/30', label: '秋2模式' },
+  { code: 'winter1', range: '12/01 ~ 01/15', label: '冬1模式' },
+  { code: 'winter2', range: '01/16 ~ 02/28', label: '冬2模式' }
 ];
 
 const activeMode = ref(modeOptions[0].code);
@@ -241,7 +242,10 @@ const handleDialogClose = async (dialogRef: any) => {
               : 'text-white/70 hover:text-white bg-transparent border-transparent shadow-none hover:bg-white/10'"
             class="shrink-0 !px-4 sm:!px-6 !py-1.5 !h-auto text-md"
           >
-            {{ item.label }}
+            <div class="leading-tight">
+              <div>{{ item.label }}</div>
+              <div class="text-xs font-normal opacity-70">{{ item.range }}</div>
+            </div>
           </BaseButton>
         </div>
       </div>
