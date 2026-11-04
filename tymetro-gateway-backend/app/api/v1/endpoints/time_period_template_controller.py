@@ -51,5 +51,19 @@ def download_template_by_code(
     resp_data = HttpUtil.get(target_url, headers=headers, timeout=5)
     return resp_data
 
+@router.get("/download-by-train/{trainCode}/{code}", response_model=ResponseBase, summary="依車組編號下載時段樣板 (中繼轉發)")
+def download_template_by_train_code(
+    trainCode: str,
+    code: str,
+    current_user: User = Depends(get_current_user)
+):
+    token = HttpUtil.get_central_backend_token()
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
+    target_url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/time-period-templates/download-by-train/{trainCode}/{code}"
 
+    logger.info(f"Proxying train download request to central backend: {target_url}")
+    resp_data = HttpUtil.get(target_url, headers=headers, timeout=5)
+    return resp_data

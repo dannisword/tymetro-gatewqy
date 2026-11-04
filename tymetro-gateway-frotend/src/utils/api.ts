@@ -125,6 +125,17 @@ export const downloadTimePeriodTemplate = async (code: string): Promise<any> => 
     return await httpOperations.get(url)
 }
 
+export const downloadTimePeriodTemplateByTrain = async (trainCode: string, code: string): Promise<any> => {
+    const url = `/api/v1/time-period-templates/download-by-train/${encodeURIComponent(trainCode)}/${code}`
+    return await httpOperations.get(url)
+}
+
+export const getLocalTrainCode = async (): Promise<string> => {
+    const res = await httpOperations.get('/api/v1/cars?pageSize=1')
+    const list = res?.data?.source ?? (Array.isArray(res?.data) ? res.data : [])
+    return list[0]?.trainCode || ''
+}
+
 export const downloadVehicleMetadata = async (trainCode?: string): Promise<any> => {
     const url = `/api/v1/configs/download-metadata` + (trainCode ? `?trainCode=${encodeURIComponent(trainCode)}` : '')
     return await httpOperations.post(url)

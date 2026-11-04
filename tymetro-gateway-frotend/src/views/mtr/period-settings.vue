@@ -8,7 +8,8 @@ import {
   getConfigsByType, 
   upsertConfig, 
   getTimePeriodTemplateOptions, 
-  downloadTimePeriodTemplate 
+  downloadTimePeriodTemplateByTrain,
+  getLocalTrainCode
 } from '@/utils/api';
 import { useAlert } from '@/composables/TLAlter';
 import { 
@@ -88,6 +89,9 @@ onBeforeMount(() => {
       if (response.data && response.data.version) {
         currentVersion.value = response.data.version;
       }
+      if (response.data && response.data.name) {
+        currentName.value = response.data.name;
+      }
       if (response.data && response.data.code) {
         currentCode.value = response.data.code;
       }
@@ -145,15 +149,21 @@ const handleDialogClose = async (dialogRef: any) => {
     return;
   }
   try {
-    const res = await downloadTimePeriodTemplate(selectedTemplateCode.value);
+    const trainCode = await getLocalTrainCode().catch(() => '');
+    if (!trainCode) {
+      TLError('找不到本機車組編號，請先下載暫存器資料');
+      return;
+    }
+    const res = await downloadTimePeriodTemplateByTrain(trainCode, selectedTemplateCode.value);
     if (res.success && res.data && res.data.payload) {
       const payload = res.data.payload;
       const templateName = templateOptions.value.find(o => o.code === selectedTemplateCode.value)?.name || res.data.name || '';
       const configPayload = {
         configType: 'SCHEDULE',
         configContent: JSON.stringify({ ...payload, templateName }),
+        name: templateName,
         code: selectedTemplateCode.value,
-        version: [templateName, res.data.version || '1.0.0'].filter(Boolean).join(' ')
+        version: res.data.version || '1.0.0'
       };
       const upsertRes = await upsertConfig(configPayload);
       if (upsertRes.success) {
