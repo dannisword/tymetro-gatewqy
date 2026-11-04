@@ -640,6 +640,7 @@ const handleMarkerDialogClose = async (res: any) => {
 };
 
 const resetCompressorHours = async (id: number) => {
+  if (!requireLogin()) return;
   try {
     await ElMessageBox.confirm(`確定要重置壓縮機 ${id} 的運轉時數嗎？此操作無法復原。`, '確認重置時數', {
       appendTo: msgBoxTarget(),
@@ -714,6 +715,7 @@ const executePlcCommand = async (command: SettingTypeEnum, value?: number): Prom
 };
 
 const setFreshAirDamper = async (val: number) => {
+  if (!requireLogin()) return;
   if (isDamperSettingLocked.value) return;
   freshAirDamperPos.value = val;
   const label = freshAirDamperOptions.value.find(o => o.value === val)?.label || `${val}%`;
@@ -734,6 +736,7 @@ const setFreshAirDamper = async (val: number) => {
 };
 
 const setEmergAirDamper = async (val: number) => {
+  if (!requireLogin()) return;
   if (isDamperSettingLocked.value) return;
   emergAirDamper.value = val;
   const label = val === 2 ? '開啟' : '關閉';
@@ -817,6 +820,7 @@ const onReload = () => {
 };
 
 const handlePlcReset = () => {
+  if (!requireLogin()) return;
   ElMessageBox.confirm("確定要發送重置復歸指令給此端點的 PLC 嗎？", "重置復歸", {
     appendTo: msgBoxTarget(),
     type: "warning",
@@ -832,6 +836,7 @@ const handlePlcReset = () => {
 };
 
 const handleClearAcHours = () => {
+  if (!requireLogin()) return;
   ElMessageBox.confirm("確定要清除此端點的空調運轉時數嗎？此操作無法復原。", "空調時數重置", {
     appendTo: msgBoxTarget(),
     type: "warning",
@@ -847,6 +852,7 @@ const handleClearAcHours = () => {
 };
 
 const openBatchTempModal = (type: 'temperature' | 'freshAir' | 'emergAir' = 'temperature') => {
+  if (!requireLogin()) return;
   batchSettingType.value = type;
   // 預設填入當前端點的即時/設定數值
   batchTemp.value = setTemp.value !== null ? setTemp.value : 24.0;
@@ -1409,7 +1415,7 @@ onUnmounted(() => {
                   :min="0"
                   :max="100"
                   :step="25"
-                  :disabled="!isDeviceConnected || isDamperSettingLocked"
+                  :disabled="!authStore.isAuthenticated || !isDeviceConnected || isDamperSettingLocked"
                   :labels="['0', '25', '50', '75', '100']"
                 />
               </div>
@@ -1427,7 +1433,7 @@ onUnmounted(() => {
                   <BaseSwitch
                     :modelValue="emergAirDamper === 2"
                     @update:modelValue="setEmergAirDamper($event ? 2 : 1)"
-                    :disabled="!isDeviceConnected || isDamperSettingLocked"
+                    :disabled="!authStore.isAuthenticated || !isDeviceConnected || isDamperSettingLocked"
                     activeColor="bg-rose-500"
                     inactiveColor="bg-slate-300"
                   />
