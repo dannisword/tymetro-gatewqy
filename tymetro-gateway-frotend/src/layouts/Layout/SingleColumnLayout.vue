@@ -10,6 +10,7 @@ import BaseIcon from "../../components/BaseIcon.vue";
 import UserDropdown from "./UserDropdown.vue";
 import LoadingOverlay from "../../components/LoadingOverlay.vue";
 import AlertsContainer from "../../components/TLAlertsContainer.vue";
+import { getLocalTrainCode } from "../../utils/api";
 
 const tagsStore = useTagsStore();
 const { tags } = storeToRefs(tagsStore);
@@ -19,8 +20,12 @@ const appStore = useAppStore();
 const mtrStore = useMtrStore();
 
 onMounted(() => {
-  mtrStore.fetchSystemIp();
+  getLocalTrainCode()
+    .then((code) => { trainCode.value = code; })
+    .catch(() => {});
 });
+
+const trainCode = ref("");
 
 const handleLogout = () => {
   appStore.logout();
@@ -89,13 +94,12 @@ const viewKey = ref(0);
     <header class="w-full bg-[#003775] text-white shadow-md z-50 shrink-0"> 
       <div class="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between max-w-[1920px] mx-auto">
         <!-- Left: Logo & Brand -->
-        <div class="flex items-center gap-3 cursor-pointer select-none" @click="router.push('/')">
+        <div class="flex items-center gap-3 cursor-pointer select-none" @click="router.push('/mtr/train-list')">
 
           <div class="flex flex-col">
             <span class="text-lg font-extrabold tracking-tight leading-none">桃園捷運監控系統</span>
             <div class="flex items-center gap-2 mt-0.5">
-              <span class="text-[11px] text-white/70 font-semibold tracking-wider">Metro Monitoring System</span>
-              <span class="text-[10px] text-white/60 bg-white/10 px-1.5 py-0.5 rounded border border-white/10 font-mono font-bold">IP: {{ mtrStore.localIp }}</span>
+              <span class="text-[11px] text-white/70 font-semibold tracking-wider">車組編號：{{ trainCode || '-' }}</span>
             </div>
           </div>
         </div>

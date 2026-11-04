@@ -7,7 +7,7 @@ import type { RouteRecordRaw, Router } from "vue-router";
 import { h, resolveComponent } from "vue";
 
 const layoutMode = import.meta.env.VITE_LAYOUT_MODE;
-const homeRedirect = layoutMode === '1-column-layout' ? 'mtr/train-list' : 'dashboard';
+const homeRedirect = layoutMode === '1-column-layout' ? '/mtr/train-list' : '/dashboard';
 
 export const baseRoutes: RouteRecordRaw[] = [
   {
