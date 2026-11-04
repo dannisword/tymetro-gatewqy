@@ -44,6 +44,7 @@ def create_tables():
     _add_missing_columns(inspector, {
         "configs": {
             "version": "VARCHAR(50) DEFAULT '1.0.0'",
+            "code": "VARCHAR(50) DEFAULT NULL",
         },
         "sensors": {
             "limit_mode": "VARCHAR(20) DEFAULT 'NONE'",

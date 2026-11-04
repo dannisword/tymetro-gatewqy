@@ -9,6 +9,7 @@ class Config(AuditModel):
     configType = Column("config_type", String(50), nullable=False, index=True, comment="設定類型")
     configContent = Column("config_content", Text, nullable=True, comment="設定內容")
     version = Column("version", String(50), nullable=True, default="1.0.0", comment="版本號")
+    code = Column("code", String(50), nullable=True, comment="樣板代碼 (time_period_templates.code)")
 
 
 class SystemConfig(AuditModel):

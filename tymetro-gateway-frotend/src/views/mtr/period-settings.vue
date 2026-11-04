@@ -55,6 +55,7 @@ const templateOptions = ref<any[]>([]);
 const selectedTemplateCode = ref('');
 const currentVersion = ref('');
 const currentName = ref('');
+const currentCode = ref('');
 
 // 預設產生單一模式的 24x7 矩陣
 const createDefaultMatrix = () => {
@@ -86,6 +87,9 @@ onBeforeMount(() => {
       }
       if (response.data && response.data.version) {
         currentVersion.value = response.data.version;
+      }
+      if (response.data && response.data.code) {
+        currentCode.value = response.data.code;
       }
       if (response.data && response.data.configContent) {
         try {
@@ -148,6 +152,7 @@ const handleDialogClose = async (dialogRef: any) => {
       const configPayload = {
         configType: 'SCHEDULE',
         configContent: JSON.stringify({ ...payload, templateName }),
+        code: selectedTemplateCode.value,
         version: [templateName, res.data.version || '1.0.0'].filter(Boolean).join(' ')
       };
       const upsertRes = await upsertConfig(configPayload);
@@ -162,6 +167,7 @@ const handleDialogClose = async (dialogRef: any) => {
           }
         });
         currentName.value = templateName;
+        currentCode.value = selectedTemplateCode.value;
         scheduleData.value = allSchedules.value[activeMode.value];
         if (upsertRes.data && upsertRes.data.id) {
           configId.value = upsertRes.data.id;

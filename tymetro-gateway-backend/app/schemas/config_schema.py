@@ -6,6 +6,7 @@ class ConfigBase(BaseModel):
     configType: str
     configContent: Optional[str] = None
     version: Optional[str] = "1.0.0"
+    code: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -16,6 +17,7 @@ class ConfigUpdate(BaseModel):
     configType: Optional[str] = None
     configContent: Optional[str] = None
     version: Optional[str] = None
+    code: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 

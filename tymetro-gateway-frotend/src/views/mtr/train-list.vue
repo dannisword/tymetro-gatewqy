@@ -331,7 +331,7 @@ onMounted(async() => {
   // 載入 config.json 車廂配置
   await loadFromConfig();
 
-  // 取得後端健康狀態與版本資訊，每 60 秒輪詢確認一次
+  // 取得後端健康狀態與版本資訊，每 10分鐘輪詢確認一次
   fetchBackendHealth();
   fetchSyncScheduleStatus();
   fetchCloudMqttSwitch();
@@ -339,7 +339,7 @@ onMounted(async() => {
     fetchBackendHealth();
     fetchSyncScheduleStatus();
     fetchCloudMqttSwitch();
-  }, 30000);
+  }, 600000);
 
   // 啟動端點超時檢測：每 5 秒檢查各端點是否超過 60 秒未收到 MQTT 訊息
   endpointTimeoutInterval = setInterval(() => {
