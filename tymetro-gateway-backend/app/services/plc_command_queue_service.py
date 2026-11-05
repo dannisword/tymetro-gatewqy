@@ -89,9 +89,12 @@ class PlcCommandQueueWorker:
             db.close()
 
     async def _retry_group(self, db, command, value, train_code, event, ids) -> None:
-        service = PlcCommandService(db)
         tasks = db.query(PlcCommandTask).filter(PlcCommandTask.id.in_(ids)).order_by(PlcCommandTask.id).all()
+        tasks = [t for t in tasks if t.status == "PENDING"]
+        if not tasks:
+            return
         targets = [{"carNo": t.carNo, "endPos": t.endPos} for t in tasks]
+        service = PlcCommandService(db)
         results = None
         error: Optional[str] = None
         fatal = False

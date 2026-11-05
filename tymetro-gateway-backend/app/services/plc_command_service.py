@@ -356,6 +356,7 @@ class PlcCommandService:
             return None
         # 優先讀 MQTT 剛收到的記憶體最新值 (DB 為批次寫入，會延遲數秒)
         live = db_config_repo.get_live_sensor_value(equipment.id, code)
+        logger.debug(f"[PlcCommand] 讀取點位 {code}: carVin={car.carVin} eq_id={equipment.id} endPos={equipment.endPos} live={live}")
         if live is not None:
             return live
         # 結束目前交易以讀到 MQTT 寫入的最新值
@@ -573,10 +574,7 @@ class PlcCommandService:
         operator: str,
         results: List[BatchTargetResult],
     ) -> None:
-        """
-        已下發但未確認的端點 (confirmed is False) 寫入重試佇列。
-        同一指令、同一端點尚未完成的舊任務標為 SUPERSEDED，避免舊設定值在新設定之後又被補送。
-        """
+        """已下發但未確認的端點 (confirmed is False) 寫入重試佇列；同一指令、同一端點的舊 PENDING 任務改為 SUPERSEDED"""
         unconfirmed = [r for r in results if r.confirmed is False and r.carNo is not None]
         if not unconfirmed:
             return

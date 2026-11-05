@@ -304,7 +304,7 @@ class GatewayMQTTService:
                 registers = eq_sensor_map.get(eq.id, {})
 
                 payload = {
-                    "events": "set_value",
+                    "events": "write_temperature",
                     "timestamp": current_timestamp,
                     "trainCode": train_no,
                     "carNo": car_no_val,
