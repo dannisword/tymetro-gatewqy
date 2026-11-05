@@ -89,6 +89,12 @@ export const baseRoutes: RouteRecordRaw[] = [
             meta: { title: "事件紀錄", affix: false, keepAlive: true, requiresAuth: false },
           },
           {
+            path: "plc-command-tasks",
+            name: "plc-command-tasks",
+            component: () => import("@/views/mtr/plc-command-tasks.vue"),
+            meta: { title: "設定重試佇列", affix: false, keepAlive: true, requiresAuth: true, maintenance: true },
+          },
+          {
             path: "train-list",
             name: "train-list",
             component: () => import("@/views/mtr/train-list.vue"),

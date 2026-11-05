@@ -14,7 +14,8 @@ from app.api.v1.endpoints import (
     option_controller,
     sensor_value_label_controller,
     equipment_event_controller,
-    plc_control_controller
+    plc_control_controller,
+    plc_command_task_controller
 )
 
 api_router = APIRouter()
@@ -39,3 +40,4 @@ api_router.include_router(option_controller.router, prefix="/options", tags=["�
 api_router.include_router(sensor_value_label_controller.router, prefix="/sensor-value-labels", tags=["數值對照文字 (Sensor Value Labels)"])
 api_router.include_router(equipment_event_controller.router, prefix="/equipment-events", tags=["設備事件紀錄 (Equipment Events)"])
 api_router.include_router(plc_control_controller.router, prefix="/plc-control", tags=["PLC 設定執行 (PLC Control)"])
+api_router.include_router(plc_command_task_controller.router, prefix="/plc-command-tasks", tags=["PLC 設定重試佇列 (PLC Command Tasks)"])

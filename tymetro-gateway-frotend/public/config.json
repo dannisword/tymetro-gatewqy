@@ -156,6 +156,12 @@
       "route": "/mtr/event-records"
     },
     {
+      "id": 8,
+      "title": "設定重試佇列",
+      "icon": "mdiTimerSand",
+      "route": "/mtr/plc-command-tasks"
+    },
+    {
       "id": 6,
       "title": "感測器圖面配置",
       "icon": "mdiVectorSquare",

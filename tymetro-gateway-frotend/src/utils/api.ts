@@ -77,6 +77,10 @@ export const getEquipmentEvents = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/equipment-events', params)
 }
 
+export const getPlcCommandTasks = async (params?: any): Promise<any> => {
+    return await httpOperations.get('/api/v1/plc-command-tasks', params)
+}
+
 export const getModbusRecords = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/sensor-histories', params)
 }
