@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     SENSOR_HISTORY_RETENTION_DAYS: int = int(os.getenv("SENSOR_HISTORY_RETENTION_DAYS", "60"))  # 感測器歷史資料保留天數 (預設60天)
     SETTING_LOG_RETENTION_DAYS: int = int(os.getenv("SETTING_LOG_RETENTION_DAYS", "60"))  # 設定與審計紀錄保留天數 (預設60天)
     EQUIPMENT_EVENT_RETENTION_DAYS: int = int(os.getenv("EQUIPMENT_EVENT_RETENTION_DAYS", "60"))  # 設備事件紀錄保留天數 (預設60天)
+    PLC_COMMAND_TASK_RETENTION_DAYS: int = int(os.getenv("PLC_COMMAND_TASK_RETENTION_DAYS", "7"))  # PLC 重試佇列紀錄保留天數 (預設7天)
     LOG_RETENTION_DAYS: int = int(os.getenv("LOG_RETENTION_DAYS", "10"))  # 本地檔案日誌保留天數 (預設10天)
     TRAIN_NO: str = os.getenv("TRAIN_NO", "199")  # 車組編號
 

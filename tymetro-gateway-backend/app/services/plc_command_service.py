@@ -14,6 +14,7 @@ from app.models.equipment_model import Equipment
 from app.models.sensor_model import Sensor
 from app.schemas.plc_command_schema import PlcCommandRequest, PlcCommandResponse
 from app.models.setting_log_model import SettingLog
+from app.models.plc_command_task_model import PlcCommandTask
 from app.services.audit_log_service import AuditLogService
 from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.utils.datetime_util import get_local_now
@@ -120,6 +121,8 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
 # 完成確認：每秒查詢一次 sensors，逾時視為未完成
 CONFIRM_TIMEOUT_SEC = 10
 CONFIRM_INTERVAL_SEC = 1.0
+# 批次設定未確認端點的背景重試上限 (見 plc_command_queue_service)
+PLC_QUEUE_MAX_ATTEMPTS = 10
 
 
 @dataclass(frozen=True)
@@ -426,11 +429,16 @@ class PlcCommandService:
         ip_address: Optional[str],
         train_code: Optional[str] = None,
         event: Optional[str] = None,
+        enqueue_failed: bool = True,
+        record: bool = True,
     ) -> List[BatchTargetResult]:
         """
         對多個端點下同一個設定 (如 8 端點批次設定溫度)：一次發出所有指令，再於同一個迴圈輪流確認各端點，
         確認方式與單端點 execute 相同 (設定值型最多重發給尚未完成者)；每個端點各寫一筆設定紀錄，另寫一筆彙總稽核紀錄。
         :param targets: [{"carNo": 1101, "endPos": 1}, ...]
+        :param enqueue_failed: 設定值型指令 (可安全重發) 未確認的端點寫入 plc_command_tasks，由背景 worker 重試至成功或 10 分鐘；
+                               觸發型指令重發等於重複觸發，不入佇列
+        :param record: False 時不寫設定紀錄與稽核紀錄 (佇列 worker 重試用，最終結果由 worker 自行記錄)
         :raises PlcCommandError: 指令不支援、設定值不合法，或沒有任何有效目標
         """
         started = time.perf_counter()
@@ -514,7 +522,7 @@ class PlcCommandService:
             results[i].message = self._done_message(w, is_confirmed, attempt_timeout)
 
         log_rows: Dict[int, Dict[str, Any]] = {}
-        for i, result in enumerate(results):
+        for i, result in enumerate(results if record else []):
             failure = result.error or (result.message if result.confirmed is False else None)
             if i in messages:
                 value_text = f"{log_value} | {result.message}" if result.message else log_value
@@ -527,6 +535,12 @@ class PlcCommandService:
             results[i].settingLogId = log_id
 
         failed = [r for r in results if not r.ok]
+        if enqueue_failed and spec.done_mode == "match":
+            self._enqueue_unconfirmed(command, value, train_code, event, operator, results)
+        if not record:
+            if interrupted is not None:
+                raise interrupted
+            return results
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         detail = (
             f"{label} 批次設定{'全數成功' if not failed else '未完全成功'}: 值={log_value}, "
@@ -549,6 +563,43 @@ class PlcCommandService:
         if interrupted is not None:
             raise interrupted
         return results
+
+    def _enqueue_unconfirmed(
+        self,
+        command: str,
+        value: Optional[float],
+        train_code: Optional[str],
+        event: Optional[str],
+        operator: str,
+        results: List[BatchTargetResult],
+    ) -> None:
+        """
+        已下發但未確認的端點 (confirmed is False) 寫入重試佇列。
+        同一指令、同一端點尚未完成的舊任務標為 SUPERSEDED，避免舊設定值在新設定之後又被補送。
+        """
+        unconfirmed = [r for r in results if r.confirmed is False and r.carNo is not None]
+        if not unconfirmed:
+            return
+        try:
+            now = get_local_now()
+            for r in unconfirmed:
+                self.db.query(PlcCommandTask).filter(
+                    PlcCommandTask.command == command,
+                    PlcCommandTask.carNo == r.carNo,
+                    PlcCommandTask.endPos == r.endPos,
+                    PlcCommandTask.status == "PENDING",
+                ).update({"status": "SUPERSEDED", "updatedAt": now}, synchronize_session=False)
+                self.db.add(PlcCommandTask(
+                    command=command, value=value, carNo=r.carNo, endPos=r.endPos,
+                    trainCode=train_code, event=event, operator=operator,
+                    status="PENDING", attemptCount=0, maxAttempts=PLC_QUEUE_MAX_ATTEMPTS, createdAt=now,
+                    lastError=(r.message or "")[:500] or None,
+                ))
+            self.db.commit()
+            logger.warning(f"[PlcCommand] 批次 {command} 有 {len(unconfirmed)} 個端點未確認，已加入重試佇列")
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"[PlcCommand] 寫入重試佇列失敗: {e}")
 
     def _build_setting_log(
         self,

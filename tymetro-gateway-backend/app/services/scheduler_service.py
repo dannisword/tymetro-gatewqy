@@ -9,6 +9,7 @@ from app.services.equipment_manager import equipment_manager
 from app.repositories.sensor_history_repository import sensor_history_repo
 from app.repositories.setting_log_repository import setting_log_repo
 from app.repositories.equipment_event_repository import equipment_event_repo
+from app.repositories.plc_command_task_repository import plc_command_task_repo
 
 class SchedulerService:
     """
@@ -19,6 +20,7 @@ class SchedulerService:
     - 每日 03:20：自動清理過期感測器歷史資料 (防止 SQLite 膨脹)
     - 每日 03:30：自動清理過期設定與審計紀錄 (setting_logs)
     - 每日 03:40：自動清理過期設備事件紀錄 (equipment_events)
+    - 每日 03:50：自動清理過期 PLC 重試佇列紀錄 (plc_command_tasks，保留 7 天)
     - 每小時第 10 分鐘：批次上傳離線感測器歷史資料
     """
     def __init__(self):
@@ -82,6 +84,16 @@ class SchedulerService:
             hour=3,
             minute=40,
             id='cleanup_old_equipment_events',
+            replace_existing=True
+        )
+
+        # Job 5c: 每日 03:50 執行過期 PLC 重試佇列紀錄清理 (plc_command_tasks)
+        self.scheduler.add_job(
+            self.job_cleanup_old_plc_command_tasks,
+            'cron',
+            hour=3,
+            minute=50,
+            id='cleanup_old_plc_command_tasks',
             replace_existing=True
         )
 
@@ -261,6 +273,7 @@ class SchedulerService:
             await self.job_cleanup_old_sensor_histories()
             await self.job_cleanup_old_setting_logs()
             await self.job_cleanup_old_equipment_events()
+            await self.job_cleanup_old_plc_command_tasks()
 
         except Exception as e:
             logger.error(f"[SchedulerService] Error in check_and_run_startup_backup: {e}")
@@ -331,6 +344,21 @@ class SchedulerService:
                 logger.info(f"[SchedulerService] Expired equipment events cleanup completed: {deleted} records removed.")
         except Exception as e:
             logger.error(f"[SchedulerService] Error during expired equipment events cleanup: {e}")
+
+    async def job_cleanup_old_plc_command_tasks(self):
+        """每日自動清理過期的 PLC 重試佇列紀錄 (以 PLC_COMMAND_TASK_RETENTION_DAYS 為基準，預設 7 天)"""
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            deleted = await loop.run_in_executor(
+                None,
+                plc_command_task_repo.delete_records_older_than,
+                settings.PLC_COMMAND_TASK_RETENTION_DAYS
+            )
+            if deleted > 0:
+                logger.info(f"[SchedulerService] Expired plc command tasks cleanup completed: {deleted} records removed.")
+        except Exception as e:
+            logger.error(f"[SchedulerService] Error during expired plc command tasks cleanup: {e}")
 
     async def job_cleanup_old_setting_logs(self):
         """每日自動清理過期的設定與審計紀錄 (以 SETTING_LOG_RETENTION_DAYS 為基準，預設 60 天)"""

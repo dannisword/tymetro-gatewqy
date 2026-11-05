@@ -18,6 +18,7 @@ from app.services.gateway_mqtt_service import gateway_mqtt_service
 from app.services.backend_mqtt_service import backend_mqtt_service
 from app.services.scheduler_service import scheduler_service
 from app.scheduler.engine import scheduler_engine
+from app.services.plc_command_queue_service import plc_command_queue_worker
 import app.models
 
 @asynccontextmanager
@@ -57,6 +58,9 @@ async def lifespan(app: FastAPI):
     
     # 5. 啟動每小時排程引擎 (Hourly Scheduler Engine)
     scheduler_engine.start()
+
+    # 5b. 啟動 PLC 設定指令重試佇列 (未確認的批次設定重試至成功或 10 分鐘)
+    plc_command_queue_worker.start()
     
     # 6. 開機自動寫入初始值暫存器至 8 台 PLC (MQTT)
     if yaml_settings.network.gateway_mqtt.enabled:
@@ -73,6 +77,7 @@ async def lifespan(app: FastAPI):
 
     # 【關閉階段】
     logger.info("Gateway Application shutting down...")
+    await plc_command_queue_worker.stop()
     scheduler_engine.shutdown()
     scheduler_service.stop()
 
