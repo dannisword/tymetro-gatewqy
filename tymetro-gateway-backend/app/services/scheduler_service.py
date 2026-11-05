@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.services.equipment_manager import equipment_manager
 from app.repositories.sensor_history_repository import sensor_history_repo
 from app.repositories.setting_log_repository import setting_log_repo
+from app.repositories.equipment_event_repository import equipment_event_repo
 
 class SchedulerService:
     """
@@ -17,6 +18,7 @@ class SchedulerService:
     - 每日 03:10：自動清理 10 天前的舊日誌檔案
     - 每日 03:20：自動清理過期感測器歷史資料 (防止 SQLite 膨脹)
     - 每日 03:30：自動清理過期設定與審計紀錄 (setting_logs)
+    - 每日 03:40：自動清理過期設備事件紀錄 (equipment_events)
     - 每小時第 10 分鐘：批次上傳離線感測器歷史資料
     """
     def __init__(self):
@@ -70,6 +72,16 @@ class SchedulerService:
             hour=3,
             minute=30,
             id='cleanup_old_setting_logs',
+            replace_existing=True
+        )
+
+        # Job 5b: 每日 03:40 執行過期設備事件紀錄清理 (equipment_events)
+        self.scheduler.add_job(
+            self.job_cleanup_old_equipment_events,
+            'cron',
+            hour=3,
+            minute=40,
+            id='cleanup_old_equipment_events',
             replace_existing=True
         )
 
@@ -248,6 +260,7 @@ class SchedulerService:
             await self.job_cleanup_old_logs()
             await self.job_cleanup_old_sensor_histories()
             await self.job_cleanup_old_setting_logs()
+            await self.job_cleanup_old_equipment_events()
 
         except Exception as e:
             logger.error(f"[SchedulerService] Error in check_and_run_startup_backup: {e}")
@@ -303,6 +316,21 @@ class SchedulerService:
                 logger.info(f"[SchedulerService] Expired sensor history cleanup completed: {deleted} records removed.")
         except Exception as e:
             logger.error(f"[SchedulerService] Error during expired sensor history cleanup: {e}")
+
+    async def job_cleanup_old_equipment_events(self):
+        """每日自動清理過期的設備事件紀錄 (以 EQUIPMENT_EVENT_RETENTION_DAYS 為基準，預設 60 天)"""
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            deleted = await loop.run_in_executor(
+                None,
+                equipment_event_repo.delete_records_older_than,
+                settings.EQUIPMENT_EVENT_RETENTION_DAYS
+            )
+            if deleted > 0:
+                logger.info(f"[SchedulerService] Expired equipment events cleanup completed: {deleted} records removed.")
+        except Exception as e:
+            logger.error(f"[SchedulerService] Error during expired equipment events cleanup: {e}")
 
     async def job_cleanup_old_setting_logs(self):
         """每日自動清理過期的設定與審計紀錄 (以 SETTING_LOG_RETENTION_DAYS 為基準，預設 60 天)"""

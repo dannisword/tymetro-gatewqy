@@ -271,14 +271,8 @@ class SchedulerEngine:
         try:
             now = get_local_now()
 
-            # 1. 取得當前啟用季節模式 (從 Config 讀取 ACTIVE_SEASON_MODE，若無則依當前日期自動計算)
-            active_mode_config = db.query(Config).filter(Config.configType == "ACTIVE_SEASON_MODE").first()
-            active_mode = None
-            if active_mode_config and active_mode_config.configContent:
-                active_mode = active_mode_config.configContent.strip()
-
-            if not active_mode:
-                active_mode = get_active_season_by_date(now)
+            # 1. 依當前日期自動計算啟用季節模式
+            active_mode = get_active_season_by_date(now)
 
             # 2. 取得時段排程矩陣 (SCHEDULE)
             schedule_config = db.query(Config).filter(Config.configType == "SCHEDULE").first()
@@ -336,29 +330,9 @@ class SchedulerEngine:
                 s.sensorValue = target_val  # type: ignore
                 updated_count += 1
 
-            # 計算 PLC 放大倍率數值 (x10 整數，例: 24.0°C -> 240)
-            scaled_temp = round(target_val * 10)
-
-            # 6. 寫入一筆設定歷程紀錄 (setting_logs)
-            log_entry = SettingLog(
-                settingType="排程控制 (Hourly)",
-                value=str(target_val),
-                operator="system_scheduler",
-                isNotified=True,
-                topic="TYMC/AIR/SET/+/+/+",
-                payload=json.dumps({
-                    "mode": active_mode,
-                    "day": js_weekday,
-                    "hour": hour,
-                    "targetTemp": target_val,
-                    "scaledTemp": scaled_temp,
-                    "updatedSensors": updated_count
-                }, ensure_ascii=False)
-            )
-            db.add(log_entry)
             db.commit()
 
-            # 7. 寫入審計日誌 (audit_logs)
+            # 6. 寫入審計日誌 (audit_logs)
             self._record_audit_log(
                 db,
                 status="success",
@@ -367,7 +341,7 @@ class SchedulerEngine:
 
             logger.info(f"[SchedulerEngine Task] Successfully updated {updated_count} sensor(s) to target temp {target_val}°C.")
 
-            # 8. 丟給 8 台 PLC：與手動批次設定共用 PlcCommandService.execute_batch (逐台確認 D40201、逾時重發、各端點設定紀錄)
+            # 7. 丟給 8 台 PLC：與手動批次設定共用 PlcCommandService.execute_batch (逐台確認 D40201、逾時重發、各端點設定紀錄)
             try:
                 active_equipments = (
                     db.query(Equipment, Car)
