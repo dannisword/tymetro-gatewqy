@@ -120,7 +120,7 @@ COMMANDS: Dict[str, PlcCommandSpec] = {
 
 # 完成確認：每秒查詢一次 sensors，逾時視為未完成
 CONFIRM_TIMEOUT_SEC = 10
-CONFIRM_INTERVAL_SEC = 1.0
+CONFIRM_INTERVAL_SEC = 0.3
 # 批次設定未確認端點的背景重試上限 (見 plc_command_queue_service)
 PLC_QUEUE_MAX_ATTEMPTS = 10
 
@@ -213,6 +213,30 @@ class PlcCommandService:
             raise PlcCommandError(f"找不到車廂 {car_no} 的 {end_pos} 端設備")
         car, equipment = record
         return car, equipment
+
+    def _find_targets(self, pairs: List[tuple[Any, int]]) -> Dict[tuple[Any, int], tuple[Car, Equipment]]:
+        """一次查詢多個 (車號, 端位)；比對規則與 _find_target 相同。找不到的 key 不在回傳值中"""
+        if not pairs:
+            return {}
+        car_nos = {c for c, _ in pairs}
+        rows = (
+            self.db.query(Car, Equipment)
+            .join(Equipment, Equipment.carId == Car.id)
+            .filter(
+                Car.carVin.in_([str(c) for c in car_nos]) | Car.carNo.in_(list(car_nos)),
+                Equipment.endPos.in_({p for _, p in pairs}),
+                Equipment.isActive == True,
+                Car.isActive == True,
+            )
+            .all()
+        )
+        found: Dict[tuple[Any, int], tuple[Car, Equipment]] = {}
+        for car_no, end_pos in pairs:
+            for car, equipment in rows:
+                if equipment.endPos == end_pos and (car.carVin == str(car_no) or car.carNo == car_no):
+                    found[(car_no, end_pos)] = (car, equipment)
+                    break
+        return found
 
     async def execute(
         self,
@@ -453,16 +477,25 @@ class PlcCommandService:
         results: List[BatchTargetResult] = []
         watchers: Dict[int, _DoneWatcher] = {}
         messages: Dict[int, Dict[str, Any]] = {}
+        valid_targets = []
         for t in targets:
             car_val = t.get("carNo") or t.get("car_no") or t.get("carVin")
             end_pos = t.get("endPos") or t.get("end_pos")
-            if not car_val or not end_pos:
-                continue
+            if car_val and end_pos:
+                valid_targets.append((car_val, end_pos))
+        # 一次查詢全部目標，避免每個端點各查一次
+        found = self._find_targets([(int(c), int(p)) for c, p in valid_targets])
+        # 完成基準值在全部目標解析完後才讀 (讀取失敗時的 rollback 會使已載入的物件過期)
+        resolved: Dict[int, tuple[Car, Equipment]] = {}
+        for car_val, end_pos in valid_targets:
             result = BatchTargetResult(carNo=None, endPos=int(end_pos))
             results.append(result)
             idx = len(results) - 1
             try:
-                car, equipment = self._find_target(int(car_val), int(end_pos))
+                match = found.get((int(car_val), int(end_pos)))
+                if match is None:
+                    raise PlcCommandError(f"找不到車廂 {int(car_val)} 的 {int(end_pos)} 端設備")
+                car, equipment = match
                 code = train_code or str(car.trainCode or "").strip()
                 if not train_code and code.upper().startswith("P"):
                     code = code[1:]
@@ -482,15 +515,17 @@ class PlcCommandService:
                     "retain": False,
                     "_payload": payload,
                 }
-                if spec.done_register:
-                    watchers[idx] = _DoneWatcher(
-                        car, equipment, spec.done_register,
-                        self._read_sensor_value(car, equipment, spec.done_register),
-                        spec.done_mode, reg_value, spec.register,
-                    )
+                resolved[idx] = (car, equipment)
             except PlcCommandError as e:
                 result.carNo = int(car_val)
                 result.error = str(e)
+        if spec.done_register:
+            for idx, (car, equipment) in resolved.items():
+                watchers[idx] = _DoneWatcher(
+                    car, equipment, spec.done_register,
+                    self._read_sensor_value(car, equipment, spec.done_register),
+                    spec.done_mode, reg_value, spec.register,
+                )
         if not messages:
             raise PlcCommandError("未找到任何有效之目標設備以執行設定")
 
