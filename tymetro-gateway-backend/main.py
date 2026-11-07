@@ -75,6 +75,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"[Startup] Failed to publish initial values on startup: {e}")
 
+    # 7. 開機後立即執行當前時段的溫度設定 (SYNC_SCHEDULE_CONFIG)，不必等到下個整點
+    try:
+        await scheduler_engine.task_registry["SYNC_SCHEDULE_CONFIG"]()
+    except Exception as e:
+        logger.error(f"[Startup] Failed to run schedule sync on startup: {e}")
+
     logger.info("[Startup] Gateway Application startup completed. 開機執行完成。")
 
     yield
