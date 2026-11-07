@@ -38,14 +38,15 @@ class SchedulerService:
         )
 
         # Job 2: 每日 03:00 執行 SQLite 資料庫自動備份
-        self.scheduler.add_job(
-            self.job_backup_database,
-            'cron',
-            hour=3,
-            minute=0,
-            id='backup_database',
-            replace_existing=True
-        )
+        if settings.BACKUP_ENABLED:
+            self.scheduler.add_job(
+                self.job_backup_database,
+                'cron',
+                hour=3,
+                minute=0,
+                id='backup_database',
+                replace_existing=True
+            )
 
         # Job 3: 每日 03:10 執行舊日誌檔案自動清理
         self.scheduler.add_job(
@@ -113,7 +114,8 @@ class SchedulerService:
         try:
             import asyncio
             loop = asyncio.get_running_loop()
-            loop.create_task(self.check_and_run_startup_backup())
+            if settings.BACKUP_ENABLED:
+                loop.create_task(self.check_and_run_startup_backup())
         except RuntimeError:
             pass
 

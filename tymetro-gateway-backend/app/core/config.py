@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     
     # 資料庫與 PLC 網段設定
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "gateway.db")
+    BACKUP_ENABLED: bool = os.getenv("BACKUP_ENABLED", "true").lower() in ("1", "true", "yes")  # 是否啟用 SQLite 每日備份
     BACKUP_RETENTION_DAYS: int = int(os.getenv("BACKUP_RETENTION_DAYS", "2"))  # SQLite 資料庫備份保留天數 (預設7天)
     PLC_IP_SUBNET: Optional[str] = os.getenv("PLC_IP_SUBNET", None)  # 如: "192.168.68" (測試區) 或 "192.168.16" (正式區)
     SENSOR_HISTORY_RETENTION_DAYS: int = int(os.getenv("SENSOR_HISTORY_RETENTION_DAYS", "60"))  # 感測器歷史資料保留天數 (預設60天)
