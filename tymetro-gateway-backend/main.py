@@ -19,6 +19,7 @@ from app.services.backend_mqtt_service import backend_mqtt_service
 from app.services.scheduler_service import scheduler_service
 from app.scheduler.engine import scheduler_engine
 from app.services.plc_command_queue_service import plc_command_queue_worker
+from app.services.template_sync_service import sync_schedule_template
 import app.models
 
 @asynccontextmanager
@@ -37,6 +38,9 @@ async def lifespan(app: FastAPI):
         db_config_repo.get_all_equipments()
     except Exception as e:
         logger.error(f"Error creating database tables or initializing mock data: {e}")
+
+    # 0. 同步後端時段樣板 (依 configs 的 code、version；失敗不影響開機)
+    await asyncio.to_thread(sync_schedule_template)
 
     # 1. 啟動 SQLite 佇列批次寫入器 (SQLite Batch Writer)
     await sqlite_writer.start()
