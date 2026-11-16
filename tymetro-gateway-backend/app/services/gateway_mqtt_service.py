@@ -13,6 +13,9 @@ from app.database.db_config_repo import db_config_repo
 
 from app.core.config_yaml import yaml_settings
 
+# 封包 timestamp 與現在時間的最大容許偏差 (秒)。超過視為殘留/重送的舊訊息 (如 retained)，不處理也不轉發
+MAX_TIMESTAMP_SKEW_SECONDS = 86400
+
 class GatewayMQTTService:
     """
     MQTT Subscriber Service:
@@ -116,6 +119,14 @@ class GatewayMQTTService:
                 timestamp = float(raw_ts)
             else:
                 timestamp = time.time()
+
+            # 1.1 timestamp 偏差過大 (如 retained 初始值、裝置時鐘錯誤) → 略過，不寫入也不轉發
+            if abs(time.time() - timestamp) > MAX_TIMESTAMP_SKEW_SECONDS:
+                logger.warning(
+                    f"[GatewayMQTTService] 略過 timestamp 偏差過大的訊息 (topic={message.topic}, "
+                    f"timestamp={timestamp}, retain={message.retain})"
+                )
+                return
 
             # 2. 從 Topic 或 Payload 解出階層與車輛資訊
             parts = topic_str.split("/")
