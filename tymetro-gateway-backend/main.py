@@ -23,6 +23,22 @@ from app.services.plc_command_queue_service import plc_command_queue_worker
 from app.services.template_sync_service import sync_schedule_template
 import app.models
 
+def _download_metadata_on_startup():
+    """開機同步中心端 metadata；車組編號取自 gateway.id (G-<車組>)。"""
+    try:
+        from app.api.v1.endpoints.config_controller import download_metadata
+        train_code = str(yaml_settings.gateway.id).removeprefix("G-")
+        logger.info(f"[Startup] Downloading metadata from central (trainCode={train_code})...")
+        db = SessionLocal()
+        try:
+            res = download_metadata(trainCode=train_code, db=db, current_user=None)
+        finally:
+            db.close()
+        logger.info(f"[Startup] Metadata download result: {res}")
+    except Exception as e:
+        logger.error(f"[Startup] Metadata download failed, continuing with local data: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 【啟動階段】
@@ -44,6 +60,9 @@ async def lifespan(app: FastAPI):
 
     # 0. 同步後端時段樣板 (依 configs 的 code、version；失敗不影響開機)
     await asyncio.to_thread(sync_schedule_template)
+
+    # 0b. 開機自動從中心端下載車廂/設備/感測器資料 (完成後才進行後續服務與 PLC 初始值；失敗不影響開機)
+    await asyncio.to_thread(_download_metadata_on_startup)
 
     # 1. 啟動 SQLite 佇列批次寫入器 (SQLite Batch Writer)
     await sqlite_writer.start()
