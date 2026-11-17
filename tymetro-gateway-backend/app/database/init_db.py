@@ -109,6 +109,10 @@ def create_tables():
             ):
                 conn.execute(text(ddl))
 
+    # 已移除的 outbox 表 (只寫不讀，離線補傳改由 sensor_histories.is_offline 負責)，清除既有 DB 的孤兒表
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS outbox"))
+
     # sensors 索引：flush_sensor_values 以 (equipment_id, sensor_code) 逐點位 UPDATE，無索引時為全表掃描
     if "sensors" in inspector.get_table_names():
         with engine.begin() as conn:

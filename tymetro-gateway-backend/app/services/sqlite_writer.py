@@ -3,7 +3,6 @@ import time
 from typing import Dict, Any, List, Optional
 from app.core.logger import logger
 from app.repositories.sensor_history_repository import sensor_history_repo
-from app.repositories.outbox_repository import outbox_repo
 from app.database.db_config_repo import db_config_repo
 
 class SQLiteWriter:
@@ -11,7 +10,7 @@ class SQLiteWriter:
     SQLite 獨立批次寫入器 (SQLite Batch Writer):
     - 使用 asyncio.Queue 做為記憶體暫存區 (Queue Manager)
     - 以條件觸發：當累積滿 100 筆 或 時間滿 5 秒 時自動寫入
-    - 使用單一 Transaction commit 寫入 SensorHistory & Outbox
+    - 使用單一 Transaction commit 寫入 SensorHistory
     - 大幅降低 eMMC Flash / SSD 的寫入擦擦次數，延長硬體壽命
     """
     def __init__(self, batch_size: int = 100, flush_interval_sec: float = 5.0, max_queue_size: int = 5000):
@@ -115,27 +114,22 @@ class SQLiteWriter:
             t0 = time.time()
             
             # 1. 寫入 SensorHistory
+            # (離線補傳不需另寫佇列：由 sensor_histories.is_offline 標記，scheduler 每小時補傳)
             h_success = True
-            o_success = True
             if items:
                 h_success = await loop.run_in_executor(None, sensor_history_repo.add_batch, items)
-                t1 = time.time()
-                # 2. 寫入 Outbox (離線補傳佇列)
-                o_success = await loop.run_in_executor(None, outbox_repo.push_batch, items)
-                t2 = time.time()
-            else:
-                t1 = t2 = t0
+            t1 = time.time()
 
-            # 3. 批次更新即時暫存值到 SQLite
+            # 2. 批次更新即時暫存值到 SQLite
             await loop.run_in_executor(None, db_config_repo.flush_sensor_values)
-            t3 = time.time()
+            t2 = time.time()
 
             elapsed = time.time() - t0
             if items and (elapsed > 1.0 or self.queue.qsize() > self.batch_size * 10):
-                logger.warning(f"[SQLiteWriter] Slow write: {len(items)} items took {elapsed:.2f}s (history={t1-t0:.2f}s outbox={t2-t1:.2f}s sensors={t3-t2:.2f}s), queue size={self.queue.qsize()}")
+                logger.warning(f"[SQLiteWriter] Slow write: {len(items)} items took {elapsed:.2f}s (history={t1-t0:.2f}s sensors={t2-t1:.2f}s), queue size={self.queue.qsize()}")
 
             if items:
-                if h_success and o_success:
+                if h_success:
                     logger.debug(f"[SQLiteWriter] Executemany Success: Flushed {len(items)} telemetry records into SQLite.")
                 else:
                     logger.error(f"[SQLiteWriter] Failed to write batch of {len(items)} items to SQLite.")
