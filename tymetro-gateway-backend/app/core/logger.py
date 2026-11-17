@@ -28,6 +28,7 @@ import threading
 from collections import deque
 
 LOG_BUFFER_SIZE = 2000
+LOG_FILE_PATH = os.path.join(os.path.dirname(os.getenv("LOG_PATH", "logs/gateway.log")) or "logs", "gateway.log")
 _log_buffer = deque(maxlen=LOG_BUFFER_SIZE)
 _log_seq = 0
 _log_lock = threading.Lock()
@@ -61,7 +62,7 @@ def get_recent_logs(after: int = 0, level: str = "", keyword: str = "", limit: i
     ]
     if kw:
         out = [i for i in out if kw in i["message"].lower() or kw in i["source"].lower()]
-    return out[-limit:], latest
+    return out[-limit:], latest, len(out)
 
 
 def setup_logger():
