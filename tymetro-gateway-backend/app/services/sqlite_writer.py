@@ -19,6 +19,7 @@ class SQLiteWriter:
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
         self._dropped = 0
         self.batch_size = batch_size
+        self.max_batch = 1000  # 積壓時單批寫入上限
         self.flush_interval_sec = flush_interval_sec
         self._running = False
         self._consumer_task: Optional[asyncio.Task] = None
@@ -80,6 +81,13 @@ class SQLiteWriter:
                     item = await asyncio.wait_for(self.queue.get(), timeout=timeout)
                     items.append(item)
                     self.queue.task_done()
+                    # 有積壓時一次撈取更多 (上限 max_batch)，以單次 commit 攤平成本
+                    while len(items) < self.max_batch:
+                        try:
+                            items.append(self.queue.get_nowait())
+                            self.queue.task_done()
+                        except asyncio.QueueEmpty:
+                            break
                 except asyncio.TimeoutError:
                     pass
 
@@ -104,6 +112,7 @@ class SQLiteWriter:
         try:
             # 異步線程中執行資料庫 commit 寫入
             loop = asyncio.get_running_loop()
+            t0 = time.time()
             
             # 1. 寫入 SensorHistory
             h_success = True
@@ -115,6 +124,10 @@ class SQLiteWriter:
 
             # 3. 批次更新即時暫存值到 SQLite
             await loop.run_in_executor(None, db_config_repo.flush_sensor_values)
+
+            elapsed = time.time() - t0
+            if items and (elapsed > 1.0 or self.queue.qsize() > self.batch_size * 10):
+                logger.warning(f"[SQLiteWriter] Slow write: {len(items)} items took {elapsed:.2f}s, queue size={self.queue.qsize()}")
 
             if items:
                 if h_success and o_success:
