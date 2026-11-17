@@ -4,6 +4,7 @@ import json
 import time
 from typing import Dict, Any, Optional, List
 import aiomqtt
+from contextlib import AsyncExitStack
 from app.core.logger import logger
 from app.services.equipment_manager import equipment_manager
 from app.services.sqlite_writer import sqlite_writer
@@ -30,6 +31,10 @@ class GatewayMQTTService:
         self._running = False
         self.is_connected = False
         self._listener_task: Optional[asyncio.Task] = None
+        # 發布專用的長連線 (重用，避免每次發送都重新建立 TCP/paho 連線)
+        self._pub_client: Optional[aiomqtt.Client] = None
+        self._pub_stack: Optional[AsyncExitStack] = None
+        self._pub_lock = asyncio.Lock()
         # 異動存記憶體快取 (Delta Saving Cache): "eq_id:sensor_code" -> last_value
         self._last_sensor_values: Dict[str, float] = {}
 
@@ -69,6 +74,8 @@ class GatewayMQTTService:
                 await self._listener_task
             except asyncio.CancelledError:
                 pass
+        async with self._pub_lock:
+            await self._close_publisher()
         logger.info("[GatewayMQTTService] MQTT Service stopped.")
 
     async def restart(self):
@@ -222,34 +229,67 @@ class GatewayMQTTService:
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Error processing MQTT payload: {e}")
 
+    async def _ensure_publisher(self) -> aiomqtt.Client:
+        """取得發布用長連線 (需在持有 _pub_lock 時呼叫)；尚未連線則建立"""
+        if self._pub_client is None:
+            stack = AsyncExitStack()
+            try:
+                client = await stack.enter_async_context(aiomqtt.Client(self.host, port=self.port, timeout=10))
+            except BaseException:
+                await stack.aclose()
+                raise
+            self._pub_stack = stack
+            self._pub_client = client
+        return self._pub_client
+
+    async def _close_publisher(self):
+        """關閉發布用連線並釋放資源 (需在持有 _pub_lock 時呼叫)"""
+        stack, self._pub_stack, self._pub_client = self._pub_stack, None, None
+        if stack is not None:
+            try:
+                await stack.aclose()
+            except Exception:
+                pass
+
+    async def _publish_many(self, messages: List[Dict[str, Any]], delay_sec: float = 0.0):
+        """透過重用連線發布；連線失效時關閉重建並重試一次"""
+        async with self._pub_lock:
+            for attempt in (1, 2):
+                try:
+                    client = await self._ensure_publisher()
+                    for idx, msg in enumerate(messages):
+                        topic = msg.get("topic")
+                        payload = msg.get("payload")
+                        if topic and payload is not None:
+                            await client.publish(topic, payload, qos=msg.get("qos", 0), retain=msg.get("retain", False), timeout=10)
+                            logger.info(f"[GatewayMQTTService] Successfully published message to Local Broker on topic '{topic}'")
+                        if delay_sec > 0 and idx < len(messages) - 1:
+                            await asyncio.sleep(delay_sec)
+                    return
+                except asyncio.CancelledError:
+                    await self._close_publisher()
+                    raise
+                except Exception:
+                    await self._close_publisher()
+                    if attempt == 2:
+                        raise
+
     async def publish_message(self, topic: str, payload: str, qos: int = 0, retain: bool = False, raise_on_error: bool = False):
         """將訊息發布至 Local MQTT Broker (raise_on_error=True 時發布失敗會拋出例外，供需回報結果的呼叫端使用)"""
         logger.info(payload)
         try:
-            async with aiomqtt.Client(self.host, port=self.port) as client:
-                await client.publish(topic, payload, qos=qos, retain=retain)
-                logger.info(f"[GatewayMQTTService] Successfully published message to Local Broker on topic '{topic}'")
+            await self._publish_many([{"topic": topic, "payload": payload, "qos": qos, "retain": retain}])
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Failed to publish message to Local Broker on topic '{topic}': {e}")
             if raise_on_error:
                 raise
 
     async def publish_messages(self, messages: List[Dict[str, Any]], delay_sec: float = 0.05):
-        """批次將多筆訊息發布至 Local MQTT Broker (共用單一連線，每筆間隔微延遲避免塞車)"""
+        """批次將多筆訊息發布至 Local MQTT Broker (重用長連線，每筆間隔微延遲避免塞車)"""
         if not messages:
             return
         try:
-            async with aiomqtt.Client(self.host, port=self.port) as client:
-                for idx, msg in enumerate(messages):
-                    topic = msg.get("topic")
-                    payload = msg.get("payload")
-                    qos = msg.get("qos", 0)
-                    retain = msg.get("retain", False)
-                    if topic and payload is not None:
-                        await client.publish(topic, payload, qos=qos, retain=retain)
-                        logger.info(f"[GatewayMQTTService] Successfully published message to Local Broker on topic '{topic}'")
-                    if delay_sec > 0 and idx < len(messages) - 1:
-                        await asyncio.sleep(delay_sec)
+            await self._publish_many(messages, delay_sec)
         except Exception as e:
             logger.error(f"[GatewayMQTTService] Failed to batch publish messages to Local Broker: {e}")
 
