@@ -25,7 +25,6 @@ class SensorHistory(Base):
         Index("ix_sensor_histories_code_time", sensorCode, recordedAt.desc()),
         Index("ix_sensor_histories_code_car_time", sensorCode, carVin, recordedAt.desc()),
         Index("ix_sensor_histories_car_time", carVin, recordedAt.desc()),
-        Index("ix_sensor_histories_equip_time", equipmentName, recordedAt.desc()),
         # 部分索引：只索引待補傳資料，不增加一般寫入負擔
         Index("ix_sensor_histories_offline", id, sqlite_where=text("is_offline = 1")),
     )

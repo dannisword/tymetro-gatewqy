@@ -1,6 +1,7 @@
 import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 from app.repositories.base_repository import BaseRepository
 from app.models.sensor_history_model import SensorHistory
@@ -22,7 +23,8 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
             return True
         db = self.db if self._external_db else SessionLocal()
         try:
-            history_objs = []
+            # Core executemany：免建立 ORM 物件與 unit-of-work，降低 ARM 上的 CPU 成本
+            rows = []
             for item in items:
                 rec_at = item.get("recorded_at") or item.get("timestamp")
                 if isinstance(rec_at, (int, float)):
@@ -30,22 +32,21 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
                 elif not isinstance(rec_at, datetime):
                     rec_at = datetime.utcnow()
 
-                obj = SensorHistory(
-                    carId=item.get("car_id", 0),
-                    carVin=item.get("car_vin"),
-                    carNo=item.get("car_no"),
-                    endPos=item.get("end_pos"),
-                    sensorCode=item.get("sensor_code", ""),
-                    sensorValue=float(item.get("sensor_value", 0.0)),
-                    recordedAt=rec_at,
-                    sensorName=item.get("sensor_name"),
-                    sensorUnit=item.get("sensor_unit"),
-                    equipmentName=item.get("equipment_name"),
-                    isOffline=bool(item.get("is_offline", False))
-                )
-                history_objs.append(obj)
+                rows.append({
+                    "car_id": item.get("car_id", 0),
+                    "car_vin": item.get("car_vin"),
+                    "car_no": item.get("car_no"),
+                    "end_pos": item.get("end_pos"),
+                    "sensor_code": item.get("sensor_code", ""),
+                    "sensor_value": float(item.get("sensor_value", 0.0)),
+                    "recorded_at": rec_at,
+                    "sensor_name": item.get("sensor_name"),
+                    "sensor_unit": item.get("sensor_unit"),
+                    "equipment_name": item.get("equipment_name"),
+                    "is_offline": bool(item.get("is_offline", False)),
+                })
 
-            db.add_all(history_objs)
+            db.connection().execute(insert(SensorHistory.__table__), rows)
             db.commit()
             return True
         except Exception as e:
