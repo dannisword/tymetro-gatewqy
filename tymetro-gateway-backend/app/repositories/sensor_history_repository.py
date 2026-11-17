@@ -83,11 +83,14 @@ class SensorHistoryRepository(BaseRepository[SensorHistory]):
         db = self.db if self._external_db else SessionLocal()
         t0 = time.perf_counter()
         try:
-            n = (
-                db.query(SensorHistory)
-                .filter(SensorHistory.id.in_(ids))
-                .update({SensorHistory.isOffline: False}, synchronize_session=False)
-            )
+            # IN 子句分塊 (避免超過 SQLite 變數上限)，但仍在單一 transaction 內 commit 一次
+            n = 0
+            for i in range(0, len(ids), 900):
+                n += (
+                    db.query(SensorHistory)
+                    .filter(SensorHistory.id.in_(ids[i:i + 900]))
+                    .update({SensorHistory.isOffline: False}, synchronize_session=False)
+                )
             t1 = time.perf_counter()
             db.commit()
             t2 = time.perf_counter()

@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 import shutil
 from datetime import datetime, timedelta
@@ -10,6 +11,11 @@ from app.repositories.sensor_history_repository import sensor_history_repo
 from app.repositories.setting_log_repository import setting_log_repo
 from app.repositories.equipment_event_repository import equipment_event_repo
 from app.repositories.plc_command_task_repository import plc_command_task_repo
+
+# 離線補傳專用單一執行緒池：同步 HTTP (timeout 30s+) 與批次 DB 讀寫不占用預設 executor (僅 4 worker)，
+# 避免網路緩慢時拖慢 SQLiteWriter 與其他排程。單 worker 同時確保補傳不會並行。
+_UPLOAD_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gw-upload")
+
 
 class SchedulerService:
     """
@@ -390,14 +396,14 @@ class SchedulerService:
 
         loop = asyncio.get_running_loop()
         url = f"{settings.TYMETRO_BACKEND_URL.rstrip('/')}/api/v1/sensor-histories/batch"
-        batch_size = 1000  # 後端單次上限 10000
+        batch_size = 5000  # 後端單次上限 10000；加大以減少往返與 commit 次數
         total = 0
         try:
             for _ in range(200):  # 安全上限，避免無窮迴圈
-                rows = await loop.run_in_executor(None, sensor_history_repo.fetch_offline, batch_size)
+                rows = await loop.run_in_executor(_UPLOAD_EXECUTOR, sensor_history_repo.fetch_offline, batch_size)
                 if not rows:
                     break
-                token = await loop.run_in_executor(None, HttpUtil.get_central_backend_token)
+                token = await loop.run_in_executor(_UPLOAD_EXECUTOR, HttpUtil.get_central_backend_token)
                 if not token:
                     logger.warning("[SchedulerService] Offline history upload aborted: no backend token.")
                     break
@@ -413,16 +419,16 @@ class SchedulerService:
                 skipped_ids = [cast(int, r.id) for r in rows if not r.carVin]
                 if records:
                     resp = await loop.run_in_executor(
-                        None,
+                        _UPLOAD_EXECUTOR,
                         lambda: HttpUtil.post(url, data={"records": records},
-                                              headers={"Authorization": f"Bearer {token}"}, timeout=30)
+                                              headers={"Authorization": f"Bearer {token}"}, timeout=60)
                     )
                     if not resp.get("success"):
                         logger.warning(f"[SchedulerService] Offline history upload failed: {resp.get('message')}")
                         break
                 # 後端已回應成功 (含其略過的筆數)；無 carVin 者無法被後端接受，一併清除標記避免卡住
                 ids = [cast(int, r.id) for r in rows]
-                await loop.run_in_executor(None, sensor_history_repo.mark_uploaded, ids)
+                await loop.run_in_executor(_UPLOAD_EXECUTOR, sensor_history_repo.mark_uploaded, ids)
                 total += len(records)
                 if skipped_ids:
                     logger.warning(f"[SchedulerService] {len(skipped_ids)} offline records without car_vin were dropped from upload.")
