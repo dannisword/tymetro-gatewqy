@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, HTTPException, Request 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -25,6 +26,8 @@ import app.models
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 【啟動階段】
+    # 限制預設 executor thread 數量 (每個 thread 各持有 SQLite 連線與堆疊，PFC200 記憶體有限)
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=4, thread_name_prefix="gw-exec"))
     logger.info(f"Gateway Application starting up SDS Mode...")
     logger.info(f"Gateway ID: {yaml_settings.gateway.id} | Name: {yaml_settings.gateway.name}")
     try:

@@ -162,6 +162,7 @@ else
     echo -e "${YELLOW}啟動 Mosquitto 容器...${NC}"
     docker rm -f tymetro-mosquitto 2>/dev/null || true
     docker run -d --name tymetro-mosquitto \
+      --memory 32m --memory-swap 32m \
       --security-opt seccomp=unconfined \
       --network tymetro-net \
       --restart always \
@@ -176,6 +177,7 @@ else
     echo -e "${YELLOW}啟動 Backend 容器...${NC}"
     docker rm -f tymetro-gateway-backend 2>/dev/null || true
     docker run -d --name tymetro-gateway-backend \
+      --memory 280m --memory-swap 280m \
       --network tymetro-net \
       --network-alias backend \
       --restart always \
@@ -189,6 +191,7 @@ else
     echo -e "${YELLOW}啟動 Frontend Nginx 容器...${NC}"
     docker rm -f tymetro-gateway-frontend 2>/dev/null || true
     docker run -d --name tymetro-gateway-frontend \
+      --memory 24m --memory-swap 24m \
       --security-opt seccomp=unconfined \
       --network tymetro-net \
       --restart always \

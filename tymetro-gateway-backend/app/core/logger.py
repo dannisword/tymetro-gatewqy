@@ -47,7 +47,7 @@ def setup_logger():
     log_level_env = os.getenv("LOG_LEVEL", "INFO").upper()
 
     # 控制台輸出
-    logger.add(sys.stderr, format=console_format, level=log_level_env, enqueue=True)
+    logger.add(sys.stderr, format=console_format, level=log_level_env, enqueue=False, diagnose=False, backtrace=False)
 
     # 檔案輸出
     log_file_format = os.path.join(log_dir, "gateway.log")
@@ -81,7 +81,9 @@ def setup_logger():
         retention="10 days",
         compression="zip",
         encoding="utf-8",
-        enqueue=True,
+        enqueue=False,
+        diagnose=False,
+        backtrace=False,
         format=file_format,
         level=log_level_env
     )

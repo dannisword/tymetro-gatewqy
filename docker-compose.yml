@@ -6,6 +6,8 @@ services:
     image: eclipse-mosquitto:2.0
     container_name: tymetro-mosquitto
     restart: always
+    mem_limit: 32m
+    memswap_limit: 32m
     environment:
       - TZ=Asia/Taipei
     ports:
@@ -29,6 +31,9 @@ services:
       dockerfile: Dockerfile
     container_name: tymetro-gateway-backend
     restart: always
+    # 記憶體上限且禁止 swap：超量時直接重啟，避免拖垮同機 PLC runtime
+    mem_limit: 280m
+    memswap_limit: 280m
     environment:
       - TZ=Asia/Taipei
     ports:
@@ -49,6 +54,8 @@ services:
     image: nginx:alpine
     container_name: tymetro-gateway-frontend
     restart: always
+    mem_limit: 24m
+    memswap_limit: 24m
     environment:
       - TZ=Asia/Taipei
     ports:

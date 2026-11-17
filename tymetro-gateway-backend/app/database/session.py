@@ -22,12 +22,14 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
         cursor.execute("PRAGMA journal_mode = WAL;")
         # 2. 同步級別改為 NORMAL：在 WAL 模式下安全且顯著減少對 Flash/SD 卡的 fsync 次數
         cursor.execute("PRAGMA synchronous = NORMAL;")
-        # 3. 記憶體快取大小：設為 16MB (負數代表 KB，-16000 約 16MB，適合 PFC200 記憶體限制)
-        cursor.execute("PRAGMA cache_size = -16000;")
+        # 3. 記憶體快取大小：每條連線 2MB (負數代表 KB)，PFC200 記憶體有限
+        cursor.execute("PRAGMA cache_size = -2000;")
         # 4. 排序與暫存表置於記憶體，減少對 SD 卡的讀寫
         cursor.execute("PRAGMA temp_store = MEMORY;")
-        # 5. 開啟 64MB 記憶體映射 I/O，加速唯讀查詢
-        cursor.execute("PRAGMA mmap_size = 67108864;")
+        # 5. 關閉 mmap，降低 32-bit 位址空間與 page cache 壓力
+        cursor.execute("PRAGMA mmap_size = 0;")
+        # 限制 WAL 檔大小，避免長期成長
+        cursor.execute("PRAGMA journal_size_limit = 4194304;")
         # 6. 設定鎖定等待時間 (30秒，與 connect_args timeout 一致)，防止批次設定/背景採集同時寫入時 database is locked 拋出異常
         cursor.execute("PRAGMA busy_timeout = 30000;")
         cursor.close()

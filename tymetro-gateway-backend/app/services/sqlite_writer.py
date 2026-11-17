@@ -14,8 +14,10 @@ class SQLiteWriter:
     - 使用單一 Transaction commit 寫入 SensorHistory & Outbox
     - 大幅降低 eMMC Flash / SSD 的寫入擦擦次數，延長硬體壽命
     """
-    def __init__(self, batch_size: int = 100, flush_interval_sec: float = 5.0):
-        self.queue: asyncio.Queue = asyncio.Queue()
+    def __init__(self, batch_size: int = 100, flush_interval_sec: float = 5.0, max_queue_size: int = 5000):
+        # 佇列上限：DB 卡住時避免記憶體無限成長 (滿了丟棄最舊)
+        self.queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
+        self._dropped = 0
         self.batch_size = batch_size
         self.flush_interval_sec = flush_interval_sec
         self._running = False
@@ -41,12 +43,27 @@ class SQLiteWriter:
 
     async def push(self, item: Dict[str, Any]):
         """將單筆或遙測數據物件推入 Queue 佇列"""
-        await self.queue.put(item)
+        self._put_drop_oldest(item)
+
+    def _put_drop_oldest(self, item: Dict[str, Any]):
+        while True:
+            try:
+                self.queue.put_nowait(item)
+                return
+            except asyncio.QueueFull:
+                try:
+                    self.queue.get_nowait()
+                    self.queue.task_done()
+                    self._dropped += 1
+                    if self._dropped % 1000 == 1:
+                        logger.warning(f"[SQLiteWriter] Queue full ({self.queue.maxsize}), dropped oldest items (total dropped={self._dropped}).")
+                except asyncio.QueueEmpty:
+                    pass
 
     async def push_many(self, items: List[Dict[str, Any]]):
         """將多筆遙測數據物件推入 Queue 佇列"""
         for item in items:
-            await self.queue.put(item)
+            self._put_drop_oldest(item)
 
     async def _consumer_loop(self):
         """背景消費輪詢：當 Queue 累積滿 batch_size 或超過 5 秒時觸發批量寫入"""
