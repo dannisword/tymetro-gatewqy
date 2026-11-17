@@ -109,6 +109,12 @@ def create_tables():
             ):
                 conn.execute(text(ddl))
 
+    # sensors 索引：flush_sensor_values 以 (equipment_id, sensor_code) 逐點位 UPDATE，無索引時為全表掃描
+    if "sensors" in inspector.get_table_names():
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensors_equip_code ON sensors (equipment_id, sensor_code)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sensors_code ON sensors (sensor_code)"))
+
     logger.info("Database tables verified/created successfully via ORM Metadata.")
 
 

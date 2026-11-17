@@ -119,15 +119,20 @@ class SQLiteWriter:
             o_success = True
             if items:
                 h_success = await loop.run_in_executor(None, sensor_history_repo.add_batch, items)
+                t1 = time.time()
                 # 2. 寫入 Outbox (離線補傳佇列)
                 o_success = await loop.run_in_executor(None, outbox_repo.push_batch, items)
+                t2 = time.time()
+            else:
+                t1 = t2 = t0
 
             # 3. 批次更新即時暫存值到 SQLite
             await loop.run_in_executor(None, db_config_repo.flush_sensor_values)
+            t3 = time.time()
 
             elapsed = time.time() - t0
             if items and (elapsed > 1.0 or self.queue.qsize() > self.batch_size * 10):
-                logger.warning(f"[SQLiteWriter] Slow write: {len(items)} items took {elapsed:.2f}s, queue size={self.queue.qsize()}")
+                logger.warning(f"[SQLiteWriter] Slow write: {len(items)} items took {elapsed:.2f}s (history={t1-t0:.2f}s outbox={t2-t1:.2f}s sensors={t3-t2:.2f}s), queue size={self.queue.qsize()}")
 
             if items:
                 if h_success and o_success:

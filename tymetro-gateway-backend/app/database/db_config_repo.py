@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import threading
+from sqlalchemy import update, bindparam
 from typing import List, Dict, Any, Optional, Tuple
 from app.models.config_model import SystemConfig
 from app.models.equipment_model import Equipment
@@ -149,11 +150,31 @@ class DbConfigRepository:
 
         db = SessionLocal()
         try:
+            # 批次 executemany：同一 statement 多組參數，避免逐筆編譯與往返
+            with_eq = []
+            code_only = []
             for (eq_id, code), val in to_update.items():
-                query = db.query(Sensor).filter(Sensor.sensorCode == code)
                 if eq_id.isdigit():
-                    query = query.filter(Sensor.equipmentId == int(eq_id))
-                query.update({Sensor.sensorValue: val}, synchronize_session=False)
+                    with_eq.append({"b_eq": int(eq_id), "b_code": code, "b_val": val})
+                else:
+                    code_only.append({"b_code": code, "b_val": val})
+            # 走 Core 連線 executemany (ORM Session.execute 會誤判為「依主鍵批次更新」)
+            tbl = Sensor.__table__
+            conn = db.connection()
+            if with_eq:
+                conn.execute(
+                    update(tbl)
+                    .where(tbl.c.sensor_code == bindparam("b_code"), tbl.c.equipment_id == bindparam("b_eq"))
+                    .values(sensor_value=bindparam("b_val")),
+                    with_eq,
+                )
+            if code_only:
+                conn.execute(
+                    update(tbl)
+                    .where(tbl.c.sensor_code == bindparam("b_code"))
+                    .values(sensor_value=bindparam("b_val")),
+                    code_only,
+                )
             db.commit()
             #logger.debug(f"[DbConfigRepository] Flushed {len(to_update)} sensor values to SQLite successfully.")
         except Exception as e:
