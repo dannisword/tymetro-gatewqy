@@ -4,7 +4,7 @@ import Breadcrumb from '@/components/Breadcrumb.vue';
 import BaseIcon from '@/components/BaseIcon.vue';
 import BaseSwitch from '@/components/BaseSwitch.vue';
 import { mdiFileDocumentOutline, mdiDownload, mdiContentCopy, mdiClose, mdiMagnify } from '@mdi/js';
-import { getSystemLogs, downloadSystemLog } from '@/utils/api';
+import { getSystemLogs, getLogDownloadTicket } from '@/utils/api';
 import { useAlert } from '@/composables/TLAlter';
 
 interface LogItem { seq: number; time: string; level: string; source: string; message: string }
@@ -29,6 +29,11 @@ const autoRefresh = ref(false);
 const wrapLines = ref(true);
 const showTimestamps = ref(true);
 const loading = ref(false);
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const downloadDate = ref(today());
 const downloading = ref(false);
 const error = ref('');
 const queriedAt = ref('');
@@ -149,14 +154,17 @@ const downloadLog = async () => {
   if (downloading.value) return;
   downloading.value = true;
   try {
-    const blob = await downloadSystemLog();
-    const url = URL.createObjectURL(blob);
+    const res = await getLogDownloadTicket();
+    const ticket = res?.data?.ticket;
+    if (!ticket) throw new Error('取得下載票證失敗');
+    // 直接以網址下載，由瀏覽器原生處理 (不經 blob)
+    const base = (import.meta.env.VITE_BASE_API || '/').replace(/\/$/, '');
     const a = document.createElement('a');
-    const ts = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
-    a.href = url;
-    a.download = `gateway_${ts}.log`;
+    a.href = `${base}/api/v1/logs/download?ticket=${encodeURIComponent(ticket)}${downloadDate.value ? `&date=${downloadDate.value}` : ''}`;
+    a.download = downloadDate.value ? `gateway_${downloadDate.value}.log` : 'gateway.log';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   } catch (e: any) {
     TLError(e?.message || '下載日誌失敗');
   } finally {
@@ -232,6 +240,7 @@ const labelCls = 'block mb-1 text-xs font-bold text-slate-500';
             <span v-if="error" class="text-red-500 ml-2">{{ error }}</span>
           </div>
           <div class="flex flex-wrap gap-2">
+            <input v-model="downloadDate" type="date" :max="today()" title="下載日期 (留空＝目前檔案)" class="px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm bg-white outline-none focus:border-[#2a7eb5]" />
             <button :class="btnCls" :disabled="downloading" @click="downloadLog">
               <BaseIcon :path="mdiDownload" w="16" h="16" size="16" /> {{ downloading ? '下載中…' : '下載日誌' }}
             </button>

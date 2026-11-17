@@ -163,6 +163,6 @@ export const getSystemLogs = async (params?: any): Promise<any> => {
     return await httpOperations.get('/api/v1/logs', params, { meta: { loading: false, silent: true } })
 }
 
-export const downloadSystemLog = async (): Promise<Blob> => {
-    return await httpOperations.get('/api/v1/logs/download', undefined, { responseType: 'blob', timeout: 120000 } as any)
+export const getLogDownloadTicket = async (): Promise<any> => {
+    return await httpOperations.post('/api/v1/logs/download-ticket', undefined, { meta: { loading: false } })
 }
