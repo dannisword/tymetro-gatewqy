@@ -162,6 +162,12 @@
       "route": "/mtr/plc-command-tasks"
     },
     {
+      "id": 9,
+      "title": "即時系統日誌",
+      "icon": "mdiTextBoxSearchOutline",
+      "route": "/mtr/system-logs"
+    },
+    {
       "id": 6,
       "title": "感測器圖面配置",
       "icon": "mdiVectorSquare",

@@ -23,6 +23,47 @@ class InterceptHandler(logging.Handler):
 
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
+# 即時 log 環形緩衝區 (供前端輪詢查看)，僅保留最近 N 筆，記憶體固定上限
+import threading
+from collections import deque
+
+LOG_BUFFER_SIZE = 2000
+_log_buffer = deque(maxlen=LOG_BUFFER_SIZE)
+_log_seq = 0
+_log_lock = threading.Lock()
+
+
+def _buffer_sink(message):
+    global _log_seq
+    r = message.record
+    with _log_lock:
+        _log_seq += 1
+        _log_buffer.append({
+            "seq": _log_seq,
+            "time": r["time"].strftime("%Y-%m-%d %H:%M:%S"),
+            "level": r["level"].name,
+            "source": f'{r["name"]}:{r["function"]}:{r["line"]}',
+            "message": r["message"] + (f'\n{r["exception"]}' if r["exception"] else ""),
+        })
+
+
+def get_recent_logs(after: int = 0, level: str = "", keyword: str = "", limit: int = 500):
+    """取得 seq > after 的 log；after=0 時回傳最新 limit 筆。"""
+    order = ["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
+    min_idx = order.index(level.upper()) if level.upper() in order else 0
+    kw = keyword.lower()
+    with _log_lock:
+        items = list(_log_buffer)
+        latest = _log_seq
+    out = [
+        i for i in items
+        if i["seq"] > after and order.index(i["level"]) >= min_idx
+    ]
+    if kw:
+        out = [i for i in out if kw in i["message"].lower() or kw in i["source"].lower()]
+    return out[-limit:], latest
+
+
 def setup_logger():
     log_path_env = os.getenv("LOG_PATH", "logs/gateway.log")
     log_dir = os.path.dirname(log_path_env) or "logs"
@@ -87,6 +128,9 @@ def setup_logger():
         format=file_format,
         level=log_level_env
     )
+
+    # 記憶體緩衝 (即時 log 頁面使用)
+    logger.add(_buffer_sink, level=log_level_env, enqueue=False, diagnose=False, backtrace=False)
 
     # 攔截並轉發標準 logging 日誌到 loguru (包含 uvicorn)
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)

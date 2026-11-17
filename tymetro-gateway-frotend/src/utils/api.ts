@@ -158,3 +158,7 @@ export const getCloudMqttSwitch = async (): Promise<any> => {
 export const setCloudMqttSwitch = async (enabled: boolean): Promise<any> => {
     return await httpOperations.post('/api/v1/configs/cloud-mqtt', { enabled })
 }
+
+export const getSystemLogs = async (params?: any): Promise<any> => {
+    return await httpOperations.get('/api/v1/logs', params, { meta: { loading: false, silent: true } })
+}

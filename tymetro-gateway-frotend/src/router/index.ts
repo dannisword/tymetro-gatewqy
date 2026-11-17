@@ -95,6 +95,12 @@ export const baseRoutes: RouteRecordRaw[] = [
             meta: { title: "設定重試佇列", affix: false, keepAlive: true, requiresAuth: true, maintenance: true },
           },
           {
+            path: "system-logs",
+            name: "system-logs",
+            component: () => import("@/views/mtr/system-logs.vue"),
+            meta: { title: "即時系統日誌", affix: false, keepAlive: false, requiresAuth: true, maintenance: true },
+          },
+          {
             path: "train-list",
             name: "train-list",
             component: () => import("@/views/mtr/train-list.vue"),
