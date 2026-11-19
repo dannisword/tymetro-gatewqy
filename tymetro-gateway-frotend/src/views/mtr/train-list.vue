@@ -18,7 +18,7 @@ import PageHeader from '@/components/PageHeader.vue';
 import StatsCard from '@/components/StatsCard.vue';
 import EndpointCard from '@/components/EndpointCard.vue';
 import { logger, updateEndpointData, frontendVersionInfo } from '@/utils';
-import { getHealthStatus, getSchedulesList, getCloudMqttSwitch, setCloudMqttSwitch } from '@/utils/api';
+import { getHealthStatus, getConfigsByType, getSchedulesList, getCloudMqttSwitch, setCloudMqttSwitch } from '@/utils/api';
 
 import dayjs from 'dayjs';
 import { ElMessageBox } from 'element-plus';
@@ -90,6 +90,19 @@ const fetchSyncScheduleStatus = async () => {
   } catch (err) {
     logger.warn('[train-list] Failed to fetch sync schedule status:', err);
     syncScheduleActive.value = null;
+  }
+};
+
+// 時段溫度設定 (SCHEDULE) 版本號
+const scheduleVersion = ref<string>('');
+
+const fetchScheduleVersion = async () => {
+  try {
+    const res = await getConfigsByType('SCHEDULE');
+    scheduleVersion.value = res?.success ? (res.data?.version || '') : '';
+  } catch (err) {
+    logger.warn('[train-list] Failed to fetch schedule version:', err);
+    scheduleVersion.value = '';
   }
 };
 
@@ -336,10 +349,12 @@ onMounted(async() => {
   // 取得後端健康狀態與版本資訊，每 10分鐘輪詢確認一次
   fetchBackendHealth();
   fetchSyncScheduleStatus();
+  fetchScheduleVersion();
   fetchCloudMqttSwitch();
   backendHealthInterval = setInterval(() => {
     fetchBackendHealth();
     fetchSyncScheduleStatus();
+    fetchScheduleVersion();
     fetchCloudMqttSwitch();
   }, 600000);
 
@@ -407,7 +422,7 @@ onUnmounted(() => {
               class="w-1.5 h-1.5 rounded-full"
               :class="syncScheduleActive === null ? 'bg-slate-400' : syncScheduleActive ? 'bg-emerald-500' : 'bg-amber-500'"
             ></span>
-            同步時段溫度設定：{{ syncScheduleActive === null ? '未知' : syncScheduleActive ? '啟用' : '停用' }}
+            同步時段溫度設定：{{ syncScheduleActive === null ? '未知' : syncScheduleActive ? '啟用' : '停用' }}<template v-if="scheduleVersion"> (v{{ scheduleVersion.replace(/^v/i, '') }})</template>
           </span>
           <BaseButton
             circle
