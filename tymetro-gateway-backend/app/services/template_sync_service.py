@@ -17,6 +17,7 @@ def sync_schedule_template() -> None:
     db = SessionLocal()
     try:
         config = db.query(Config).filter(Config.configType == "SCHEDULE").first()
+        logger.info(f"[TemplateSync] Config: {config}")
         if not config or not config.code:
             logger.info("[TemplateSync] 本機無 SCHEDULE 樣板 code，略過同步。")
             return
